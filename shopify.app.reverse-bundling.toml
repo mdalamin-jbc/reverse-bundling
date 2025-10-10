@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "784665a29510303d56391f0df4fcf21d"
-name = "Reverse Bundle Pro"
+client_id = "34cb9a0e91e7c069ba308f2d7bc27f52"
+name = "reverse-bundling"
 application_url = "https://reverse-bundle-pro.fly.dev"
 embedded = true
 
@@ -9,7 +9,7 @@ embedded = true
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-01"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
@@ -21,7 +21,7 @@ api_version = "2025-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_orders,read_products"
+scopes = "read_orders,read_products,write_products"
 
 [auth]
 redirect_urls = [
