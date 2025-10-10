@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRevalidator } from "@remix-run/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import {
@@ -20,44 +20,70 @@ import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { useState, useCallback, useEffect } from "react";
 
+// Simple in-memory storage for demo purposes
+// In a real app, this would be in your database
+let bundleRulesStorage: Array<{
+  id: string;
+  name: string;
+  items: string[];
+  bundledSku: string;
+  status: string;
+  createdAt: string;
+}> = [];
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
-  // Mock bundle rules data - in a real app, this would come from your database
-  const bundleRules = [
-    {
-      id: "1",
-      name: "Main Product Bundle",
-      items: ["SKU-A", "SKU-B", "SKU-C"],
-      bundledSku: "SKU-ABC",
-      status: "active",
-      frequency: 12,
-      savings: 15.50,
-      createdAt: "2024-01-15",
-    },
-    {
-      id: "2", 
-      name: "Accessory Bundle",
-      items: ["SKU-A", "SKU-D"],
-      bundledSku: "SKU-AD",
-      status: "active",
-      frequency: 8,
-      savings: 8.25,
-      createdAt: "2024-01-10",
-    },
-    {
-      id: "3",
-      name: "Premium Bundle",
-      items: ["SKU-E", "SKU-F", "SKU-G", "SKU-H"],
-      bundledSku: "SKU-EFGH",
-      status: "draft",
-      frequency: 3,
-      savings: 22.75,
-      createdAt: "2024-01-05",
-    },
-  ];
+  // Fetch real products from Shopify
+  let products: Array<{label: string, value: string}> = [];
+  let productMap: {[key: string]: string} = {};
+  try {
+    const response = await admin.graphql(`#graphql
+      query getProducts {
+        products(first: 100) {
+          edges {
+            node {
+              id
+              title
+              status
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    sku
+                    title
+                    price
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const responseJson = await response.json();
+    products = responseJson.data.products.edges.flatMap((edge: any) => {
+      const product = edge.node;
+      return product.variants.edges.map((variant: any) => {
+        // Use variant ID as value if SKU is empty
+        const value = variant.node.sku || variant.node.id;
+        const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
+        // Create a mapping from value to readable label
+        productMap[value] = label;
+        productMap[variant.node.id] = label; // Also map the ID
+        return {
+          label,
+          value
+        };
+      });
+    }).filter((product: any) => product.label && product.value); // Filter out empty products
+  } catch (e) {
+    // fallback to empty
+    products = [];
+  }
 
-  return json({ bundleRules });
+  // Return current bundle rules from storage
+  return json({ bundleRules: bundleRulesStorage, products, productMap });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -66,47 +92,68 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const action = formData.get("action");
 
   if (action === "createRule") {
-    const name = formData.get("name");
-    // const items = formData.get("items");
-    // const bundledSku = formData.get("bundledSku");
+    const name = formData.get("name") as string;
+    const items = formData.get("items") as string;
+    const bundledSku = formData.get("bundledSku") as string;
     
-    // Here you would save to your database
+    // Create new rule and add to storage
+    const newRule = {
+      id: String(Date.now()), // Simple ID generation
+      name,
+      items: items.split(",").filter(item => item.trim()),
+      bundledSku,
+      status: "active" as const,
+      frequency: 0,
+      savings: 0,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    
+    bundleRulesStorage.push(newRule);
+    
     return json({ 
       success: true, 
-      message: `Bundle rule "${name}" created successfully!` 
+      message: `Bundle rule "${name}" created successfully!`,
+      reload: true
     });
   }
 
   if (action === "toggleStatus") {
-    // const ruleId = formData.get("ruleId");
-    // Here you would update the status in your database
+    const ruleId = formData.get("ruleId") as string;
+    const rule = bundleRulesStorage.find(r => r.id === ruleId);
+    if (rule) {
+      rule.status = rule.status === "active" ? "draft" : "active";
+    }
     return json({ 
       success: true, 
-      message: "Bundle rule status updated!" 
+      message: "Bundle rule status updated!",
+      reload: true
     });
   }
 
   if (action === "deleteRule") {
-    // const ruleId = formData.get("ruleId");
-    // Here you would delete from your database
+    const ruleId = formData.get("ruleId") as string;
+    bundleRulesStorage = bundleRulesStorage.filter(r => r.id !== ruleId);
     return json({ 
       success: true, 
-      message: "Bundle rule deleted successfully!" 
+      message: "Bundle rule deleted successfully!",
+      reload: true
     });
   }
 
   return json({ success: false, message: "Unknown action" });
 };
 
+
 export default function BundleRules() {
-  const { bundleRules } = useLoaderData<typeof loader>();
+  const { bundleRules, products, productMap } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const revalidator = useRevalidator();
   const shopify = useAppBridge();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    items: "",
+    items: [] as string[],
     bundledSku: "",
   });
 
@@ -117,12 +164,12 @@ export default function BundleRules() {
       shopify.toast.show(fetcher.data.message);
       if (fetcher.data.message.includes("created")) {
         setIsModalOpen(false);
-        setFormData({ name: "", items: "", bundledSku: "" });
+        setFormData({ name: "", items: [], bundledSku: "" });
+        // Refresh the data to show the new rule
+        revalidator.revalidate();
       }
     }
-  }, [fetcher.data, shopify]);
-
-  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
+  }, [fetcher.data, shopify, revalidator]);  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
   const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
 
   const handleSubmit = useCallback(() => {
@@ -130,7 +177,7 @@ export default function BundleRules() {
       { 
         action: "createRule",
         name: formData.name,
-        items: formData.items,
+        items: formData.items.join(","),
         bundledSku: formData.bundledSku,
       },
       { method: "POST" }
@@ -148,33 +195,41 @@ export default function BundleRules() {
   }, [fetcher]);
 
   // Convert bundle rules for DataTable
-  const tableData = bundleRules.map((rule: any) => [
-    rule.name,
-    rule.items.join(" + "),
-    rule.bundledSku,
-    <Badge key={rule.id} tone={rule.status === "active" ? "success" : "attention"}>
-      {rule.status}
-    </Badge>,
-    `${rule.frequency}/month`,
-    `$${rule.savings}`,
-    <InlineStack key={rule.id} gap="200">
-      <Button
-        size="micro"
-        onClick={() => toggleRuleStatus(rule.id)}
-        variant={rule.status === "active" ? "secondary" : "primary"}
-      >
-        {rule.status === "active" ? "Pause" : "Activate"}
-      </Button>
-      <Button
-        size="micro"
-        variant="secondary"
-        tone="critical"
-        onClick={() => deleteRule(rule.id)}
-      >
-        Delete
-      </Button>
-    </InlineStack>,
-  ]);
+  const tableData = bundleRules.map((rule: any) => {
+    const displayItems = rule.items.map((item: string) => {
+      // Clean up the item display
+      const cleanItem = productMap[item] || item.replace(/gid:\/\/shopify\/ProductVariant\/\d+/, 'Unknown Product');
+      return cleanItem;
+    }).join(" + ");
+
+    return [
+      rule.name,
+      displayItems,
+      rule.bundledSku,
+      <Badge key={rule.id} tone={rule.status === "active" ? "success" : "attention"}>
+        {rule.status}
+      </Badge>,
+      `${rule.frequency}/month`,
+      `$${rule.savings}`,
+      <InlineStack key={rule.id} gap="200">
+        <Button
+          size="micro"
+          onClick={() => toggleRuleStatus(rule.id)}
+          variant={rule.status === "active" ? "secondary" : "primary"}
+        >
+          {rule.status === "active" ? "Pause" : "Activate"}
+        </Button>
+        <Button
+          size="micro"
+          variant="secondary"
+          tone="critical"
+          onClick={() => deleteRule(rule.id)}
+        >
+          Delete
+        </Button>
+      </InlineStack>,
+    ];
+  });
 
   return (
     <Page>
@@ -268,14 +323,35 @@ export default function BundleRules() {
               helpText="Give your bundle rule a descriptive name"
               autoComplete="off"
             />
-            <TextField
-              label="Individual SKUs"
-              value={formData.items}
-              onChange={(value) => setFormData({...formData, items: value})}
-              placeholder="e.g., SKU-A, SKU-B, SKU-C"
-              helpText="Enter SKUs separated by commas"
-              autoComplete="off"
-            />
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd">Select Products/Variants for Bundle</Text>
+              <Text as="p" variant="bodySm" tone="subdued">Choose multiple products/variants from your store</Text>
+              <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
+                <BlockStack gap="100">
+                  {products.map((product) => (
+                    <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                      <input
+                        type="checkbox"
+                        checked={formData.items.includes(product.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({...formData, items: [...formData.items, product.value]});
+                          } else {
+                            setFormData({...formData, items: formData.items.filter(item => item !== product.value)});
+                          }
+                        }}
+                      />
+                      <Text as="span" variant="bodySm">{product.label}</Text>
+                    </label>
+                  ))}
+                </BlockStack>
+              </div>
+              {formData.items.length > 0 && (
+                <Text as="p" variant="bodySm" tone="success">
+                  Selected: {formData.items.length} product(s)
+                </Text>
+              )}
+            </BlockStack>
             <TextField
               label="Bundled SKU"
               value={formData.bundledSku}

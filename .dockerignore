@@ -1,3 +1,15 @@
 .cache
 build
 node_modules
+.env*
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+npm-debug.log
+dist
+.next
+coverage
+.pytest_cache
+*.log
