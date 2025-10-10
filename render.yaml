@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: reverse-bundle-pro
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SHOPIFY_API_KEY
+        value: 784665a29510303d56391f0df4fcf21d
+      - key: SHOPIFY_API_SECRET
+        value: cc311232d04399eb80503574f301c117
+      - key: SCOPES
+        value: read_orders,write_products,read_products
+      - key: SESSION_SECRET
+        value: 2b1e6c8e7f8a4d3b9c2f7e1a6d5c4b3a
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000

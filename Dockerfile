@@ -26,6 +26,8 @@ EXPOSE 3000
 
 # Set environment to production
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
 
 # Start the application
 CMD ["npm", "start"]
