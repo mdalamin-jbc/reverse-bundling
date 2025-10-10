@@ -25,6 +25,7 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/demo">Live Demo</Link>
+        <Link to="/app/test-demo">Test Demo</Link>
         <Link to="/app/bundle-rules">Bundle Rules</Link>
         <Link to="/app/fulfillment">Fulfillment Integration</Link>
       </NavMenu>
