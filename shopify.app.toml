@@ -2,7 +2,7 @@
 
 client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
 name = "reverse-bundling"
-application_url = "https://reverse-bundle-pro.fly.dev"  # Update this for production
+application_url = "https://reverse-bundling-q5i8.onrender.com"  # Update this for production
 embedded = true
 
 [build]
@@ -36,7 +36,7 @@ scopes = "write_products,read_all_orders,read_products,write_orders,read_locatio
 
 [auth]
 redirect_urls = [
-  "https://reverse-bundle-pro.fly.dev/auth/callback",
-  "https://reverse-bundle-pro.fly.dev/auth/shopify/callback",
-  "https://reverse-bundle-pro.fly.dev/api/auth/callback"
+  "https://reverse-bundling-q5i8.onrender.com/auth/callback",
+  "https://reverse-bundling-q5i8.onrender.com/auth/shopify/callback",
+  "https://reverse-bundling-q5i8.onrender.com/api/auth/callback"
 ]

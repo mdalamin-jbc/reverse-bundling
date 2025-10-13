@@ -22,12 +22,12 @@ const shopify = shopifyApp({
     removeRest: true,
   },
   webhooks: {
-    ORDERS_CREATE: {
+    "orders/create": {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks/orders/create",
       includeFields: ["id", "line_items", "created_at"],
     },
-    ORDERS_UPDATED: {
+    "orders/updated": {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks/orders/updated",
       includeFields: ["id", "line_items", "updated_at"],

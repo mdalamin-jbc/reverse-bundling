@@ -58,7 +58,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const totalOrders = await db.orderConversion.count({ 
       where: { shop: session.shop }
     });
-    const totalSavings = totalOrders * 8;
+    const totalSavingsResult = await db.orderConversion.aggregate({
+      where: { shop: session.shop },
+      _sum: { savingsAmount: true }
+    });
+    const totalSavings = totalSavingsResult._sum.savingsAmount || 0;
 
     let planLimit = 50, planName = "Free"; // Everyone gets 50 free orders
     if (currentPlan) {
