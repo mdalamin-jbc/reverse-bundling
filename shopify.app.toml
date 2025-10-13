@@ -27,6 +27,10 @@ api_version = "2025-10"
   topics = [ "orders/updated" ]
   uri = "/webhooks/orders/updated"
 
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/compliance"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # Using read_all_orders for complete historical order analysis (required for bundle pattern detection)
