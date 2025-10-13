@@ -81,6 +81,7 @@ model OrderConversion {
 
   bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
 
+  @@unique([shop, orderId]) // Prevent duplicate conversions for same order
   @@index([shop])
   @@index([orderId])
   @@index([bundleRuleId])
