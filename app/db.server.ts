@@ -7,6 +7,11 @@ declare global {
 // Create a single instance for production
 const prisma = global.prismaGlobal ?? new PrismaClient({
   log: ["query", "error", "warn"],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
 });
 
 // In development, save to global to avoid creating multiple instances
@@ -16,15 +21,34 @@ if (process.env.NODE_ENV !== "production") {
 
 // Test database connection on startup
 if (process.env.NODE_ENV === "production") {
-  prisma.$connect()
-    .then(() => {
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  const testConnection = async () => {
+    try {
+      await prisma.$connect();
       console.log("✅ Database connected successfully");
-    })
-    .catch((error) => {
-      console.error("❌ Database connection failed:", error);
+      // Test a simple query
+      await prisma.session.count();
+      console.log("✅ Database query test successful");
+    } catch (error) {
+      console.error(`❌ Database connection failed (attempt ${retryCount + 1}/${maxRetries}):`, error);
       console.error("DATABASE_URL exists:", !!process.env.DATABASE_URL);
-      console.error("DATABASE_URL starts with:", process.env.DATABASE_URL?.substring(0, 20) + "...");
-    });
+      if (process.env.DATABASE_URL) {
+        console.error("DATABASE_URL format check:", process.env.DATABASE_URL.startsWith('postgresql://') ? 'Valid PostgreSQL URL' : 'Invalid URL format');
+      }
+
+      if (retryCount < maxRetries - 1) {
+        retryCount++;
+        console.log(`Retrying connection in 5 seconds... (${retryCount}/${maxRetries})`);
+        setTimeout(testConnection, 5000);
+      } else {
+        console.error("❌ All database connection attempts failed");
+      }
+    }
+  };
+
+  testConnection();
 }
 
 export default prisma;
