@@ -39,7 +39,7 @@ if (host === "localhost") {
 
 export default defineConfig({
   server: {
-    allowedHosts: [host, "bryan-benefits-referrals-actively.trycloudflare.com"],
+    allowedHosts: [host],
     cors: {
       preflightContinue: true,
     },

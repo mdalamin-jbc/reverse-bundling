@@ -1,0 +1,262 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Reverse Bundle Pro API",
+    "description": "Enterprise-grade Shopify app for automatic order bundling and fulfillment optimization",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Support",
+      "email": "support@reversebundlepro.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://your-app-domain.com",
+      "description": "Production server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check endpoint",
+        "description": "Returns the health status of the application and its dependencies",
+        "tags": ["Monitoring"],
+        "responses": {
+          "200": {
+            "description": "Application is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Application is unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Application metrics",
+        "description": "Returns detailed application metrics for monitoring",
+        "tags": ["Monitoring"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metrics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Metrics unavailable"
+          }
+        }
+      }
+    },
+    "/webhooks/orders/create": {
+      "post": {
+        "summary": "Order creation webhook",
+        "description": "Processes Shopify order creation webhooks for bundle detection",
+        "tags": ["Webhooks"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderWebhook"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed successfully"
+          },
+          "400": {
+            "description": "Invalid webhook payload"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["healthy", "unhealthy"]
+          },
+          "responseTime": {
+            "type": "string",
+            "example": "45ms"
+          },
+          "database": {
+            "type": "boolean"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uptime": {
+            "type": "number"
+          },
+          "version": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          }
+        }
+      },
+      "MetricsResponse": {
+        "type": "object",
+        "properties": {
+          "conversions": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "recent_24h": {
+                "type": "integer"
+              },
+              "total_savings": {
+                "type": "number"
+              }
+            }
+          },
+          "rules": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "integer"
+              }
+            }
+          },
+          "system": {
+            "type": "object",
+            "properties": {
+              "uptime": {
+                "type": "number"
+              },
+              "memory": {
+                "type": "object"
+              },
+              "version": {
+                "type": "string"
+              },
+              "nodeVersion": {
+                "type": "string"
+              },
+              "environment": {
+                "type": "string"
+              }
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderWebhook": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Order ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Order name/number"
+          },
+          "total_price": {
+            "type": "string",
+            "description": "Total order price"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineItem"
+            }
+          }
+        }
+      },
+      "LineItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "variant_id": {
+            "type": "string"
+          },
+          "price": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Use METRICS_TOKEN from environment variables"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Monitoring",
+      "description": "Health checks and metrics endpoints"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Shopify webhook endpoints"
+    }
+  ]
+}

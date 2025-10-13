@@ -24,10 +24,11 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
-        <Link to="/app/demo">Live Demo</Link>
-        <Link to="/app/test-demo">Test Demo</Link>
         <Link to="/app/bundle-rules">Bundle Rules</Link>
+        <Link to="/app/orders">Order Conversions</Link>
         <Link to="/app/fulfillment">Fulfillment Integration</Link>
+        <Link to="/app/billing">Billing</Link>
+        <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

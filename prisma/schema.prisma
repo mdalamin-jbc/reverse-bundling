@@ -10,7 +10,7 @@ generator client {
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -46,6 +46,8 @@ model BundleRule {
   analytics    BundleAnalytics[]
   conversions  OrderConversion[]
 
+  @@index([shop])
+  @@index([shop, status])
   @@map("bundle_rules")
 }
 
@@ -62,6 +64,8 @@ model BundleAnalytics {
 
   bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
 
+  @@index([shop])
+  @@index([bundleRuleId])
   @@map("bundle_analytics")
 }
 
@@ -77,5 +81,42 @@ model OrderConversion {
 
   bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
 
+  @@index([shop])
+  @@index([orderId])
+  @@index([bundleRuleId])
   @@map("order_conversions")
+}
+
+model FulfillmentProvider {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  type            String   // shipstation, fba, custom, edi
+  apiKey          String?
+  apiSecret       String?
+  webhookUrl      String?
+  autoSync        Boolean  @default(true)
+  status          String   @default("active") // active, paused, error
+  lastSyncAt      DateTime?
+  ordersProcessed Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop])
+  @@index([shop, status])
+  @@map("fulfillment_providers")
+}
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+  shop                  String   @unique
+  notificationsEnabled  Boolean  @default(true)
+  emailNotifications    Boolean  @default(true)
+  slackWebhook          String?
+  autoConvertOrders     Boolean  @default(true)
+  minimumSavings        Float    @default(0.0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("app_settings")
 }
