@@ -32,20 +32,6 @@ export default function App() {
           <p className={styles.tagline}>
             Transform individual product sales into profitable bundle conversions. Automatically detect and convert customer orders into your pre-configured bundle SKUs, maximizing revenue and customer satisfaction.
           </p>
-          <div className={styles.stats}>
-            <div className={styles.stat}>
-              <div className={styles.statNumber}>500+</div>
-              <div className={styles.statLabel}>Merchants</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statNumber}>$2M+</div>
-              <div className={styles.statLabel}>Revenue Generated</div>
-            </div>
-            <div className={styles.stat}>
-              <div className={styles.statNumber}>99.9%</div>
-              <div className={styles.statLabel}>Uptime</div>
-            </div>
-          </div>
         </div>
         <div className={styles.heroVisual}>
           <div className={styles.loginCard}>
@@ -55,25 +41,34 @@ export default function App() {
             </div>
             {showForm && (
               <Form className={styles.form} method="post" action="/auth/login">
-                <div className={styles.inputGroup}>
-                  <label className={styles.label}>
-                    <span>Shop Domain</span>
-                    <input
-                      className={styles.input}
-                      type="text"
-                      name="shop"
-                      placeholder="your-store.myshopify.com"
-                      required
-                    />
-                  </label>
-                  <span className={styles.helper}>Enter your Shopify store domain</span>
+                <div className={styles.inputWrapper}>
+                  <div className={styles.inputIcon}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 16V8C21 6.89543 20.1046 6 19 6H5C3.89543 6 3 6.89543 3 8V16C3 17.1046 3.89543 18 5 18H19C20.1046 18 21 17.1046 21 16Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M3 8L10.89 12.26C11.2187 12.4793 11.6049 12.5963 12 12.5963C12.3951 12.5963 12.7813 12.4793 13.11 12.26L21 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <input
+                    className={styles.input}
+                    type="text"
+                    name="shop"
+                    placeholder="your-store.myshopify.com"
+                    required
+                    autoComplete="off"
+                  />
+                  <div className={styles.inputGlow}></div>
                 </div>
-                <button className={styles.button} type="submit">
-                  <span>Connect Store</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                <div className={styles.formFooter}>
+                  <p className={styles.formHelp}>
+                    Enter your Shopify store domain to get started
+                  </p>
+                  <button className={styles.button} type="submit">
+                    <span>Connect Store</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
               </Form>
             )}
           </div>
