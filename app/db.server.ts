@@ -17,6 +17,14 @@ const prisma = global.prismaGlobal ?? new PrismaClient({
 // In development, save to global to avoid creating multiple instances
 if (process.env.NODE_ENV !== "production") {
   global.prismaGlobal = prisma;
+
+  // Ensure local development uses local database
+  if (process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('neon') || process.env.DATABASE_URL.includes('postgresql://') || process.env.DATABASE_URL.includes('postgres://'))) {
+    console.error('❌ SECURITY WARNING: Development environment is configured to use production database!');
+    console.error('Please check your .env file and ensure DATABASE_URL points to a local database.');
+    console.error('Current DATABASE_URL:', process.env.DATABASE_URL);
+    process.exit(1);
+  }
 }
 
 // Test database connection on startup
