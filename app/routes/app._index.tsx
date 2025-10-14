@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
 import {
   Page,
@@ -24,6 +24,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
   try {
+    // Check if user has completed onboarding
+    const appSettings = await db.appSettings.findUnique({
+      where: { shop: session.shop },
+    });
+
+    // If onboarding not completed, redirect to onboarding wizard
+    if (!appSettings?.onboardingCompleted) {
+      throw redirect('/app/onboarding');
+    }
+
     // Fetch ALL data from database - NO MOCK DATA
     const [
       activeBundleRulesCount,

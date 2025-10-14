@@ -116,6 +116,8 @@ model AppSettings {
   slackWebhook          String?
   autoConvertOrders     Boolean  @default(true)
   minimumSavings        Float    @default(0.0)
+  onboardingCompleted   Boolean  @default(false)
+  onboardingStep        Int      @default(0)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
