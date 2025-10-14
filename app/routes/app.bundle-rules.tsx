@@ -9,13 +9,11 @@ import {
   Button,
   BlockStack,
   InlineStack,
-  Modal,
-  FormLayout,
-  TextField,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { SmartRuleBuilder } from "../components/SmartRuleBuilder";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -163,41 +161,20 @@ export default function BundleRules() {
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState({
-    name: '',
-    items: [] as string[],
-    bundledSku: '',
-    savings: '',
-  });
-
-  const isLoading = fetcher.state === "submitting";
+  const [showSmartBuilder, setShowSmartBuilder] = useState(false);
 
   useEffect(() => {
     if (fetcher.data?.success) {
       shopify.toast.show(fetcher.data.message);
       if (fetcher.data.message.includes("created")) {
-        setIsModalOpen(false);
-        setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-        // Refresh the data to show the new rule
+        setShowSmartBuilder(false);
         revalidator.revalidate();
       }
     }
-  }, [fetcher.data, shopify, revalidator]);  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
-  const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
+  }, [fetcher.data, shopify, revalidator, setShowSmartBuilder]);
 
-  const handleSubmit = useCallback(() => {
-    fetcher.submit(
-      { 
-        action: "createRule",
-        name: formData.name,
-        items: formData.items.join(","),
-        bundledSku: formData.bundledSku,
-        savings: formData.savings,
-      },
-      { method: "POST" }
-    );
-  }, [fetcher, formData]);
+  const handleOpenSmartBuilder = useCallback(() => setShowSmartBuilder(true), [setShowSmartBuilder]);
+  const handleCloseSmartBuilder = useCallback(() => setShowSmartBuilder(false), [setShowSmartBuilder]);
 
   const toggleRuleStatus = useCallback((ruleId: string) => {
     fetcher.submit({ action: "toggleStatus", ruleId }, { method: "POST" });
@@ -213,7 +190,7 @@ export default function BundleRules() {
     <Page>
       <>
       <TitleBar title="Bundle Rules Management">
-        <button variant="primary" onClick={handleOpenModal}>
+        <button variant="primary" onClick={handleOpenSmartBuilder}>
           Create Bundle Rule
         </button>
       </TitleBar>
@@ -299,7 +276,7 @@ export default function BundleRules() {
                         </span>
                       </Text>
                     </BlockStack>
-                    <Button onClick={handleOpenModal} size="large" variant="primary" tone="success">
+                    <Button onClick={handleOpenSmartBuilder} size="large" variant="primary" tone="success">
                       + Create New Rule
                     </Button>
                   </InlineStack>
@@ -537,7 +514,7 @@ export default function BundleRules() {
                         </div>
                       </BlockStack>
                       <div style={{ marginTop: '16px' }}>
-                        <Button variant="primary" size="large" tone="success" onClick={handleOpenModal}>
+                        <Button variant="primary" size="large" tone="success" onClick={handleOpenSmartBuilder}>
                           🚀 Create Your First Rule
                         </Button>
                       </div>
@@ -814,82 +791,25 @@ export default function BundleRules() {
           </div>
       </BlockStack>
 
-      <Modal
-        open={isModalOpen}
-        onClose={handleCloseModal}
-        title="Create New Bundle Rule"
-        primaryAction={{
-          content: 'Create Rule',
-          onAction: handleSubmit,
-          loading: isLoading,
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: handleCloseModal,
-          },
-        ]}
-      >
-        <Modal.Section>
-          <FormLayout>
-            <TextField
-              label="Rule Name"
-              value={formData.name}
-              onChange={(value) => setFormData({...formData, name: value})}
-              placeholder="e.g., Main Product Bundle"
-              helpText="Give your bundle rule a descriptive name"
-              autoComplete="off"
-            />
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd">Select Products/Variants for Bundle</Text>
-              <Text as="p" variant="bodySm" tone="subdued">Choose multiple products/variants from your store</Text>
-              <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
-                <BlockStack gap="100">
-                  {products.map((product) => (
-                    <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
-                      <input
-                        type="checkbox"
-                        checked={formData.items.includes(product.value)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({...formData, items: [...formData.items, product.value]});
-                          } else {
-                            setFormData({...formData, items: formData.items.filter(item => item !== product.value)});
-                          }
-                        }}
-                      />
-                      <Text as="span" variant="bodySm">{product.label}</Text>
-                    </label>
-                  ))}
-                </BlockStack>
-              </div>
-              {formData.items.length > 0 && (
-                <Text as="p" variant="bodySm" tone="success">
-                  Selected: {formData.items.length} product(s)
-                </Text>
-              )}
-            </BlockStack>
-            <TextField
-              label="Bundled SKU"
-              value={formData.bundledSku}
-              onChange={(value) => setFormData({...formData, bundledSku: value})}
-              placeholder="e.g., SKU-ABC"
-              helpText="The pre-bundled SKU that will be sent to fulfillment"
-              autoComplete="off"
-            />
-            <TextField
-              label="Expected Savings"
-              type="number"
-              value={formData.savings}
-              onChange={(value) => setFormData({...formData, savings: value})}
-              placeholder="e.g., 45"
-              helpText="Expected savings per bundle in dollars (e.g., 45 for $45.00)"
-              autoComplete="off"
-              prefix="$"
-            />
-          </FormLayout>
-        </Modal.Section>
-      </Modal>
+      {showSmartBuilder && (
+        <SmartRuleBuilder
+          products={products}
+          onSave={(rule) => {
+            fetcher.submit(
+              {
+                action: "createRule",
+                name: rule.name,
+                items: rule.items.join(","),
+                bundledSku: rule.bundledSku,
+                savings: rule.savings.toString(),
+              },
+              { method: "POST" }
+            );
+            setShowSmartBuilder(false);
+          }}
+          onCancel={handleCloseSmartBuilder}
+        />
+      )}
       </>
     </Page>
   );

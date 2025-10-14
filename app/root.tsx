@@ -7,6 +7,9 @@ import {
   useRouteError,
   isRouteErrorResponse,
 } from "@remix-run/react";
+import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+
+export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export default function App() {
   return (
@@ -30,9 +33,7 @@ export default function App() {
       </body>
     </html>
   );
-}
-
-export function ErrorBoundary() {
+}export function ErrorBoundary() {
   const error = useRouteError();
 
   let errorMessage = "An unexpected error occurred";

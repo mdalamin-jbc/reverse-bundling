@@ -52,11 +52,9 @@ export default function App() {
                     className={styles.input}
                     type="text"
                     name="shop"
-                    placeholder="your-store.myshopify.com or https://your-store.myshopify.com"
+                    placeholder="your-store.myshopify.com"
                     required
                     autoComplete="off"
-                    pattern="^(https://)?[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com/?$"
-                    title="Please enter a valid Shopify store domain (e.g., your-store.myshopify.com or https://your-store.myshopify.com)"
                   />
                   <div className={styles.inputGlow}></div>
                   <div className={styles.inputLabel}>
@@ -65,7 +63,7 @@ export default function App() {
                 </div>
                 <div className={styles.formFooter}>
                   <p className={styles.formHelp}>
-                    Enter your Shopify store domain or full URL to get started
+                    Enter your Shopify store domain to get started
                   </p>
                   <div className={styles.formLinks}>
                     <a href="/privacy-policy" className={styles.privacyLink}>
