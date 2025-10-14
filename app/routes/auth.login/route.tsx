@@ -26,7 +26,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
+  const formData = await request.formData();
+  const shop = formData.get("shop") as string;
+
+  // Normalize shop domain - remove protocol and trailing slash if present
+  const normalizedShop = shop
+    .replace(/^https?:\/\//, "") // Remove http:// or https://
+    .replace(/\/$/, ""); // Remove trailing slash
+
+  // Update the form data with normalized shop
+  formData.set("shop", normalizedShop);
+
+  // Create a new request with normalized data
+  const normalizedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: formData,
+  });
+
+  const errors = loginErrorMessage(await login(normalizedRequest));
 
   return {
     errors,
