@@ -5,6 +5,7 @@
     "build": "remix vite:build",
     "dev": "shopify app dev",
     "predev": "cp prisma/schema.dev.prisma prisma/schema.prisma",
+    "prebuild": "cp prisma/schema.production.prisma prisma/schema.prisma",
     "predeploy": "cp prisma/schema.production.prisma prisma/schema.prisma",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
