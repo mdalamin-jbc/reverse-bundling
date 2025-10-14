@@ -216,6 +216,7 @@
   position: relative;
   display: flex;
   align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .inputIcon {
@@ -266,6 +267,20 @@
   color: #667eea;
 }
 
+.input:invalid:not(:placeholder-shown) {
+  border-color: #ef4444;
+  box-shadow:
+    0 0 0 4px rgba(239, 68, 68, 0.1),
+    0 8px 32px rgba(239, 68, 68, 0.15);
+}
+
+.input:valid:not(:placeholder-shown) {
+  border-color: #22c55e;
+  box-shadow:
+    0 0 0 4px rgba(34, 197, 94, 0.1),
+    0 8px 32px rgba(34, 197, 94, 0.15);
+}
+
 .inputGlow {
   position: absolute;
   top: 50%;
@@ -281,6 +296,32 @@
   z-index: 0;
 }
 
+.inputLabel {
+  position: absolute;
+  top: -0.75rem;
+  left: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.input:focus ~ .inputLabel,
+.input:not(:placeholder-shown) ~ .inputLabel {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .formFooter {
   display: flex;
   flex-direction: column;
@@ -294,6 +335,28 @@
   margin: 0;
   text-align: center;
   font-weight: 500;
+}
+
+.formLinks {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.privacyLink {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.privacyLink:hover {
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
 }
 
 .button {

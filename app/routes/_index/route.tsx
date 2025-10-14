@@ -36,8 +36,8 @@ export default function App() {
         <div className={styles.heroVisual}>
           <div className={styles.loginCard}>
             <div className={styles.cardHeader}>
-              <h3>Get Started in Minutes</h3>
-              <p>Connect your Shopify store and start bundling</p>
+              <h3>Connect Your Store</h3>
+              <p>Secure integration with enterprise-grade security</p>
             </div>
             {showForm && (
               <Form className={styles.form} method="post" action="/auth/login">
@@ -55,13 +55,23 @@ export default function App() {
                     placeholder="your-store.myshopify.com"
                     required
                     autoComplete="off"
+                    pattern="^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$"
+                    title="Please enter a valid Shopify store domain (e.g., your-store.myshopify.com)"
                   />
                   <div className={styles.inputGlow}></div>
+                  <div className={styles.inputLabel}>
+                    Shopify Store Domain
+                  </div>
                 </div>
                 <div className={styles.formFooter}>
                   <p className={styles.formHelp}>
                     Enter your Shopify store domain to get started
                   </p>
+                  <div className={styles.formLinks}>
+                    <a href="/privacy-policy" className={styles.privacyLink}>
+                      Privacy Policy
+                    </a>
+                  </div>
                   <button className={styles.button} type="submit">
                     <span>Connect Store</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -149,8 +159,8 @@ export default function App() {
       <div className={styles.cta}>
         <div className={styles.container}>
           <div className={styles.ctaContent}>
-            <h2>Ready to Boost Your Revenue?</h2>
-            <p>Join hundreds of successful merchants using Reverse Bundle Pro</p>
+            <h2>Ready to Transform Your Revenue?</h2>
+            <p>Start your journey to automated bundle optimization today</p>
             <div className={styles.ctaButtons}>
               <button className={styles.ctaPrimary} onClick={() => document.querySelector('form')?.querySelector('input')?.focus()}>
                 Start Free Trial
