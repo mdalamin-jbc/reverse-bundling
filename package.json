@@ -2,7 +2,7 @@
   "name": "reverse-bundling",
   "private": true,
   "scripts": {
-    "build": "remix vite:build",
+    "build": "cp prisma/schema.production.prisma prisma/schema.prisma && remix vite:build",
     "dev": "shopify app dev",
     "predev": "cp prisma/schema.dev.prisma prisma/schema.prisma",
     "prebuild": "cp prisma/schema.production.prisma prisma/schema.prisma",
