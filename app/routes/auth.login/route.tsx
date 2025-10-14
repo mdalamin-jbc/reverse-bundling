@@ -26,7 +26,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
+  const formData = await request.formData();
+  const shopRaw = formData.get("shop") as string;
+
+  // Extract domain from various URL formats
+  let shop = shopRaw?.trim();
+
+  if (shop) {
+    // Handle admin.shopify.com/store/store-name format
+    if (shop.includes("admin.shopify.com/store/")) {
+      const match = shop.match(/admin\.shopify\.com\/store\/([a-zA-Z0-9][a-zA-Z0-9-]*)/);
+      if (match) {
+        shop = `${match[1]}.myshopify.com`;
+      }
+    }
+    // Handle full URLs like https://store.myshopify.com or https://store.myshopify.com/
+    else if (shop.includes("myshopify.com")) {
+      const match = shop.match(/([a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com)/);
+      if (match) {
+        shop = match[1];
+      }
+    }
+    // If it's already just the domain, keep it as is
+  }
+
+  // Create a new request with the processed shop parameter
+  const newFormData = new FormData();
+  newFormData.set("shop", shop);
+
+  const newRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: newFormData,
+  });
+
+  const errors = loginErrorMessage(await login(newRequest));
 
   return {
     errors,
@@ -52,7 +86,7 @@ export default function Auth() {
                 type="text"
                 name="shop"
                 label="Shop domain"
-                helpText="example.myshopify.com"
+                helpText="your-store.myshopify.com or https://your-store.myshopify.com"
                 value={shop}
                 onChange={setShop}
                 autoComplete="on"

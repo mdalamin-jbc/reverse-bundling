@@ -68,12 +68,12 @@ export default function App() {
                     className={styles.input}
                     type="text"
                     name="shop"
-                    placeholder="your-store.myshopify.com"
-                    pattern="^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$"
+                    placeholder="your-store.myshopify.com or https://your-store.myshopify.com"
+                    pattern="^(https?://(admin\.shopify\.com/store/)?)?[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com/?$"
                     required
                   />
                   <div className={styles.inputGlow}></div>
-                  <label className={styles.inputLabel}>Shopify Domain</label>
+                  <label className={styles.inputLabel}>Shopify Domain or URL</label>
                   <span className={styles.inputIcon}>🏪</span>
                 </div>
 
