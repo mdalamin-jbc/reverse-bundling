@@ -69,7 +69,7 @@ export default function App() {
                     type="text"
                     name="shop"
                     placeholder="your-store.myshopify.com or https://your-store.myshopify.com"
-                    pattern="^(https?://(admin\.shopify\.com/store/)?)?[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com/?$"
+                    pattern="^(https?://(admin\.shopify\.com/store/)?)?[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com/?$|^https?://admin\.shopify\.com/store/[a-zA-Z0-9][a-zA-Z0-9-]*$"
                     required
                   />
                   <div className={styles.inputGlow}></div>
