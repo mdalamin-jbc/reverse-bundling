@@ -14,7 +14,7 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { hasActiveSubscription } from "../billing.server";
+import { hasActiveSubscription, redirectToAppStore, getCurrentPlan } from "../billing.server";
 import { logInfo, logError } from "../logger.server";
 import db from "../db.server";
 import { useEffect, useState } from "react";
@@ -25,30 +25,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const hasSubscription = await hasActiveSubscription(admin, session.shop);
     
-    let currentPlan = null;
-    if (hasSubscription) {
-      const response = await admin.graphql(`#graphql
-        query {
-          currentAppInstallation {
-            activeSubscriptions {
-              id name status test createdAt
-              lineItems {
-                plan {
-                  pricingDetails {
-                    ... on AppRecurringPricing {
-                      price { amount currencyCode }
-                      interval
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }`);
-      const data = await response.json();
-      const subscriptions = data.data?.currentAppInstallation?.activeSubscriptions || [];
-      if (subscriptions.length > 0) currentPlan = subscriptions[0];
-    }
+    // For managed pricing apps, we can't get detailed subscription info
+    const currentPlan = await getCurrentPlan(admin);
 
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -65,12 +43,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const totalSavings = totalSavingsResult._sum.savingsAmount || 0;
 
     let planLimit = 50, planName = "Free"; // Everyone gets 50 free orders
-    if (currentPlan) {
-      const amount = parseFloat(currentPlan.lineItems?.[0]?.plan?.pricingDetails?.price?.amount || "0");
-      if (amount === 29) { planLimit = 550; planName = "Starter"; } // 50 free + 500 paid
-      else if (amount === 79) { planLimit = 2050; planName = "Professional"; } // 50 free + 2000 paid
-      else if (amount === 199) { planLimit = 999999; planName = "Enterprise"; }
-    }
+    // For managed pricing apps, we determine plan based on usage patterns or stored data
+    // For now, we show Free plan as default since we can't query subscription details
+    // In production, you might store plan information in your database
 
     return json({ 
       hasSubscription, 
@@ -96,127 +71,50 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("action") as string;
 
   if (actionType === "subscribe") {
     const planType = formData.get("plan") as string;
     try {
-      logInfo("Processing subscription request", { shop: session.shop, plan: planType });
+      logInfo("Redirecting to App Store for subscription", { shop: session.shop, plan: planType });
 
-      // Check if there's already an active subscription
-      const subscriptionResponse = await admin.graphql(`#graphql
-        query {
-          currentAppInstallation {
-            activeSubscriptions {
-              id name status
-              lineItems {
-                plan {
-                  pricingDetails {
-                    ... on AppRecurringPricing {
-                      price { amount currencyCode }
-                      interval
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }`);
+      // For managed pricing apps, all billing is handled through the App Store
+      const result = await redirectToAppStore(planType);
 
-      const subscriptionData = await subscriptionResponse.json();
-      const activeSubscriptions = subscriptionData.data?.currentAppInstallation?.activeSubscriptions || [];
-
-      // Determine plan pricing
-      const planPrices = {
-        starter: 29,
-        professional: 79,
-        enterprise: 199
-      };
-
-      const targetPrice = planPrices[planType as keyof typeof planPrices];
-      if (!targetPrice) {
-        return json({ success: false, error: "Invalid plan selected" });
-      }
-
-      if (activeSubscriptions.length > 0) {
-        // Existing subscription - handle upgrade/downgrade
-        const currentSubscription = activeSubscriptions[0];
-        const currentPrice = parseFloat(currentSubscription.lineItems?.[0]?.plan?.pricingDetails?.price?.amount || "0");
-
-        if (currentPrice === targetPrice) {
-          return json({ success: false, error: "You are already on this plan" });
-        }
-
-        // For plan changes, redirect to App Store with plan-specific URL
-        // Shopify doesn't allow direct plan changes via API for App Store apps
-        const appStoreUrl = `https://apps.shopify.com/reverse-bundle-pro`;
-
-        logInfo("Redirecting to App Store for plan change", {
-          shop: session.shop,
-          fromPlan: currentPrice,
-          toPlan: targetPrice,
-          url: appStoreUrl
-        });
-
-        return json({
-          success: true,
-          confirmationUrl: appStoreUrl,
-          message: `Redirecting to Shopify App Store to ${currentPrice < targetPrice ? 'upgrade' : 'downgrade'} your plan...`
-        });
-
-      } else {
-        // No active subscription - new subscription
-        const appStoreUrl = `https://apps.shopify.com/reverse-bundle-pro`;
-
-        logInfo("Redirecting to App Store for new subscription", {
-          shop: session.shop,
-          plan: planType,
-          url: appStoreUrl
-        });
-
-        return json({
-          success: true,
-          confirmationUrl: appStoreUrl,
-          message: "Redirecting to Shopify App Store to start your subscription..."
-        });
-      }
+      return json({
+        success: true,
+        confirmationUrl: result.redirectUrl,
+        message: result.message
+      });
     } catch (error) {
       logError(error as Error, { shop: session.shop, action: "subscribe", plan: planType });
-      return json({ success: false, error: (error as Error).message });
+      return json({ 
+        success: false, 
+        error: `Failed to process subscription request: ${(error as Error).message}` 
+      });
     }
   }
 
   if (actionType === "cancel") {
     try {
-      const response = await admin.graphql(`#graphql
-        query { currentAppInstallation { activeSubscriptions { id }}}`);
-      const data = await response.json();
-      const subscriptions = data.data?.currentAppInstallation?.activeSubscriptions || [];
-      
-      if (subscriptions.length > 0) {
-        const cancelResponse = await admin.graphql(`#graphql
-          mutation appSubscriptionCancel($id: ID!) {
-            appSubscriptionCancel(id: $id) {
-              appSubscription { id status }
-              userErrors { field message }
-            }
-          }`, { variables: { id: subscriptions[0].id }});
-        
-        const cancelData = await cancelResponse.json();
-        const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors || [];
-        if (userErrors.length > 0) {
-          return json({ success: false, error: userErrors[0].message });
-        }
-        
-        logInfo("Subscription cancelled", { shop: session.shop });
-        return json({ success: true });
-      }
-      return json({ success: false, error: "No active subscription found" });
+      logInfo("Redirecting to App Store for cancellation", { shop: session.shop });
+
+      // For managed pricing apps, cancellation is handled through the App Store
+      const result = await redirectToAppStore();
+
+      return json({
+        success: true,
+        confirmationUrl: result.redirectUrl,
+        message: "Redirecting to Shopify App Store to manage your subscription..."
+      });
     } catch (error) {
       logError(error as Error, { shop: session.shop });
-      return json({ success: false, error: (error as Error).message });
+      return json({ 
+        success: false, 
+        error: `Failed to process cancellation request: ${(error as Error).message}` 
+      });
     }
   }
 
@@ -224,66 +122,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Billing() {
-  const { hasSubscription, currentPlan, orderCount, planLimit, planName, totalSavings } = useLoaderData<typeof loader>();
+  const { hasSubscription, orderCount, planLimit, planName, totalSavings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string; confirmationUrl?: string; message?: string }>();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
-  // Suppress hydration warnings for this component
-  const [isClient, setIsClient] = useState(false);
+  // Handle successful subscription changes
   useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  const showSuccessBanner = fetcher.state === "idle" && fetcher.data?.success === true && !fetcher.data?.confirmationUrl;
-
-  useEffect(() => {
-    if (isClient && showSuccessBanner) {
-      const timer = setTimeout(() => window.location.reload(), 2000);
-      return () => clearTimeout(timer);
+    if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data?.confirmationUrl) {
+      // Open App Store in new tab for subscription management
+      window.open(fetcher.data.confirmationUrl, '_blank');
+      // Reset loading state
+      setLoadingPlan(null);
     }
-  }, [isClient, showSuccessBanner]);
+  }, [fetcher.state, fetcher.data]);
 
-  // Reset loading state when fetcher is done or encounters an error
+  // Reset loading state on completion or error
   useEffect(() => {
     if (fetcher.state === 'idle' || fetcher.data?.error) {
       setLoadingPlan(null);
     }
   }, [fetcher.state, fetcher.data]);
 
-  // Handle App Store redirect - only on client side
-  useEffect(() => {
-    if (isClient && fetcher.data?.confirmationUrl) {
-      // For App Store billing, open the App Store URL in a new tab/window
-      window.open(fetcher.data.confirmationUrl, '_blank');
-      // Reset loading state immediately after opening the App Store
-      setLoadingPlan(null);
-    }
-  }, [isClient, fetcher.data?.confirmationUrl]);
-
-  const currentPlanAmount = currentPlan
-    ? parseFloat(currentPlan.lineItems?.[0]?.plan?.pricingDetails?.price?.amount || "0")
-    : 0;
-
   const handleSelectPlan = (planType: string) => {
-    // Prevent multiple simultaneous requests for the same plan
-    if (loadingPlan !== null) return;
+    // Prevent multiple simultaneous requests
+    if (loadingPlan !== null || fetcher.state !== 'idle') return;
     
     setLoadingPlan(planType);
     const formData = new FormData();
     formData.append("action", "subscribe");
     formData.append("plan", planType);
-    formData.append("timestamp", Date.now().toString()); // Make each request unique
     fetcher.submit(formData, { method: "post" });
-
-    // Fallback: Reset loading state after 10 seconds in case something goes wrong
-    setTimeout(() => {
-      setLoadingPlan(null);
-    }, 10000);
   };
 
   const handleCancelSubscription = () => {
-    if (loadingPlan !== null) return;
+    if (loadingPlan !== null || fetcher.state !== 'idle') return;
     
     setLoadingPlan('cancel');
     const formData = new FormData();
@@ -299,20 +172,14 @@ export default function Billing() {
       <TitleBar title="Billing" />
 
       <BlockStack gap="500">
-        {/* Success/Error Banners - only show on client to prevent hydration mismatches */}
-        {isClient && showSuccessBanner && (
-          <Banner tone="success">
-            <p>Subscription updated successfully! Refreshing...</p>
-          </Banner>
-        )}
-
-        {isClient && fetcher.data?.message && (
+        {/* Success/Error Banners */}
+        {fetcher.data?.message && (
           <Banner tone="info">
             <p>{fetcher.data.message}</p>
           </Banner>
         )}
 
-        {isClient && fetcher.data?.error && (
+        {fetcher.data?.error && (
           <Banner tone="critical">
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd" fontWeight="semibold">
@@ -328,8 +195,8 @@ export default function Billing() {
           </Banner>
         )}
 
-        {/* Loading state banner - only show on client */}
-        {isClient && loadingPlan !== null && (
+        {/* Loading state banner */}
+        {loadingPlan !== null && (
           <Banner tone="info">
             <p>Processing subscription change... Please wait.</p>
           </Banner>
@@ -470,11 +337,11 @@ export default function Billing() {
                   <Button
                     variant="primary"
                     onClick={() => handleSelectPlan('starter')}
-                    disabled={currentPlanAmount === 29}
                     loading={loadingPlan === 'starter'}
+                    disabled={loadingPlan !== null}
                     fullWidth
                   >
-                    {currentPlanAmount === 29 ? 'Current Plan' : 'Upgrade to Starter'}
+                    Upgrade to Starter
                   </Button>
                 </BlockStack>
               </Card>
@@ -510,11 +377,11 @@ export default function Billing() {
                   <Button
                     variant="primary"
                     onClick={() => handleSelectPlan('professional')}
-                    disabled={currentPlanAmount === 79}
                     loading={loadingPlan === 'professional'}
+                    disabled={loadingPlan !== null}
                     fullWidth
                   >
-                    {currentPlanAmount === 79 ? 'Current Plan' : 'Upgrade to Professional'}
+                    Upgrade to Professional
                   </Button>
                 </BlockStack>
               </Card>
@@ -550,11 +417,11 @@ export default function Billing() {
                   <Button
                     variant="primary"
                     onClick={() => handleSelectPlan('enterprise')}
-                    disabled={currentPlanAmount === 199}
                     loading={loadingPlan === 'enterprise'}
+                    disabled={loadingPlan !== null}
                     fullWidth
                   >
-                    {currentPlanAmount === 199 ? 'Current Plan' : 'Upgrade to Enterprise'}
+                    Upgrade to Enterprise
                   </Button>
                 </BlockStack>
               </Card>
@@ -621,7 +488,7 @@ export default function Billing() {
                 Subscription Management
               </Text>
 
-              {isClient && !showCancelConfirm ? (
+              {!showCancelConfirm ? (
                 <Button
                   variant="plain"
                   tone="critical"
@@ -630,7 +497,7 @@ export default function Billing() {
                 >
                   Cancel Subscription
                 </Button>
-              ) : isClient && showCancelConfirm ? (
+              ) : showCancelConfirm ? (
                 <BlockStack gap="400">
                   <Banner tone="warning">
                     <p>

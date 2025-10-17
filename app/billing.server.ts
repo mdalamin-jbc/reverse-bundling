@@ -2,11 +2,11 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "./shopify.server";
 
 /**
- * Billing configuration for the app
- * Update these values based on your pricing strategy
+ * Billing configuration for managed pricing apps
+ * For managed pricing apps, billing is handled entirely by Shopify App Store
  */
 export const BILLING_CONFIG = {
-  required: process.env.BILLING_REQUIRED === "true",
+  required: true, // Always required for managed pricing apps
   trialDays: 14,
   freeOrderLimit: 50, // Free tier: 50 orders/month for everyone
   plans: {
@@ -35,66 +35,100 @@ export const BILLING_CONFIG = {
 };
 
 /**
- * Check if shop has an active subscription
- * For App Store apps, this checks the app installation status
+ * Check if shop has access to the app
+ * For managed pricing apps, this checks if the app is installed
+ * Billing access is granted by Shopify based on App Store purchases
  */
 export async function hasActiveSubscription(admin: any, shop: string) {
-  if (!BILLING_CONFIG.required) {
-    return true; // Billing not required
-  }
-
   try {
-    // For App Store apps, check if the app is installed and active
+    // For managed pricing apps, check if the app is installed
+    // The actual billing is managed by Shopify's App Store
     const response = await admin.graphql(
       `#graphql
         query {
           currentAppInstallation {
             id
-            activeSubscriptions {
-              id
-              name
-              status
-              test
-            }
           }
         }`
     );
 
     const data = await response.json();
-    const subscriptions = data.data?.currentAppInstallation?.activeSubscriptions || [];
+    const hasInstallation = !!data.data?.currentAppInstallation?.id;
 
-    // For App Store billing, we check if there are any active subscriptions
-    // The actual billing is managed by Shopify's App Store
-    return subscriptions.some((sub: any) => sub.status === "ACTIVE");
+    // For managed pricing apps, if the app is installed, it has billing access
+    // The actual subscription management is handled by Shopify
+    return hasInstallation;
   } catch (error) {
-    console.error("[Billing] Error checking subscription:", error);
-    // For App Store apps, if we can't check, assume no subscription
-    // This will trigger the App Store redirect
+    console.error("[Billing] Error checking app installation:", error);
     return false;
   }
 }
 
 /**
- * Request payment - redirects to App Store for billing
- * For App Store apps, we redirect to the App Store listing instead of using Billing API
+ * Get current plan information for managed pricing apps
+ * Since we can't access subscription details directly, we determine plan based on usage limits
+ * This is a simplified approach - in production, you might need to store plan info in your database
  */
-export async function requestPayment(admin: any, session: any, billing: any, planType: string, requestOrigin?: string) {
-  // For App Store apps, we don't create subscriptions directly
-  // Instead, we redirect users to the App Store to manage billing
+export async function getCurrentPlan(admin: any) {
+  // For managed pricing apps, we can't query subscription details
+  // Return null to indicate we should show the free plan by default
+  // The actual plan enforcement should be handled by Shopify's billing system
+  return null;
+}
 
+/**
+ * Redirect to Shopify App Store for billing operations
+ * For managed pricing apps, all billing is handled through the App Store
+ */
+export async function redirectToAppStore(planType?: string) {
+  // For managed pricing apps, we redirect to the App Store
+  // The App Store URL should be constructed based on your app's listing
   const appStoreUrl = `https://apps.shopify.com/reverse-bundle-pro`;
-
-  console.log('[Billing] Redirecting to App Store for billing:', {
-    plan: planType,
-    shop: session.shop,
-    appStoreUrl
-  });
 
   return {
     success: true,
     redirectUrl: appStoreUrl,
-    error: null
+    message: planType
+      ? `Redirecting to Shopify App Store to subscribe to ${planType} plan...`
+      : "Redirecting to Shopify App Store for billing management..."
   };
+}
+
+/**
+ * Handle plan changes for managed pricing apps
+ * Since we can't modify subscriptions directly, redirect to App Store
+ */
+export async function handlePlanChange(admin: any, planType: string) {
+  console.log(`[Billing] Redirecting to App Store for plan change: ${planType}`);
+  return redirectToAppStore(planType);
+}
+
+/**
+ * Request payment - redirects to App Store for managed pricing apps
+ */
+export async function requestPayment(admin: any, session: any, billing: any, planType: string, requestOrigin?: string) {
+  try {
+    const result = await redirectToAppStore(planType);
+
+    console.log('[Billing] Redirecting to App Store:', {
+      plan: planType,
+      shop: session.shop,
+      redirectUrl: result.redirectUrl
+    });
+
+    return {
+      success: true,
+      redirectUrl: result.redirectUrl,
+      error: null
+    };
+  } catch (error) {
+    console.error('[Billing] Error redirecting to App Store:', error);
+    return {
+      success: false,
+      redirectUrl: null,
+      error: (error as Error).message
+    };
+  }
 }
 
 /**
