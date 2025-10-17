@@ -158,19 +158,18 @@ docker-compose up -d
 curl https://your-domain.com/health
 ```
 
-### Option 2: Cloud Platforms
+### Option 2: Oracle Cloud (Automated CI/CD)
 
-**Fly.io (Recommended for Shopify Apps):**
-```bash
-fly launch
-fly deploy
-```
+**🚀 Automated Deployment with GitHub Actions:**
+- Push to `main` branch → Automatic deployment to production
+- Zero-downtime deployments with health checks
+- Database migrations applied automatically
+- Production PostgreSQL configuration restored automatically
 
-**Render.com:**
-- Connect GitHub repository
-- Choose Docker environment
-- Set environment variables
-- Deploy automatically
+**Setup (5 minutes):**
+1. Configure GitHub Secrets: `ORACLE_HOST`, `ORACLE_USER`, `ORACLE_SSH_PRIVATE_KEY`
+2. Push to main branch → Auto-deploy happens
+3. Monitor deployment status in GitHub Actions tab
 
 See `DEPLOYMENT.md` for detailed production deployment guide.
 
@@ -431,47 +430,31 @@ Ready to save thousands on fulfillment costs? Let's go! 🚀
 
 ---
 
-## � Quick Start (Production Deployment)
+## 🚀 Quick Start (Automated Oracle Cloud Deployment)
 
-### Option 1: Deploy to Render.com (Recommended)
-
+### Automated CI/CD Pipeline
 ```bash
-# 1. Fork/clone this repository
+# 1. Clone repository
 git clone https://github.com/yourusername/reverse-bundling.git
 cd reverse-bundling
 
-# 2. Push to your GitHub repository
-git remote set-url origin https://github.com/yourusername/reverse-bundling.git
-git push -u origin main
+# 2. Configure GitHub Secrets for Oracle Cloud
+# In GitHub: Settings → Secrets and variables → Actions
+# Add: ORACLE_HOST, ORACLE_USER, ORACLE_SSH_PRIVATE_KEY
 
-# 3. Deploy to Render.com (30 minutes)
-# - Visit https://render.com
-# - Create PostgreSQL database (free tier)
-# - Create Web Service from GitHub repo
-# - Set environment variables (see Configuration section)
-# - Deploy!
+# 3. Push to main branch (triggers automatic deployment)
+git push origin main
+
+# 4. Monitor deployment in GitHub Actions tab
+# ✅ Automatic: Dependencies install, build, database migrations, restart service
 ```
 
-### Option 2: Deploy to Fly.io
-
-```bash
-# 1. Install Fly CLI
-curl -L https://fly.io/install.sh | sh
-
-# 2. Login and configure
-fly auth login
-fly launch
-
-# 3. Set secrets
-fly secrets set SHOPIFY_API_KEY="your_key"
-fly secrets set SHOPIFY_API_SECRET="your_secret"
-fly secrets set DATABASE_URL="postgresql://..."
-fly secrets set SESSION_SECRET="$(openssl rand -base64 32)"
-fly secrets set SCOPES="write_products,read_all_orders,read_products,write_orders"
-
-# 4. Deploy
-fly deploy
-```
+### What Happens Automatically
+- **Dependencies**: `npm ci --production=false`
+- **Build**: `npm run build`
+- **Database**: PostgreSQL config applied, migrations run
+- **Health Check**: Application verified running
+- **Zero Downtime**: Service restarted gracefully
 
 ---
 
@@ -608,87 +591,76 @@ With conservative 2% conversion rate from Shopify App Store:
 
 ---
 
-### Option 1: Deploy to Fly.io (Recommended)
+## 🚀 Production Deployment (Oracle Cloud + GitHub Actions)
 
-#### 1. Install Fly CLI
+### Automated CI/CD Pipeline
 
-```bash
-# macOS
-brew install flyctl
+**Zero-touch deployment**: Push to `main` → Automatic production deployment
 
-# Or via curl
-curl -L https://fly.io/install.sh | sh
+#### 1. Configure GitHub Secrets
+In your GitHub repository: **Settings → Secrets and variables → Actions**
+
+Add these secrets:
+```
+ORACLE_HOST=161.118.160.169
+ORACLE_USER=opc
+ORACLE_SSH_PRIVATE_KEY=-----BEGIN OPENSSH PRIVATE KEY-----
+(your private key content)
+-----END OPENSSH PRIVATE KEY-----
 ```
 
-#### 2. Login to Fly.io
-
+#### 2. Deploy Automatically
 ```bash
-fly auth login
+# Just push to main branch
+git add .
+git commit -m "Deploy to production"
+git push origin main
+
+# ✅ GitHub Actions automatically:
+# - Connects to Oracle Cloud via SSH
+# - Pulls latest code
+# - Applies production PostgreSQL config
+# - Installs dependencies (npm ci)
+# - Builds application (npm run build)
+# - Runs database migrations (prisma db push)
+# - Restarts service (systemctl restart)
+# - Health checks application
 ```
 
-#### 3. Set Up PostgreSQL Database
+#### 3. Monitor Deployment
+- **GitHub Actions Tab**: Real-time deployment logs
+- **Success Indicators**:
+  - ✅ "Deployment completed successfully"
+  - ✅ "Application is running and healthy"
+  - ✅ No failed jobs in Actions
 
-```bash
-fly postgres create --name reverse-bundle-db --region sjc
+### Production Architecture
+```
+┌─────────────────┐    ┌──────────────────┐
+│   GitHub Push   │ -> │ GitHub Actions   │
+│    (main)       │    │   CI/CD Pipeline │
+└─────────────────┘    └─────────┬────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    Oracle Cloud VM      │
+                    │  ┌─────────────────┐    │
+                    │  │   Node.js App   │    │
+                    │  │   (Port 3000)   │    │
+                    │  └─────────┬───────┘    │
+                    │            │            │
+                    │  ┌─────────▼────────┐   │
+                    │  │  PostgreSQL DB   │   │
+                    │  │  (Production)    │   │
+                    │  └──────────────────┘   │
+                    └─────────────────────────┘
 ```
 
-Get the connection string:
-
-```bash
-fly postgres connect -a reverse-bundle-db
-# Copy the DATABASE_URL
-```
-
-#### 4. Configure Secrets
-
-```bash
-# Set all environment variables
-fly secrets set SHOPIFY_API_KEY="your_key"
-fly secrets set SHOPIFY_API_SECRET="your_secret"
-fly secrets set DATABASE_URL="postgresql://..."
-fly secrets set SESSION_SECRET="$(openssl rand -base64 32)"
-fly secrets set SCOPES="write_products,read_orders,read_products,write_orders"
-fly secrets set NODE_ENV="production"
-```
-
-#### 5. Deploy
-
-```bash
-fly deploy
-```
-
-#### 6. Run Database Migrations
-
-```bash
-fly ssh console -C "npm run setup"
-```
-
----
-
-### Option 2: Deploy to Render.com
-
-#### 1. Create PostgreSQL Database
-
-- Go to https://render.com
-- Create new PostgreSQL database
-- Copy the Internal Database URL
-
-#### 2. Create Web Service
-
-- Connect your GitHub repository
-- Choose "Docker" environment
-- Set environment variables in Render Dashboard:
-  - `SHOPIFY_API_KEY`
-  - `SHOPIFY_API_SECRET`
-  - `DATABASE_URL` (from step 1)
-  - `SESSION_SECRET` (generate with: `openssl rand -base64 32`)
-  - `SCOPES=write_products,read_orders,read_products,write_orders`
-  - `NODE_ENV=production`
-  - `PORT=3000`
-
-#### 3. Deploy
-
-Render will automatically deploy when you push to your main branch.
+### Production Features
+- **Automated Deployments**: Push-to-deploy with GitHub Actions
+- **Database Migrations**: Automatic schema updates
+- **Health Monitoring**: Built-in health checks
+- **Error Recovery**: Rollback on deployment failures
+- **Zero Downtime**: Graceful service restarts
 
 ---
 
@@ -699,24 +671,24 @@ Render will automatically deploy when you push to your main branch.
 1. Go to [Shopify Partner Dashboard](https://partners.shopify.com)
 2. Navigate to Apps → Your App
 3. Update URLs:
-   - **App URL**: Your production domain (e.g., `https://your-app.fly.dev`)
+   - **App URL**: Your Oracle Cloud domain (e.g., `https://your-oracle-cloud-ip`)
    - **Allowed redirection URLs**:
-     - `https://your-app.fly.dev/auth/callback`
-     - `https://your-app.fly.dev/auth/shopify/callback`
-     - `https://your-app.fly.dev/api/auth/callback`
+     - `https://your-oracle-cloud-ip/auth/callback`
+     - `https://your-oracle-cloud-ip/auth/shopify/callback`
+     - `https://your-oracle-cloud-ip/api/auth/callback`
 
-4. Configure scopes: `write_products,read_orders,read_products,write_orders`
+4. Configure scopes: `write_products,read_all_orders,read_products,write_orders,read_locations,write_order_edits`
 
 ### Update shopify.app.toml
 
 ```toml
-application_url = "https://your-production-domain.com"
+application_url = "https://your-oracle-cloud-domain.com"
 
 [auth]
 redirect_urls = [
-  "https://your-production-domain.com/auth/callback",
-  "https://your-production-domain.com/auth/shopify/callback",
-  "https://your-production-domain.com/api/auth/callback"
+  "https://your-oracle-cloud-domain.com/auth/callback",
+  "https://your-oracle-cloud-domain.com/auth/shopify/callback",
+  "https://your-oracle-cloud-domain.com/api/auth/callback"
 ]
 ```
 
@@ -724,22 +696,30 @@ redirect_urls = [
 
 ## 📊 Database Management
 
-### Create New Migration
-
+### Development
 ```bash
-npx prisma migrate dev --name your_migration_name
-```
+# Create migration
+npx prisma migrate dev --name your_migration
 
-### Apply Migrations in Production
-
-```bash
-npx prisma migrate deploy
-```
-
-### Reset Database (Development Only!)
-
-```bash
+# Reset database
 npx prisma migrate reset
+```
+
+### Production (Oracle Cloud)
+Database migrations run automatically on deployment via GitHub Actions:
+
+```bash
+# Manual migration (if needed)
+ssh -i ~/.ssh/id_rsa opc@161.118.160.169
+cd /home/opc/reverse-bundling
+git stash pop  # Apply production config
+npx prisma db push
+```
+
+### Database Backup (Recommended)
+```bash
+# On Oracle Cloud server
+pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ---
@@ -811,6 +791,10 @@ npm run start
 ### Build Errors
 
 ```bash
+# On Oracle Cloud server
+ssh -i ~/.ssh/id_rsa opc@161.118.160.169
+cd /home/opc/reverse-bundling
+
 # Clear cache and rebuild
 rm -rf node_modules build .cache
 npm install

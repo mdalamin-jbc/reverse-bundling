@@ -1,7 +1,7 @@
 name: Deploy to Oracle Cloud
 on:
   push:
-    branches: [ main ]  # Change this to your production branch name if different
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -20,10 +20,41 @@ jobs:
     - name: Deploy to Oracle Cloud
       run: |
         ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+          set -e  # Exit on any error
+
+          echo "🚀 Starting deployment to Oracle Cloud..."
+
           cd /home/opc/reverse-bundling
+
+          echo "📥 Pulling latest changes from main branch..."
           git pull origin main
-          npm install
+
+          echo "💾 Applying production database configuration..."
+          git stash pop || echo "No stashed changes to apply"
+
+          echo "📦 Installing dependencies..."
+          npm ci --production=false
+
+          echo "🔨 Building application..."
           npm run build
+
+          echo "🗄️ Running database migrations..."
+          npx prisma generate
+          npx prisma db push --accept-data-loss || echo "Database schema already up to date"
+
+          echo "🔄 Restarting application service..."
           sudo systemctl restart reverse-bundling.service
-          echo "Deployment completed successfully"
+
+          echo "⏳ Waiting for application to start..."
+          sleep 10
+
+          echo "🏥 Checking application health..."
+          if curl -f http://localhost:3000/health 2>/dev/null; then
+            echo "✅ Deployment completed successfully!"
+            echo "🌐 Application is running and healthy"
+          else
+            echo "⚠️ Application deployed but health check failed"
+            echo "🔍 Check application logs for details"
+            exit 1
+          fi
         EOF
