@@ -1,0 +1,46 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
+name = "reverse-bundling"
+application_url = "https://reverse-bundling.me"  # Updated for Oracle Cloud production
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/updated" ]
+  uri = "/webhooks/orders/updated"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/compliance"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# Using read_all_orders for complete historical order analysis (required for bundle pattern detection)
+# read_locations enables auto-detection of fulfillment providers
+# write_order_edits enables automatic order modification for bundle conversion
+scopes = "write_products,read_all_orders,read_products,write_orders,read_locations,write_order_edits"
+
+[auth]
+redirect_urls = [
+  "https://reverse-bundling.me/auth/callback",
+  "https://reverse-bundling.me/auth/shopify/callback",
+  "https://reverse-bundling.me/api/auth/callback"
+]

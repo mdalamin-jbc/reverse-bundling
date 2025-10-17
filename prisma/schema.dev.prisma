@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model BundleRule {
+  id          String   @id @default(cuid())
+  shop        String
+  name        String
+  items       String   // JSON array of SKUs
+  bundledSku  String
+  status      String   @default("draft") // draft, active, paused
+  frequency   Int      @default(0)
+  savings     Float    @default(0.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  analytics    BundleAnalytics[]
+  conversions  OrderConversion[]
+
+  @@index([shop])
+  @@index([shop, status])
+  @@map("bundle_rules")
+}
+
+model BundleAnalytics {
+  id              String   @id @default(cuid())
+  shop            String
+  bundleRuleId    String
+  orderCount      Int      @default(0)
+  savingsAmount   Float    @default(0.0)
+  period          String   // monthly, weekly, daily
+  periodStart     DateTime
+  periodEnd       DateTime
+  createdAt       DateTime @default(now())
+
+  bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
+
+  @@index([shop])
+  @@index([bundleRuleId])
+  @@map("bundle_analytics")
+}
+
+model OrderConversion {
+  id              String   @id @default(cuid())
+  shop            String
+  orderId         String
+  originalItems   String   // JSON array of original SKUs
+  bundledSku      String
+  bundleRuleId    String
+  savingsAmount   Float
+  convertedAt     DateTime @default(now())
+
+  bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, orderId]) // Prevent duplicate conversions for same order
+  @@index([shop])
+  @@index([orderId])
+  @@index([bundleRuleId])
+  @@map("order_conversions")
+}
+
+model FulfillmentProvider {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  type            String   // shipstation, fba, custom, edi
+  apiKey          String?
+  apiSecret       String?
+  webhookUrl      String?
+  autoSync        Boolean  @default(true)
+  status          String   @default("active") // active, paused, error
+  lastSyncAt      DateTime?
+  ordersProcessed Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop])
+  @@index([shop, status])
+  @@map("fulfillment_providers")
+}
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+  shop                  String   @unique
+  notificationsEnabled  Boolean  @default(true)
+  emailNotifications    Boolean  @default(true)
+  slackWebhook          String?
+  autoConvertOrders     Boolean  @default(true)
+  minimumSavings        Float    @default(0.0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("app_settings")
+}

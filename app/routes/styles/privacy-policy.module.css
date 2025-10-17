@@ -1,0 +1,288 @@
+/* Privacy Policy Page Styles */
+.page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2rem 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.contentCard {
+  background: white;
+  border-radius: 1.5rem;
+  padding: 3rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.title {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #1a202c;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  font-size: 1.25rem;
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+.dateInfo {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.content {
+  color: #374151;
+  line-height: 1.7;
+}
+
+.section {
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 3px solid #667eea;
+  display: inline-block;
+}
+
+.subsectionTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1rem;
+  margin-top: 2rem;
+}
+
+.paragraph {
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+}
+
+.list {
+  margin-bottom: 1.5rem;
+  padding-left: 2rem;
+}
+
+.listItem {
+  margin-bottom: 0.75rem;
+  position: relative;
+  padding-left: 0.5rem;
+}
+
+.listItem::marker {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.highlightBox {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-left: 4px solid #3b82f6;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.highlightText {
+  color: #1e40af;
+  font-weight: 600;
+  margin: 0;
+}
+
+.warningBox {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-left: 4px solid #f59e0b;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+
+.warningText {
+  color: #92400e;
+  font-weight: 600;
+  margin: 0;
+}
+
+.infoBox {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-left: 4px solid #0284c7;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.1);
+}
+
+.infoText {
+  color: #0c4a6e;
+  font-weight: 600;
+  margin: 0;
+}
+
+.contactBox {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 2rem;
+  border-radius: 1rem;
+  margin: 2rem 0;
+  border: 2px solid #e2e8f0;
+}
+
+.contactItem {
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.contactItem:last-child {
+  margin-bottom: 0;
+}
+
+.contactLabel {
+  font-weight: 600;
+  color: #374151;
+  margin-right: 0.5rem;
+}
+
+.footer {
+  border-top: 2px solid #e5e7eb;
+  padding-top: 2rem;
+  margin-top: 3rem;
+  text-align: center;
+}
+
+.footerText {
+  color: #6b7280;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.footerDate {
+  color: #9ca3af;
+  font-size: 0.875rem;
+}
+
+.acknowledgment {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  border-left: 4px solid #16a34a;
+  padding: 2rem;
+  margin-top: 3rem;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.1);
+}
+
+.acknowledgmentText {
+  color: #166534;
+  font-weight: 600;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* Checkmark list */
+.checkList {
+  margin: 1.5rem 0;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+
+.checkIcon {
+  color: #16a34a;
+  margin-right: 0.75rem;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .page {
+    padding: 1rem 0;
+  }
+
+  .container {
+    padding: 0 0.5rem;
+  }
+
+  .contentCard {
+    padding: 2rem 1.5rem;
+    border-radius: 1rem;
+  }
+
+  .title {
+    font-size: 2.5rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.75rem;
+  }
+
+  .subsectionTitle {
+    font-size: 1.25rem;
+  }
+
+  .paragraph {
+    font-size: 1rem;
+  }
+
+  .list {
+    padding-left: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: 2rem;
+  }
+
+  .contentCard {
+    padding: 1.5rem 1rem;
+  }
+
+  .header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .section {
+    margin-bottom: 2rem;
+  }
+
+  .highlightBox,
+  .warningBox,
+  .infoBox,
+  .contactBox {
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+  }
+
+  .acknowledgment {
+    padding: 1.5rem;
+    margin-top: 2rem;
+  }
+}
