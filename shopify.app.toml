@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
-name = "reverse-bundling"
+name = "Reverse Bundle Pro"
 application_url = "https://reverse-bundling.me"  # Updated for Oracle Cloud production
 embedded = true
 
