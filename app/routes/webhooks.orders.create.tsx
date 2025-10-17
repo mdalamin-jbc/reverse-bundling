@@ -171,7 +171,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   bundledSku: rule.bundledSku,
                   savings: rule.savings,
                   items: ruleItems,
-                  appUrl: `https://${shop}/admin/apps/reverse-bundling`,
+                  appUrl: `https://${shop}/admin/apps/reverse-bundling/app`,
                 });
                 logInfo('Bundle detection email sent', { shop, orderId: String(order.id) });
               }
@@ -179,6 +179,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           } catch (emailError) {
             // Don't fail the webhook if email fails
             logError(emailError as Error, { context: 'send_bundle_email', shop, orderId: String(order.id) });
+          }
+
+          // Send Slack notification if enabled
+          try {
+            const { sendBundleDetectedSlackNotification } = await import("../slack.server");
+            const slackResult = await sendBundleDetectedSlackNotification({
+              shop,
+              orderNumber: order.name || `#${String(order.id)}`,
+              bundleName: rule.name,
+              bundledSku: rule.bundledSku,
+              savings: rule.savings,
+              items: ruleItems,
+              appUrl: `https://${shop}/admin/apps/reverse-bundling/app`,
+            });
+
+            if (slackResult.success) {
+              logInfo('Bundle detection Slack notification sent', { shop, orderId: String(order.id) });
+            } else {
+              logInfo('Slack notification skipped', { shop, orderId: String(order.id), reason: (slackResult as any).reason });
+            }
+          } catch (slackError) {
+            // Don't fail the webhook if Slack fails
+            logError(slackError as Error, { context: 'send_slack_notification', shop, orderId: String(order.id) });
           }
           
           // 🔥 MODIFY THE ORDER IN SHOPIFY - Make it real!

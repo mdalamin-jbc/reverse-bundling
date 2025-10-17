@@ -2,7 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
-import { NavMenu } from "@shopify/app-bridge-react";
+import { NavMenu, TitleBar } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
@@ -20,13 +20,11 @@ export default function App() {
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
+      <TitleBar title="Reverse Bundle Pro" />
       <NavMenu>
-        <Link to="/app" rel="home">
-          Home
-        </Link>
         <Link to="/app/bundle-rules">Bundle Rules</Link>
         <Link to="/app/orders">Order Conversions</Link>
-        <Link to="/app/fulfillment">Fulfillment Integration</Link>
+        <Link to="/app/fulfillment">Fulfillment Provider</Link>
         <Link to="/app/billing">Billing</Link>
         <Link to="/app/settings">Settings</Link>
       </NavMenu>
