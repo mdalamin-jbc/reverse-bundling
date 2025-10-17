@@ -10,16 +10,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Install SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
+
     - name: Deploy to Oracle Cloud
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.ORACLE_HOST }}
-        username: ${{ secrets.ORACLE_USER }}
-        key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
-        script: |
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
           cd /home/opc/reverse-bundling
           git pull origin main
           npm install
           npm run build
           sudo systemctl restart reverse-bundling.service
           echo "Deployment completed successfully"
+        EOF

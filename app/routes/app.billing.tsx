@@ -14,7 +14,7 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { hasActiveSubscription, requestPayment } from "../billing.server";
+import { hasActiveSubscription } from "../billing.server";
 import { logInfo, logError } from "../logger.server";
 import db from "../db.server";
 import { useEffect, useState } from "react";
@@ -96,33 +96,94 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const actionType = formData.get("action") as string;
 
   if (actionType === "subscribe") {
     const planType = formData.get("plan") as string;
     try {
-      logInfo("Requesting subscription", { shop: session.shop, plan: planType });
-      
-      // Get the request origin for return URL
-      const url = new URL(request.url);
-      const origin = url.origin;
-      
-      const result = await requestPayment(admin, session, billing, planType, origin);
-      
-      logInfo("Subscription result", { shop: session.shop, result });
-      
-      if (result.success && result.redirectUrl) {
-        logInfo("Redirecting to confirmation URL", { shop: session.shop, url: result.redirectUrl });
-        // Return the confirmation URL to the frontend for App Bridge redirect
-        return json({ success: true, confirmationUrl: result.redirectUrl });
+      logInfo("Processing subscription request", { shop: session.shop, plan: planType });
+
+      // Check if there's already an active subscription
+      const subscriptionResponse = await admin.graphql(`#graphql
+        query {
+          currentAppInstallation {
+            activeSubscriptions {
+              id name status
+              lineItems {
+                plan {
+                  pricingDetails {
+                    ... on AppRecurringPricing {
+                      price { amount currencyCode }
+                      interval
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }`);
+
+      const subscriptionData = await subscriptionResponse.json();
+      const activeSubscriptions = subscriptionData.data?.currentAppInstallation?.activeSubscriptions || [];
+
+      // Determine plan pricing
+      const planPrices = {
+        starter: 29,
+        professional: 79,
+        enterprise: 199
+      };
+
+      const targetPrice = planPrices[planType as keyof typeof planPrices];
+      if (!targetPrice) {
+        return json({ success: false, error: "Invalid plan selected" });
       }
-      
-      logError(new Error("Subscription creation failed"), { shop: session.shop, result });
-      return json({ success: false, error: result.error || "Failed to create subscription" });
+
+      if (activeSubscriptions.length > 0) {
+        // Existing subscription - handle upgrade/downgrade
+        const currentSubscription = activeSubscriptions[0];
+        const currentPrice = parseFloat(currentSubscription.lineItems?.[0]?.plan?.pricingDetails?.price?.amount || "0");
+
+        if (currentPrice === targetPrice) {
+          return json({ success: false, error: "You are already on this plan" });
+        }
+
+        // For plan changes, redirect to App Store with plan-specific URL
+        // Shopify doesn't allow direct plan changes via API for App Store apps
+        const appStoreUrl = `https://apps.shopify.com/reverse-bundle-pro`;
+
+        logInfo("Redirecting to App Store for plan change", {
+          shop: session.shop,
+          fromPlan: currentPrice,
+          toPlan: targetPrice,
+          url: appStoreUrl
+        });
+
+        return json({
+          success: true,
+          confirmationUrl: appStoreUrl,
+          message: `Redirecting to Shopify App Store to ${currentPrice < targetPrice ? 'upgrade' : 'downgrade'} your plan...`
+        });
+
+      } else {
+        // No active subscription - new subscription
+        const appStoreUrl = `https://apps.shopify.com/reverse-bundle-pro`;
+
+        logInfo("Redirecting to App Store for new subscription", {
+          shop: session.shop,
+          plan: planType,
+          url: appStoreUrl
+        });
+
+        return json({
+          success: true,
+          confirmationUrl: appStoreUrl,
+          message: "Redirecting to Shopify App Store to start your subscription..."
+        });
+      }
     } catch (error) {
-      logError(error as Error, { shop: session.shop, action: "subscribe" });
+      logError(error as Error, { shop: session.shop, action: "subscribe", plan: planType });
       return json({ success: false, error: (error as Error).message });
     }
   }
@@ -162,164 +223,69 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({ success: false, error: "Invalid action" });
 };
 
-function PricingCard({ 
-  title, 
-  price, 
-  period, 
-  description, 
-  features, 
-  isPopular, 
-  buttonLabel, 
-  onSelect, 
-  isActive,
-  loading 
-}: {
-  title: string;
-  price: string;
-  period: string;
-  description: string;
-  features: string[];
-  isPopular?: boolean;
-  buttonLabel: string;
-  onSelect: () => void;
-  isActive?: boolean;
-  loading?: boolean;
-}) {
-  const cardStyle: React.CSSProperties = isPopular
-    ? {
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white',
-        padding: '32px',
-        borderRadius: '16px',
-        position: 'relative',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        transform: 'scale(1.05)',
-        border: '2px solid rgba(255,255,255,0.2)'
-      }
-    : {
-        background: 'white',
-        padding: '32px',
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-      };
-
-  return (
-    <div style={cardStyle}>
-      {isPopular && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '-16px',
-            right: '32px',
-            background: 'linear-gradient(135deg, #f5576c 0%, #f093fb 100%)',
-            color: 'white',
-            padding: '8px 20px',
-            borderRadius: '20px',
-            fontSize: '12px',
-            fontWeight: 700,
-            letterSpacing: '0.5px',
-            boxShadow: '0 4px 6px rgba(245, 87, 108, 0.3)',
-          }}
-        >
-          ⭐ MOST POPULAR
-        </div>
-      )}
-      
-      <BlockStack gap="400">
-        <Text as="h3" variant="headingLg" fontWeight="bold">
-          {title}
-        </Text>
-        
-        <div>
-          <InlineStack align="start" blockAlign="end" gap="200">
-            <Text as="span" variant="heading2xl" fontWeight="bold">
-              {price}
-            </Text>
-            <Text as="span" variant="bodyLg" tone={isPopular ? undefined : "subdued"}>
-              {period}
-            </Text>
-          </InlineStack>
-        </div>
-        
-        <Text as="p" variant="bodyMd" tone={isPopular ? undefined : "subdued"}>
-          {description}
-        </Text>
-        
-        <div style={{ paddingTop: '12px', borderTop: isPopular ? '1px solid rgba(255,255,255,0.2)' : '1px solid #e5e7eb' }}>
-          <BlockStack gap="300">
-            {features.map((feature, index) => (
-              <InlineStack key={index} gap="200" blockAlign="start">
-                <div
-                  style={{
-                    color: isPopular ? 'white' : '#10b981',
-                    flexShrink: 0,
-                    marginTop: '2px',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  ✓
-                </div>
-                <Text as="span" variant="bodyMd">
-                  {feature}
-                </Text>
-              </InlineStack>
-            ))}
-          </BlockStack>
-        </div>
-        
-        <div style={{ paddingTop: '16px' }}>
-          <Button
-            variant={isPopular ? "primary" : "secondary"}
-            size="large"
-            onClick={onSelect}
-            disabled={isActive}
-            loading={loading}
-            fullWidth
-          >
-            {isActive ? "✓ Current Plan" : buttonLabel}
-          </Button>
-        </div>
-      </BlockStack>
-    </div>
-  );
-}
-
 export default function Billing() {
   const { hasSubscription, currentPlan, orderCount, planLimit, planName, totalSavings } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<{ success?: boolean; error?: string; confirmationUrl?: string }>();
+  const fetcher = useFetcher<{ success?: boolean; error?: string; confirmationUrl?: string; message?: string }>();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  // Suppress hydration warnings for this component
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const showSuccessBanner = fetcher.state === "idle" && fetcher.data?.success === true && !fetcher.data?.confirmationUrl;
 
   useEffect(() => {
-    if (showSuccessBanner) {
+    if (isClient && showSuccessBanner) {
       const timer = setTimeout(() => window.location.reload(), 2000);
       return () => clearTimeout(timer);
     }
-  }, [showSuccessBanner]);
+  }, [isClient, showSuccessBanner]);
 
-  // Handle App Bridge redirect for subscription confirmation
+  // Reset loading state when fetcher is done or encounters an error
   useEffect(() => {
-    if (fetcher.data?.confirmationUrl) {
-      // Use window.open with _top to break out of iframe
-      window.open(fetcher.data.confirmationUrl, '_top');
+    if (fetcher.state === 'idle' || fetcher.data?.error) {
+      setLoadingPlan(null);
     }
-  }, [fetcher.data?.confirmationUrl]);
+  }, [fetcher.state, fetcher.data]);
+
+  // Handle App Store redirect - only on client side
+  useEffect(() => {
+    if (isClient && fetcher.data?.confirmationUrl) {
+      // For App Store billing, open the App Store URL in a new tab/window
+      window.open(fetcher.data.confirmationUrl, '_blank');
+      // Reset loading state immediately after opening the App Store
+      setLoadingPlan(null);
+    }
+  }, [isClient, fetcher.data?.confirmationUrl]);
 
   const currentPlanAmount = currentPlan
     ? parseFloat(currentPlan.lineItems?.[0]?.plan?.pricingDetails?.price?.amount || "0")
     : 0;
 
   const handleSelectPlan = (planType: string) => {
+    // Prevent multiple simultaneous requests for the same plan
+    if (loadingPlan !== null) return;
+    
+    setLoadingPlan(planType);
     const formData = new FormData();
     formData.append("action", "subscribe");
     formData.append("plan", planType);
+    formData.append("timestamp", Date.now().toString()); // Make each request unique
     fetcher.submit(formData, { method: "post" });
+
+    // Fallback: Reset loading state after 10 seconds in case something goes wrong
+    setTimeout(() => {
+      setLoadingPlan(null);
+    }, 10000);
   };
 
   const handleCancelSubscription = () => {
+    if (loadingPlan !== null) return;
+    
+    setLoadingPlan('cancel');
     const formData = new FormData();
     formData.append("action", "cancel");
     fetcher.submit(formData, { method: "post" });
@@ -331,352 +297,319 @@ export default function Billing() {
   return (
     <Page title="Subscription & Billing">
       <TitleBar title="Billing" />
-      
-      <BlockStack gap="600">
-        {/* Success/Error Banners */}
-        {showSuccessBanner && (
+
+      <BlockStack gap="500">
+        {/* Success/Error Banners - only show on client to prevent hydration mismatches */}
+        {isClient && showSuccessBanner && (
           <Banner tone="success">
-            <p style={{ fontSize: '16px', fontWeight: 500 }}>
-              ✓ Subscription updated successfully! Refreshing...
-            </p>
+            <p>Subscription updated successfully! Refreshing...</p>
           </Banner>
         )}
-        
-        {fetcher.data?.error && (
+
+        {isClient && fetcher.data?.message && (
+          <Banner tone="info">
+            <p>{fetcher.data.message}</p>
+          </Banner>
+        )}
+
+        {isClient && fetcher.data?.error && (
           <Banner tone="critical">
-            <p style={{ fontSize: '16px', fontWeight: 500 }}>
-              ⚠️ {fetcher.data.error}
-            </p>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                Subscription Error
+              </Text>
+              <Text as="p" variant="bodyMd">
+                {fetcher.data.error}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                If this error persists, please contact support or try again later.
+              </Text>
+            </BlockStack>
           </Banner>
         )}
 
-        {/* Hero Section */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            padding: '64px 48px',
-            borderRadius: '20px',
-            color: 'white',
-            textAlign: 'center',
-            boxShadow: '0 20px 25px -5px rgba(102, 126, 234, 0.3)',
-          }}
-        >
-          <BlockStack gap="400">
-            <Text as="h1" variant="heading2xl" fontWeight="bold">
-              🚀 Unlock the Full Power of Reverse Bundling
-            </Text>
-            <Text as="p" variant="bodyLg">
-              Save thousands on fulfillment costs • Start with 50 FREE orders/month
-            </Text>
-          </BlockStack>
-        </div>
-
-        {/* Current Subscription Stats */}
-        {hasSubscription && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  📊 Current Plan
-                </Text>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {planName}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  📦 Orders This Month
-                </Text>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {orderCount.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  💰 Total Savings
-                </Text>
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">
-                  ${totalSavings.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  ✓ Status
-                </Text>
-                <Badge tone="success" size="large">
-                  Active
-                </Badge>
-              </BlockStack>
-            </Card>
-          </div>
+        {/* Loading state banner - only show on client */}
+        {isClient && loadingPlan !== null && (
+          <Banner tone="info">
+            <p>Processing subscription change... Please wait.</p>
+          </Banner>
         )}
 
-        {/* Usage Progress */}
-        {hasSubscription && planLimit > 0 && planLimit < 999999 && (
+        {/* Current Plan Status */}
+        {hasSubscription && (
           <Card>
             <BlockStack gap="400">
-              <InlineStack align="space-between">
-                <Text as="h3" variant="headingMd">
-                  📈 Monthly Usage
-                </Text>
-                <Text as="span" variant="bodyMd" fontWeight="bold">
-                  {orderCount.toLocaleString()} / {planLimit.toLocaleString()} orders
-                </Text>
-              </InlineStack>
+              <Text as="h2" variant="headingMd">
+                Current Plan: {planName}
+              </Text>
 
-              <ProgressBar progress={usagePercentage} size="large" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Monthly Orders
+                  </Text>
+                  <Text as="p" variant="headingMd" fontWeight="bold">
+                    {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
+                  </Text>
+                </div>
 
-              {usagePercentage > 90 && (
-                <Banner tone="warning">
-                  <p>
-                    ⚠️ You're approaching your plan limit ({Math.round(usagePercentage)}% used).
-                    Consider upgrading to avoid service interruption.
-                  </p>
-                </Banner>
+                <div>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Total Savings
+                  </Text>
+                  <Text as="p" variant="headingMd" fontWeight="bold" tone="success">
+                    ${totalSavings.toLocaleString()}
+                  </Text>
+                </div>
+
+                <div>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Status
+                  </Text>
+                  <Badge tone="success">Active</Badge>
+                </div>
+              </div>
+
+              {/* Usage Progress */}
+              {planLimit > 0 && planLimit < 999999 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <Text as="p" variant="bodySm">
+                      Monthly usage: {Math.round(usagePercentage)}%
+                    </Text>
+                    <Text as="p" variant="bodySm">
+                      {orderCount} / {planLimit} orders
+                    </Text>
+                  </div>
+                  <ProgressBar progress={usagePercentage} />
+
+                  {usagePercentage > 90 && (
+                    <Banner tone="warning" title="Usage Alert">
+                      <p>
+                        You're approaching your monthly limit. Consider upgrading to ensure uninterrupted service.
+                      </p>
+                    </Banner>
+                  )}
+                </div>
               )}
             </BlockStack>
           </Card>
         )}
 
-        {/* ROI Section */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-            padding: '48px',
-            borderRadius: '20px',
-            color: 'white',
-            boxShadow: '0 20px 25px -5px rgba(245, 87, 108, 0.3)',
-          }}
-        >
+        {/* Pricing Plans */}
+        <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingLg" fontWeight="bold">
-              💎 Calculate Your ROI
+            <Text as="h2" variant="headingMd">
+              Choose Your Plan
             </Text>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '24px',
-                marginTop: '16px',
-              }}
-            >
-              {[
-                { orders: '100', savings: '$4,000' },
-                { orders: '500', savings: '$24,000' },
-                { orders: '2,000', savings: '$96,000' },
-                { orders: '5,000+', savings: '$192,000+' },
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'rgba(255,255,255,0.2)',
-                    padding: '20px',
-                    borderRadius: '12px',
-                    backdropFilter: 'blur(10px)',
-                  }}
-                >
-                  <Text as="p" variant="bodyMd" fontWeight="bold">
-                    {item.orders} orders/month
-                  </Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">
-                    Save: {item.savings}/year
-                  </Text>
-                </div>
-              ))}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+              {/* Free Plan */}
+              <Card>
+                <BlockStack gap="300">
+                  <div>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Free
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Get started with basic features
+                    </Text>
+                  </div>
+
+                  <div>
+                    <Text as="span" variant="heading2xl" fontWeight="bold">
+                      $0
+                    </Text>
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      /month
+                    </Text>
+                  </div>
+
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">• 50 orders per month</Text>
+                    <Text as="p" variant="bodySm">• Basic bundling rules</Text>
+                    <Text as="p" variant="bodySm">• Email support</Text>
+                  </BlockStack>
+
+                  {!hasSubscription && (
+                    <Button variant="secondary" disabled fullWidth>
+                      Current Plan
+                    </Button>
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Starter Plan */}
+              <Card>
+                <BlockStack gap="300">
+                  <div>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Starter
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Perfect for growing stores
+                    </Text>
+                  </div>
+
+                  <div>
+                    <Text as="span" variant="heading2xl" fontWeight="bold">
+                      $29
+                    </Text>
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      /month
+                    </Text>
+                  </div>
+
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">• 550 orders per month</Text>
+                    <Text as="p" variant="bodySm">• Unlimited bundle rules</Text>
+                    <Text as="p" variant="bodySm">• Real-time analytics</Text>
+                    <Text as="p" variant="bodySm">• Email support</Text>
+                  </BlockStack>
+
+                  <Button
+                    variant="primary"
+                    onClick={() => handleSelectPlan('starter')}
+                    disabled={currentPlanAmount === 29}
+                    loading={loadingPlan === 'starter'}
+                    fullWidth
+                  >
+                    {currentPlanAmount === 29 ? 'Current Plan' : 'Upgrade to Starter'}
+                  </Button>
+                </BlockStack>
+              </Card>
+
+              {/* Professional Plan */}
+              <Card>
+                <BlockStack gap="300">
+                  <div>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Professional
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      For established businesses
+                    </Text>
+                  </div>
+
+                  <div>
+                    <Text as="span" variant="heading2xl" fontWeight="bold">
+                      $79
+                    </Text>
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      /month
+                    </Text>
+                  </div>
+
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">• 2,050 orders per month</Text>
+                    <Text as="p" variant="bodySm">• Advanced analytics</Text>
+                    <Text as="p" variant="bodySm">• Priority support</Text>
+                    <Text as="p" variant="bodySm">• API access</Text>
+                  </BlockStack>
+
+                  <Button
+                    variant="primary"
+                    onClick={() => handleSelectPlan('professional')}
+                    disabled={currentPlanAmount === 79}
+                    loading={loadingPlan === 'professional'}
+                    fullWidth
+                  >
+                    {currentPlanAmount === 79 ? 'Current Plan' : 'Upgrade to Professional'}
+                  </Button>
+                </BlockStack>
+              </Card>
+
+              {/* Enterprise Plan */}
+              <Card>
+                <BlockStack gap="300">
+                  <div>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Enterprise
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      For high-volume stores
+                    </Text>
+                  </div>
+
+                  <div>
+                    <Text as="span" variant="heading2xl" fontWeight="bold">
+                      $199
+                    </Text>
+                    <Text as="span" variant="bodyMd" tone="subdued">
+                      /month
+                    </Text>
+                  </div>
+
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodySm">• Unlimited orders</Text>
+                    <Text as="p" variant="bodySm">• Dedicated account manager</Text>
+                    <Text as="p" variant="bodySm">• Custom development</Text>
+                    <Text as="p" variant="bodySm">• 24/7 phone support</Text>
+                  </BlockStack>
+
+                  <Button
+                    variant="primary"
+                    onClick={() => handleSelectPlan('enterprise')}
+                    disabled={currentPlanAmount === 199}
+                    loading={loadingPlan === 'enterprise'}
+                    fullWidth
+                  >
+                    {currentPlanAmount === 199 ? 'Current Plan' : 'Upgrade to Enterprise'}
+                  </Button>
+                </BlockStack>
+              </Card>
             </div>
-          </BlockStack>
-        </div>
 
-        {/* Pricing Cards */}
-        <div>
-          <BlockStack gap="400">
-            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-              <Text as="h2" variant="heading2xl" fontWeight="bold">
-                Choose Your Plan
-              </Text>
-              <Text as="p" variant="bodyLg" tone="subdued">
-                🎁 50 free orders/month • 14-day free trial • No credit card required
-              </Text>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: '32px',
-                alignItems: 'center',
-              }}
-            >
-              <PricingCard
-                title="Starter"
-                price="$29"
-                period="/month"
-                description="Perfect for growing stores"
-                features={[
-                  'Up to 550 bundled orders/month (50 free + 500)',
-                  'Unlimited bundle rules',
-                  'Real-time analytics dashboard',
-                  'Email support',
-                  'Basic integrations',
-                ]}
-                buttonLabel="Start Free Trial"
-                onSelect={() => handleSelectPlan('starter')}
-                isActive={currentPlanAmount === 29}
-                loading={fetcher.state === 'submitting'}
-              />
-
-              <PricingCard
-                title="Professional"
-                price="$79"
-                period="/month"
-                description="For established businesses"
-                features={[
-                  'Up to 2,050 bundled orders/month (50 free + 2,000)',
-                  'Everything in Starter',
-                  'Advanced analytics & insights',
-                  'Priority support (24/7)',
-                  'API access',
-                  'Custom integrations',
-                ]}
-                isPopular
-                buttonLabel="Start Free Trial"
-                onSelect={() => handleSelectPlan('professional')}
-                isActive={currentPlanAmount === 79}
-                loading={fetcher.state === 'submitting'}
-              />
-
-              <PricingCard
-                title="Enterprise"
-                price="$199"
-                period="/month"
-                description="For high-volume stores"
-                features={[
-                  'Unlimited orders (50 free + unlimited)',
-                  'Everything in Professional',
-                  'Dedicated account manager',
-                  'Custom development support',
-                  'SLA guarantee (99.9%)',
-                  'White-label options',
-                ]}
-                buttonLabel="Start Free Trial"
-                onSelect={() => handleSelectPlan('enterprise')}
-                isActive={currentPlanAmount === 199}
-                loading={fetcher.state === 'submitting'}
-              />
-            </div>
-          </BlockStack>
-        </div>
-
-        {/* Social Proof */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-            padding: '48px',
-            borderRadius: '20px',
-            textAlign: 'center',
-          }}
-        >
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingLg" fontWeight="bold">
-              🏆 Trusted by 10,000+ Shopify Merchants
+            <Text as="p" variant="bodySm" tone="subdued">
+              All plans include a 14-day free trial. No credit card required to start.
             </Text>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '32px',
-                marginTop: '24px',
-              }}
-            >
-              <div>
-                <Text as="p" variant="heading2xl" fontWeight="bold">
-                  $2.4M+
-                </Text>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Total Savings Generated
-                </Text>
-              </div>
-              <div>
-                <Text as="p" variant="heading2xl" fontWeight="bold">
-                  50K+
-                </Text>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Orders Processed Daily
-                </Text>
-              </div>
-              <div>
-                <Text as="p" variant="heading2xl" fontWeight="bold">
-                  4.9/5
-                </Text>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Average Rating
-                </Text>
-              </div>
-            </div>
           </BlockStack>
-        </div>
+        </Card>
 
         {/* FAQ */}
         <Card>
-          <BlockStack gap="600">
-            <Text as="h2" variant="headingLg" fontWeight="bold">
-              💬 Frequently Asked Questions
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">
+              Frequently Asked Questions
             </Text>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                gap: '32px',
-              }}
-            >
-              {[
-                {
-                  q: '💳 How does the 14-day free trial work?',
-                  a: 'Start using any plan immediately with full features. You won\'t be charged until after 14 days. Cancel anytime before the trial ends and pay nothing.',
-                },
-                {
-                  q: '🔄 Can I change plans?',
-                  a: 'Yes! Upgrade or downgrade at any time. Changes take effect immediately, and we\'ll prorate the difference for you.',
-                },
-                {
-                  q: '📈 What happens if I exceed my order limit?',
-                  a: 'We\'ll notify you when you reach 80% of your limit. You can upgrade anytime to continue processing. Orders won\'t be interrupted.',
-                },
-                {
-                  q: '🔒 Is my payment information secure?',
-                  a: 'Absolutely. All billing is processed through Shopify\'s secure payment system. We never see or store your payment details.',
-                },
-                {
-                  q: '💰 How much can I actually save?',
-                  a: 'On average, merchants save $8-12 per order on fulfillment costs. That\'s $4,000-$24,000/month depending on your plan!',
-                },
-                {
-                  q: '❌ Can I cancel anytime?',
-                  a: 'Yes! No long-term contracts. Cancel anytime from this page. You\'ll retain access until the end of your billing period.',
-                },
-              ].map((faq, idx) => (
-                <div key={idx}>
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyLg" fontWeight="bold">
-                      {faq.q}
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      {faq.a}
-                    </Text>
-                  </BlockStack>
-                </div>
-              ))}
-            </div>
+            <BlockStack gap="300">
+              <div>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  How does the free trial work?
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Install the app from the Shopify App Store to start your 14-day free trial. You'll get full access to all features with no credit card required.
+                </Text>
+              </div>
+
+              <div>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  Can I change plans anytime?
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Yes! You can upgrade or downgrade your plan anytime through the Shopify App Store. Changes take effect immediately.
+                </Text>
+              </div>
+
+              <div>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  What happens if I exceed my order limit?
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  We'll notify you when you reach 80% of your limit. You can upgrade your plan instantly through the App Store. Orders won't be interrupted.
+                </Text>
+              </div>
+
+              <div>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  How do I cancel my subscription?
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  You can uninstall the app anytime from your Shopify admin. Your subscription will be cancelled immediately with no further charges.
+                </Text>
+              </div>
+            </BlockStack>
           </BlockStack>
         </Card>
 
@@ -688,20 +621,20 @@ export default function Billing() {
                 Subscription Management
               </Text>
 
-              {!showCancelConfirm ? (
+              {isClient && !showCancelConfirm ? (
                 <Button
                   variant="plain"
                   tone="critical"
                   onClick={() => setShowCancelConfirm(true)}
-                  loading={fetcher.state === 'submitting'}
+                  loading={loadingPlan === 'cancel'}
                 >
                   Cancel Subscription
                 </Button>
-              ) : (
+              ) : isClient && showCancelConfirm ? (
                 <BlockStack gap="400">
                   <Banner tone="warning">
                     <p>
-                      ⚠️ Are you sure you want to cancel your subscription? You'll lose access to
+                      Are you sure you want to cancel your subscription? You'll lose access to
                       all premium features.
                     </p>
                   </Banner>
@@ -710,14 +643,14 @@ export default function Billing() {
                       variant="primary"
                       tone="critical"
                       onClick={handleCancelSubscription}
-                      loading={fetcher.state === 'submitting'}
+                      loading={loadingPlan === 'cancel'}
                     >
                       Yes, Cancel Subscription
                     </Button>
                     <Button onClick={() => setShowCancelConfirm(false)}>Keep Subscription</Button>
                   </InlineStack>
                 </BlockStack>
-              )}
+              ) : null}
             </BlockStack>
           </Card>
         )}
