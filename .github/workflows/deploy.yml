@@ -33,7 +33,7 @@ jobs:
           git stash pop || echo "No stashed changes to apply"
 
           echo "📦 Installing dependencies..."
-          npm ci --production=false
+          npm install --production=false
 
           echo "🔨 Building application..."
           npm run build
