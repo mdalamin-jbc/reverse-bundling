@@ -29,32 +29,44 @@ jobs:
           echo "📥 Pulling latest changes from main branch..."
           git pull origin main
 
-          echo "💾 Applying production database configuration..."
-          git stash pop || echo "No stashed changes to apply"
-
           echo "📦 Installing dependencies..."
           npm ci --production=false
+
+          echo "🔧 Setting up production environment..."
+          if [ ! -f .env.production ]; then
+            echo "⚠️ .env.production not found, copying from example..."
+            cp .env.production.example .env.production || echo "No example file found, using existing env vars"
+          fi
 
           echo "🔨 Building application..."
           npm run build
 
           echo "🗄️ Running database migrations..."
           npx prisma generate
-          npx prisma db push --accept-data-loss || echo "Database schema already up to date"
+          if npx prisma db push --accept-data-loss; then
+            echo "✅ Database migration completed successfully"
+          else
+            echo "⚠️ Database migration failed, but continuing deployment..."
+          fi
 
           echo "🔄 Restarting application service..."
           sudo systemctl restart reverse-bundling.service
 
           echo "⏳ Waiting for application to start..."
-          sleep 10
+          sleep 15
 
           echo "🏥 Checking application health..."
-          if curl -f http://localhost:3000/health 2>/dev/null; then
-            echo "✅ Deployment completed successfully!"
-            echo "🌐 Application is running and healthy"
-          else
-            echo "⚠️ Application deployed but health check failed"
-            echo "🔍 Check application logs for details"
-            exit 1
-          fi
+          for i in {1..3}; do
+            if curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Deployment completed successfully!"
+              echo "🌐 Application is running and healthy"
+              exit 0
+            fi
+            echo "⏳ Health check attempt $i failed, waiting..."
+            sleep 5
+          done
+
+          echo "❌ Deployment completed but health check failed after 3 attempts"
+          echo "🔍 Check application logs: sudo journalctl -u reverse-bundling.service -n 50"
+          exit 1
         EOF
