@@ -32,6 +32,10 @@ jobs:
           git clean -fd
           git pull origin main --force
 
+          echo "🧹 Cleaning previous build artifacts..."
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
+
           echo "📦 Installing dependencies..."
           npm ci --production=false
 

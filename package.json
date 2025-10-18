@@ -62,7 +62,8 @@
     "extensions/*"
   ],
   "trustedDependencies": [
-    "@shopify/plugin-cloudflare"
+    "@shopify/plugin-cloudflare",
+    "esbuild"
   ],
   "resolutions": {
     "@graphql-tools/url-loader": "8.0.16",
