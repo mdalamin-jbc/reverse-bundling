@@ -27,7 +27,8 @@ jobs:
           cd /home/opc/reverse-bundling
 
           echo "📥 Pulling latest changes from main branch..."
-          git pull origin main
+          git fetch origin
+          git reset --hard origin/main
 
           echo "💾 Applying production database configuration..."
           git stash pop || echo "No stashed changes to apply"
