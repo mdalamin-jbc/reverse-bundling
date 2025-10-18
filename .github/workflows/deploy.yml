@@ -30,14 +30,33 @@ jobs:
           git fetch origin
           git reset --hard origin/main
 
-          echo "💾 Applying production database configuration..."
-          git stash pop || echo "No stashed changes to apply"
+          echo "🧹 Cleaning up previous installation..."
+          rm -rf node_modules package-lock.json .next build
+          npm cache clean --force 2>/dev/null || true
 
-          echo "📦 Installing dependencies..."
-          npm install --production=false
+          echo "💾 Setting up memory optimization..."
+          # Add swap space for better npm performance
+          sudo swapoff -a 2>/dev/null || true
+          sudo fallocate -l 1G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=1024 2>/dev/null
+          sudo chmod 600 /swapfile 2>/dev/null || true
+          sudo mkswap /swapfile 2>/dev/null || true
+          sudo swapon /swapfile 2>/dev/null || true
+
+          echo "📦 Installing dependencies efficiently..."
+          # Use npm ci for faster, more reliable installs if lock file exists
+          if [ -f package-lock.json ]; then
+            timeout 600 npm ci --production=false --no-optional --prefer-offline || timeout 600 npm install --production=false --no-optional
+          else
+            timeout 600 npm install --production=false --no-optional
+          fi
 
           echo "🔨 Building application..."
-          npm run build
+          # Set memory limit and build
+          NODE_OPTIONS="--max-old-space-size=256" npm run build
+
+          echo "🧹 Cleaning up temporary files..."
+          sudo swapoff /swapfile 2>/dev/null || true
+          sudo rm -f /swapfile 2>/dev/null || true
 
           echo "🗄️ Running database migrations..."
           npx prisma generate
