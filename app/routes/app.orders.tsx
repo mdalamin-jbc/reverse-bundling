@@ -20,38 +20,68 @@ import { authenticate } from "../shopify.server";
 import { useState, useMemo } from "react";
 import db from "../db.server";
 import { logInfo, logError } from "../logger.server";
+import { withCache, cacheKeys } from "../cache.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "50");
+  const offset = (page - 1) * limit;
+
   try {
-    // Fetch all order conversions with bundle rule details
+    // Cache expensive stats calculation for 5 minutes
+    const statsKey = cacheKeys.shopStats(session.shop);
+    const stats = await withCache(statsKey, 5 * 60 * 1000, async () => {
+      // Get summary statistics with optimized queries
+      const [totalConversions, totalSavingsResult, avgSavingsResult] = await Promise.all([
+        db.orderConversion.count({ where: { shop: session.shop } }),
+        db.orderConversion.aggregate({
+          where: { shop: session.shop },
+          _sum: { savingsAmount: true }
+        }),
+        db.orderConversion.aggregate({
+          where: { shop: session.shop },
+          _avg: { savingsAmount: true }
+        })
+      ]);
+
+      return {
+        totalConversions,
+        totalSavings: totalSavingsResult._sum.savingsAmount || 0,
+        avgSavings: avgSavingsResult._avg.savingsAmount || 0
+      };
+    });
+
+    // Fetch paginated conversions with optimized query
     const conversions = await db.orderConversion.findMany({
       where: { shop: session.shop },
       include: {
-        bundleRule: true
+        bundleRule: {
+          select: { name: true, bundledSku: true } // Only select needed fields
+        }
       },
       orderBy: { convertedAt: 'desc' },
-      take: 100 // Limit to last 100 conversions
+      skip: offset,
+      take: limit
     });
 
-    // Get summary statistics
-    const totalConversions = conversions.length;
-    const totalSavings = conversions.reduce((sum, c) => sum + c.savingsAmount, 0);
-    const avgSavings = totalConversions > 0 ? totalSavings / totalConversions : 0;
-
-    logInfo('Loaded order conversions', {
+    logInfo('Loaded paginated order conversions', {
       shop: session.shop,
-      conversionCount: totalConversions,
-      totalSavings
+      page,
+      limit,
+      conversionCount: conversions.length,
+      totalConversions: stats.totalConversions
     });
 
-    return json({ 
+    return json({
       conversions,
-      stats: {
-        totalConversions,
-        totalSavings,
-        avgSavings
+      stats,
+      pagination: {
+        page,
+        limit,
+        total: stats.totalConversions,
+        totalPages: Math.ceil(stats.totalConversions / limit)
       }
     });
   } catch (error) {
@@ -70,13 +100,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function OrderConversions() {
   const { conversions, stats } = useLoaderData<typeof loader>();
   
+  // Filter out any null conversions (shouldn't happen but TypeScript needs this)
+  const validConversions = conversions.filter(c => c !== null);
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortBy, setSortBy] = useState("date_desc");
 
   // Filter and sort conversions
   const filteredConversions = useMemo(() => {
-    let filtered = conversions;
+    let filtered = validConversions;
 
     // Search filter
     if (searchQuery) {
@@ -109,7 +142,7 @@ export default function OrderConversions() {
     }
 
     return sorted;
-  }, [conversions, searchQuery, filterStatus, sortBy]);
+  }, [validConversions, searchQuery, filterStatus, sortBy]);
 
   // Prepare data for DataTable
   const tableRows = filteredConversions.map(conversion => {
@@ -329,8 +362,8 @@ export default function OrderConversions() {
                       Best Performing Rule
                     </Text>
                     <Text as="p" variant="bodySm">
-                      {conversions.length > 0 
-                        ? conversions.reduce((prev, current) => 
+                      {validConversions.length > 0 
+                        ? validConversions.reduce((prev, current) => 
                             prev.savingsAmount > current.savingsAmount ? prev : current
                           ).bundleRule.name
                         : "N/A"
@@ -345,7 +378,7 @@ export default function OrderConversions() {
                       Today's Conversions
                     </Text>
                     <Text as="p" variant="bodySm">
-                      {conversions.filter(c => {
+                      {validConversions.filter(c => {
                         const today = new Date();
                         const convertDate = new Date(c.convertedAt);
                         return convertDate.toDateString() === today.toDateString();
@@ -360,8 +393,8 @@ export default function OrderConversions() {
                       Highest Single Savings
                     </Text>
                     <Text as="p" variant="bodySm">
-                      ${conversions.length > 0 
-                        ? Math.max(...conversions.map(c => c.savingsAmount)).toFixed(2)
+                      ${validConversions.length > 0 
+                        ? Math.max(...validConversions.map(c => c.savingsAmount)).toFixed(2)
                         : "0.00"
                       }
                     </Text>

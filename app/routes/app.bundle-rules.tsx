@@ -15,10 +15,16 @@ import {
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { logInfo, logError } from "../logger.server";
+import { withCache, cacheKeys } from "../cache.server";
 import db from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const offset = (page - 1) * limit;
 
   // Fetch real products from Shopify
   let products: Array<{label: string, value: string}> = [];
@@ -54,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Use variant ID as value if SKU is empty
         const value = variant.node.sku || variant.node.id;
         const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
-        // Create a mapping from value to readable label
+        // Create a mapping from value to value
         productMap[value] = label;
         productMap[variant.node.id] = label; // Also map the ID
         return {
@@ -68,17 +74,55 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     products = [];
   }
 
-  // Fetch bundle rules from database
-  const bundleRules = await db.bundleRule.findMany({
-    where: {
-      shop: session.shop
-    },
-    orderBy: {
-      createdAt: 'desc'
-    }
-  });
+  try {
+    // Cache bundle rules for 10 minutes (rules don't change frequently)
+    const rulesKey = cacheKeys.bundleRules(session.shop);
+    const bundleRules = await withCache(rulesKey, 10 * 60 * 1000, async () => {
+      return db.bundleRule.findMany({
+        where: { shop: session.shop },
+        orderBy: { createdAt: 'desc' }
+      });
+    });
 
-  return json({ bundleRules, products, productMap });
+    // Get total count for pagination
+    const totalRules = bundleRules.length;
+
+    // Apply pagination to the cached results
+    const paginatedRules = bundleRules.slice(offset, offset + limit);
+
+    logInfo('Loaded paginated bundle rules', {
+      shop: session.shop,
+      page,
+      limit,
+      rulesCount: paginatedRules.length,
+      totalRules
+    });
+
+    return json({
+      bundleRules: paginatedRules,
+      products,
+      productMap,
+      pagination: {
+        page,
+        limit,
+        total: totalRules,
+        totalPages: Math.ceil(totalRules / limit)
+      }
+    });
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error('Error loading bundle rules'), { shop: session.shop });
+    return json({
+      bundleRules: [],
+      products,
+      productMap,
+      pagination: {
+        page: 1,
+        limit,
+        total: 0,
+        totalPages: 0
+      }
+    });
+  }
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -158,7 +202,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 
 export default function BundleRules() {
-  const { bundleRules, products, productMap } = useLoaderData<typeof loader>();
+  const { bundleRules, products, productMap, pagination } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -251,7 +295,7 @@ export default function BundleRules() {
             }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white' }}>
-                  {bundleRules.length}
+                  {pagination.total}
                 </div>
                 <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
                   Active Rules
@@ -259,7 +303,7 @@ export default function BundleRules() {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fbbf24' }}>
-                  {bundleRules.reduce((sum, rule: any) => sum + (rule.frequency || 0), 0)}
+                  {bundleRules.reduce((sum: number, rule: any) => sum + (rule.frequency || 0), 0)}
                 </div>
                 <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
                   Monthly Conversions
@@ -267,7 +311,7 @@ export default function BundleRules() {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#34d399' }}>
-                  ${bundleRules.reduce((sum, rule: any) => sum + (rule.savings || 0) * (rule.frequency || 0), 0).toLocaleString()}
+                  ${bundleRules.reduce((sum: number, rule: any) => sum + (rule.savings || 0) * (rule.frequency || 0), 0).toLocaleString()}
                 </div>
                 <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
                   Total Savings/Month
@@ -291,7 +335,7 @@ export default function BundleRules() {
               <InlineStack align="space-between" blockAlign="center">
                 <BlockStack gap="100">
                       <Text as="h2" variant="heading2xl" fontWeight="bold">
-                        📋 Bundle Rules ({bundleRules.length})
+                        📋 Bundle Rules ({pagination.total})
                       </Text>
                       <Text variant="bodyLg" as="p">
                         <span style={{ color: '#78350f' }}>
@@ -544,8 +588,72 @@ export default function BundleRules() {
                     </BlockStack>
                   </div>
                 )}
-            </BlockStack>
-          </Card>
+
+                {/* Pagination Controls */}
+                {pagination.totalPages > 1 && (
+                  <div
+                    style={{
+                      marginTop: '24px',
+                      padding: '20px',
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                      borderRadius: '12px',
+                      border: '1px solid #cbd5e1',
+                    }}
+                  >
+                    <BlockStack gap="300">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text as="p" variant="bodyMd" tone="subdued">
+                          Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} rules
+                        </Text>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <Button
+                            variant="secondary"
+                            disabled={pagination.page <= 1}
+                            onClick={() => {
+                              const newUrl = new URL(window.location.href);
+                              newUrl.searchParams.set('page', (pagination.page - 1).toString());
+                              window.location.href = newUrl.toString();
+                            }}
+                          >
+                            ← Previous
+                          </Button>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                              const pageNum = i + 1;
+                              return (
+                                <Button
+                                  key={pageNum}
+                                  variant={pageNum === pagination.page ? "primary" : "secondary"}
+                                  size="slim"
+                                  onClick={() => {
+                                    const newUrl = new URL(window.location.href);
+                                    newUrl.searchParams.set('page', pageNum.toString());
+                                    window.location.href = newUrl.toString();
+                                  }}
+                                >
+                                  {pageNum.toString()}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                          <Button
+                            variant="secondary"
+                            disabled={pagination.page >= pagination.totalPages}
+                            onClick={() => {
+                              const newUrl = new URL(window.location.href);
+                              newUrl.searchParams.set('page', (pagination.page + 1).toString());
+                              window.location.href = newUrl.toString();
+                            }}
+                          >
+                            Next →
+                          </Button>
+                        </div>
+                      </div>
+                    </BlockStack>
+                  </div>
+                )}
+              </BlockStack>
+            </Card>
 
         {/* Premium Cards Section - Below Table */}
         <div style={{ 
