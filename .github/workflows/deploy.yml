@@ -19,7 +19,7 @@ jobs:
 
     - name: Deploy to Oracle Cloud
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o ConnectTimeout=30 -i ~/.ssh/id_rsa ${{ secrets.ORACLE_SSH_USER }}@${{ secrets.ORACLE_HOST }} << 'EOF'
           set -e  # Exit on any error
 
           echo "🚀 Starting deployment to Oracle Cloud..."
@@ -37,22 +37,38 @@ jobs:
           echo "💾 Setting up memory optimization..."
           # Add swap space for better npm performance
           sudo swapoff -a 2>/dev/null || true
-          sudo fallocate -l 1G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=1024 2>/dev/null
+          sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 2>/dev/null
           sudo chmod 600 /swapfile 2>/dev/null || true
           sudo mkswap /swapfile 2>/dev/null || true
           sudo swapon /swapfile 2>/dev/null || true
 
           echo "📦 Installing dependencies efficiently..."
-          # Use npm ci for faster, more reliable installs if lock file exists
+          # Use npm ci for faster, more reliable installs with retry logic
+          set +e  # Temporarily disable exit on error for retry logic
           if [ -f package-lock.json ]; then
-            timeout 600 npm ci --production=false --no-optional --prefer-offline || timeout 600 npm install --production=false --no-optional
+            echo "🔄 Attempting npm ci..."
+            timeout 300 npm ci --production=false --no-optional --prefer-offline --no-audit
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "⚠️ npm ci failed, trying npm install..."
+              timeout 300 npm install --production=false --no-optional --prefer-offline --no-audit
+              EXIT_CODE=$?
+            fi
           else
-            timeout 600 npm install --production=false --no-optional
+            echo "🔄 Attempting npm install..."
+            timeout 300 npm install --production=false --no-optional --prefer-offline --no-audit
+            EXIT_CODE=$?
+          fi
+          set -e  # Re-enable exit on error
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Dependency installation failed after retries"
+            exit 1
           fi
 
           echo "🔨 Building application..."
           # Set memory limit and build
-          NODE_OPTIONS="--max-old-space-size=256" npm run build
+          NODE_OPTIONS="--max-old-space-size=512" timeout 300 npm run build
 
           echo "🧹 Cleaning up temporary files..."
           sudo swapoff /swapfile 2>/dev/null || true
@@ -66,13 +82,13 @@ jobs:
           # Kill existing process and start new one
           pkill -f "remix-serve" || true
           cd /home/opc/reverse-bundling
-          nohup node --max-old-space-size=32 ./node_modules/.bin/remix-serve ./build/server/index.js >> app.log 2>&1 &
+          nohup node --max-old-space-size=64 ./node_modules/.bin/remix-serve ./build/server/index.js >> app.log 2>&1 &
 
           echo "⏳ Waiting for application to start..."
-          sleep 10
+          sleep 15
 
           echo "🏥 Checking application health..."
-          if curl -f http://localhost:3000/health 2>/dev/null; then
+          if curl -f --max-time 30 http://localhost:3000/health 2>/dev/null; then
             echo "✅ Deployment completed successfully!"
             echo "🌐 Application is running and healthy"
           else
