@@ -43,36 +43,17 @@ jobs:
           sudo swapon /swapfile 2>/dev/null || true
 
           echo "📦 Installing dependencies efficiently..."
-          # Use npm ci for faster, more reliable installs with extended timeout
+          # Use npm install with optimizations for faster, reliable installs
           set +e  # Temporarily disable exit on error for retry logic
 
-          # First try with production dependencies only for faster install
-          echo "🔄 Attempting production-only install first..."
-          timeout 600 npm ci --omit=dev --prefer-offline --no-audit --no-fund --no-progress
-          PROD_EXIT_CODE=$?
-
-          if [ $PROD_EXIT_CODE -eq 0 ]; then
-            echo "✅ Production dependencies installed, now installing dev dependencies..."
-            timeout 600 npm ci --include=dev --prefer-offline --no-audit --no-fund --no-progress
-            DEV_EXIT_CODE=$?
-          else
-            echo "⚠️ Production install failed, trying full install..."
-            timeout 600 npm ci --prefer-offline --no-audit --no-fund --no-progress
-            DEV_EXIT_CODE=$?
-          fi
-
-          if [ $DEV_EXIT_CODE -ne 0 ]; then
-            echo "⚠️ npm ci failed, trying npm install with cache optimization..."
-            timeout 600 npm install --prefer-offline --no-audit --no-fund --no-progress
-            EXIT_CODE=$?
-          else
-            EXIT_CODE=$DEV_EXIT_CODE
-          fi
+          echo "🔄 Installing dependencies..."
+          timeout 600 npm install --prefer-offline --no-audit --no-fund --no-progress
+          EXIT_CODE=$?
 
           set -e  # Re-enable exit on error
 
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Dependency installation failed after all attempts"
+            echo "❌ Dependency installation failed"
             exit 1
           fi
 
