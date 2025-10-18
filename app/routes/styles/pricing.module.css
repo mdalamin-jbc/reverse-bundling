@@ -1,0 +1,341 @@
+/* Pricing Page Styles */
+.page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #f0f9ff 100%);
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.header {
+  padding: 4rem 0 6rem;
+  text-align: center;
+}
+
+.headerTitle {
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: #1a202c;
+  margin-bottom: 1.5rem;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.headerSubtitle {
+  font-size: 1.25rem;
+  color: #64748b;
+  margin-bottom: 3rem;
+  line-height: 1.6;
+  max-width: 768px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Pricing Grid */
+.pricingGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  margin-bottom: 6rem;
+}
+
+@media (min-width: 768px) {
+  .pricingGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Pricing Cards */
+.pricingCard {
+  background: white;
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.pricingCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.popularCard {
+  border: 2px solid #667eea;
+  position: relative;
+}
+
+.popularBadge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Card Content */
+.cardHeader {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.planName {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 0.5rem;
+}
+
+.planPrice {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #1a202c;
+  margin-bottom: 1rem;
+}
+
+.priceAmount {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.pricePeriod {
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.planDescription {
+  color: #64748b;
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+/* Feature List */
+.featureList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.featureItem {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  color: #374151;
+}
+
+.featureIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: #10b981;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* CTA Buttons */
+.ctaButton {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.primaryButton {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.primaryButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.secondaryButton {
+  background: #1f2937;
+  color: white;
+}
+
+.secondaryButton:hover {
+  background: #111827;
+  transform: translateY(-1px);
+}
+
+/* Features Section */
+.featuresSection {
+  text-align: center;
+  margin-top: 4rem;
+}
+
+.featuresTitle {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #1a202c;
+  margin-bottom: 1rem;
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  max-width: 896px;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .featuresGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .featuresGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.featureCard {
+  text-align: center;
+}
+
+.featureIconContainer {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.75rem;
+}
+
+.featureIconGreen {
+  background: #dcfce7;
+}
+
+.featureIconBlue {
+  background: #dbeafe;
+}
+
+.featureIconPurple {
+  background: #f3e8ff;
+}
+
+.featureIconOrange {
+  background: #fed7aa;
+}
+
+.featureIconSvg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.featureIconGreen .featureIconSvg {
+  color: #16a34a;
+}
+
+.featureIconBlue .featureIconSvg {
+  color: #2563eb;
+}
+
+.featureIconPurple .featureIconSvg {
+  color: #9333ea;
+}
+
+.featureIconOrange .featureIconSvg {
+  color: #ea580c;
+}
+
+.featureTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .header {
+    padding: 3rem 0 4rem;
+  }
+
+  .headerTitle {
+    font-size: 2.5rem;
+  }
+
+  .headerSubtitle {
+    font-size: 1.1rem;
+  }
+
+  .pricingGrid {
+    margin-bottom: 4rem;
+  }
+
+  .pricingCard {
+    padding: 1.5rem;
+  }
+
+  .planName {
+    font-size: 1.5rem;
+  }
+
+  .planPrice {
+    font-size: 2.25rem;
+  }
+
+  .featuresSection {
+    margin-top: 3rem;
+  }
+
+  .featuresTitle {
+    font-size: 1.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 0.5rem;
+  }
+
+  .headerTitle {
+    font-size: 2rem;
+  }
+
+  .pricingCard {
+    padding: 1.25rem;
+  }
+
+  .planName {
+    font-size: 1.25rem;
+  }
+
+  .planPrice {
+    font-size: 2rem;
+  }
+
+  .featuresTitle {
+    font-size: 1.5rem;
+  }
+
+  .featuresGrid {
+    gap: 1.5rem;
+  }
+}

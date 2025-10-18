@@ -62,8 +62,11 @@ jobs:
           npx prisma generate
           npx prisma db push --accept-data-loss || echo "Database schema already up to date"
 
-          echo "🔄 Restarting application service..."
-          sudo systemctl restart reverse-bundling.service
+          echo "🔄 Restarting application..."
+          # Kill existing process and start new one
+          pkill -f "remix-serve" || true
+          cd /home/opc/reverse-bundling
+          nohup node --max-old-space-size=32 ./node_modules/.bin/remix-serve ./build/server/index.js >> app.log 2>&1 &
 
           echo "⏳ Waiting for application to start..."
           sleep 10
