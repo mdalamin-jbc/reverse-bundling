@@ -37,7 +37,7 @@ jobs:
           npm cache clean --force
 
           echo "📦 Installing dependencies..."
-          npm ci --production=false
+          npm install --production=false
 
           echo "🔧 Setting up production environment..."
           if [ ! -f .env.production ]; then
