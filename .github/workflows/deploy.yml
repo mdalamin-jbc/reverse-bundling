@@ -27,7 +27,10 @@ jobs:
           cd /home/opc/reverse-bundling
 
           echo "📥 Pulling latest changes from main branch..."
-          git pull origin main
+          # Reset any local changes to avoid merge conflicts
+          git reset --hard HEAD
+          git clean -fd
+          git pull origin main --force
 
           echo "📦 Installing dependencies..."
           npm ci --production=false
