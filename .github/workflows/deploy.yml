@@ -43,32 +43,42 @@ jobs:
           sudo swapon /swapfile 2>/dev/null || true
 
           echo "📦 Installing dependencies efficiently..."
-          # Use npm ci for faster, more reliable installs with retry logic
+          # Use npm ci for faster, more reliable installs with extended timeout
           set +e  # Temporarily disable exit on error for retry logic
-          if [ -f package-lock.json ]; then
-            echo "🔄 Attempting npm ci..."
-            timeout 300 npm ci --production=false --no-optional --prefer-offline --no-audit
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -ne 0 ]; then
-              echo "⚠️ npm ci failed, trying npm install..."
-              timeout 300 npm install --production=false --no-optional --prefer-offline --no-audit
-              EXIT_CODE=$?
-            fi
+
+          # First try with production dependencies only for faster install
+          echo "🔄 Attempting production-only install first..."
+          timeout 600 npm ci --only=production --prefer-offline --no-audit --no-fund --no-progress
+          PROD_EXIT_CODE=$?
+
+          if [ $PROD_EXIT_CODE -eq 0 ]; then
+            echo "✅ Production dependencies installed, now installing dev dependencies..."
+            timeout 600 npm ci --only=development --prefer-offline --no-audit --no-fund --no-progress
+            DEV_EXIT_CODE=$?
           else
-            echo "🔄 Attempting npm install..."
-            timeout 300 npm install --production=false --no-optional --prefer-offline --no-audit
-            EXIT_CODE=$?
+            echo "⚠️ Production install failed, trying full install..."
+            timeout 600 npm ci --prefer-offline --no-audit --no-fund --no-progress
+            DEV_EXIT_CODE=$?
           fi
+
+          if [ $DEV_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ npm ci failed, trying npm install with cache optimization..."
+            timeout 600 npm install --prefer-offline --no-audit --no-fund --no-progress --cache-min=86400
+            EXIT_CODE=$?
+          else
+            EXIT_CODE=$DEV_EXIT_CODE
+          fi
+
           set -e  # Re-enable exit on error
 
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Dependency installation failed after retries"
+            echo "❌ Dependency installation failed after all attempts"
             exit 1
           fi
 
           echo "🔨 Building application..."
-          # Set memory limit and build
-          NODE_OPTIONS="--max-old-space-size=512" timeout 300 npm run build
+          # Set memory limit and build with extended timeout
+          NODE_OPTIONS="--max-old-space-size=512" timeout 600 npm run build
 
           echo "🧹 Cleaning up temporary files..."
           sudo swapoff /swapfile 2>/dev/null || true
