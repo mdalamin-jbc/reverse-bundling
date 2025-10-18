@@ -1,6 +1,6 @@
 import { useLoaderData, useFetcher, useRevalidator } from "@remix-run/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import React, { useState, useCallback, useEffect } from "react";
 import {
   Page,
@@ -16,7 +16,7 @@ import {
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { logInfo, logError } from "../logger.server";
-import { withCache, cacheKeys } from "../cache.server";
+import { withCache, cacheKeys, cache } from "../cache.server";
 import db from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -148,6 +148,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         savings,
       }
     });
+
+    // Invalidate cache for this shop's bundle rules
+    const rulesKey = cacheKeys.bundleRules(session.shop);
+    cache.delete(rulesKey);
     
     return json({ 
       success: true, 
@@ -173,12 +177,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       });
     }
+
+    // Invalidate cache for this shop's bundle rules
+    const rulesKey = cacheKeys.bundleRules(session.shop);
+    cache.delete(rulesKey);
     
-    return json({ 
-      success: true, 
-      message: "Bundle rule status updated!",
-      reload: true
-    });
+    return redirect("/app/bundle-rules");
   }
 
   if (action === "deleteRule") {
@@ -189,12 +193,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shop: session.shop
       }
     });
+
+    // Invalidate cache for this shop's bundle rules
+    const rulesKey = cacheKeys.bundleRules(session.shop);
+    cache.delete(rulesKey);
     
-    return json({ 
-      success: true, 
-      message: "Bundle rule deleted successfully!",
-      reload: true
-    });
+    return redirect("/app/bundle-rules");
   }
 
   return json({ success: false, message: "Unknown action" });
@@ -227,7 +231,9 @@ export default function BundleRules() {
         revalidator.revalidate();
       }
     }
-  }, [fetcher.data, shopify, revalidator]);  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
+  }, [fetcher.data, shopify, revalidator]);
+
+  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
   const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
 
   const handleSubmit = useCallback(() => {
