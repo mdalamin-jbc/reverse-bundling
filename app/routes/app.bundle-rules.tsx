@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher, useRevalidator } from "@remix-run/react";
+import { useLoaderData, useFetcher } from "@remix-run/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import React, { useState, useCallback, useEffect } from "react";
@@ -208,7 +208,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function BundleRules() {
   const { bundleRules, products, productMap, pagination } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const revalidator = useRevalidator();
   const shopify = useAppBridge();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -227,11 +226,11 @@ export default function BundleRules() {
       if (fetcher.data.message.includes("created")) {
         setIsModalOpen(false);
         setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-        // Refresh the data to show the new rule
-        revalidator.revalidate();
+        // Force a full page reload to show the new rule
+        window.location.reload();
       }
     }
-  }, [fetcher.data, shopify, revalidator]);
+  }, [fetcher.data, shopify]);
 
   const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
   const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
