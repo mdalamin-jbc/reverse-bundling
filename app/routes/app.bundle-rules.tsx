@@ -39,7 +39,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const offset = (page - 1) * limit;
 
   // Fetch real products from Shopify with caching (products don't change frequently)
-  let products: Array<{label: string, value: string}> = [];
+  let products: Array<{
+    label: string,
+    value: string,
+    sku?: string,
+    price?: number,
+    productTitle?: string,
+    variantTitle?: string
+  }> = [];
   let productMap: {[key: string]: string} = {};
   try {
     const productsKey = cacheKeys.shopProducts(session.shop);
@@ -76,7 +83,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
           return {
             label,
-            value
+            value,
+            sku: variant.node.sku || '',
+            price: parseFloat(variant.node.price || '0') || 0,
+            productTitle: product.title,
+            variantTitle: variant.node.title || ''
           };
         });
       }).filter((product: any) => product.label && product.value);
@@ -423,6 +434,7 @@ export default function BundleRules() {
     bundledSku: '',
     savings: '',
   });
+  const [selectedTotalPrice, setSelectedTotalPrice] = useState(0);
 
   // Products modal and hover state
   const [showProductsModal, setShowProductsModal] = useState(false);
@@ -440,7 +452,7 @@ export default function BundleRules() {
     plural: 'bundle rules',
   };
 
-  const { selectedResources, allResourcesSelected, handleSelectionChange } = useIndexResourceState(bundleRules);
+  const { selectedResources, handleSelectionChange } = useIndexResourceState(bundleRules);
 
   const isLoading = fetcher.state === "submitting";
 
@@ -506,21 +518,7 @@ export default function BundleRules() {
     window.location.assign(newUrl.toString());
   }, []);
 
-  const handleFiltersApply = useCallback(() => {
-    const newUrl = new URL(window.location.href);
-    if (searchValue) {
-      newUrl.searchParams.set('search', searchValue);
-    } else {
-      newUrl.searchParams.delete('search');
-    }
-    if (statusFilter) {
-      newUrl.searchParams.set('status', statusFilter);
-    } else {
-      newUrl.searchParams.delete('status');
-    }
-    newUrl.searchParams.set('page', '1'); // Reset to first page when filtering
-    window.location.assign(newUrl.toString());
-  }, [searchValue, statusFilter]);
+  // Filters are applied via the toolbar Apply button; useQuery/Apply handled inline where needed
 
   // Update applied filters
   useEffect(() => {
@@ -1271,22 +1269,41 @@ export default function BundleRules() {
                         type="checkbox"
                         checked={formData.items.includes(product.value)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({...formData, items: [...formData.items, product.value]});
-                          } else {
-                            setFormData({...formData, items: formData.items.filter(item => item !== product.value)});
+                          const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
+                          setFormData({...formData, items: nextItems});
+
+                          // Update total price from products list
+                          const priceMap: Record<string, number> = {};
+                          products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
+                          const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
+                          setSelectedTotalPrice(total);
+
+                          // Suggest a bundled SKU based on selected SKUs or count if none
+                          const selectedSkus = nextItems.map(i => {
+                            const p = products.find((x: any) => x.value === i);
+                            return (p && (p.sku || '') ) || '';
+                          }).filter(Boolean);
+                          const suggested = selectedSkus.length > 0 ? `BUNDLE-${selectedSkus.join('-').slice(0, 40)}` : `BUNDLE-${nextItems.length}`;
+                          // Only auto-fill bundledSku if user hasn't typed one yet (allow edit)
+                          if (!formData.bundledSku) {
+                            setFormData(prev => ({ ...prev, bundledSku: suggested }));
                           }
                         }}
                       />
-                      <Text as="span" variant="bodySm">{product.label}</Text>
+                      <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
                     </label>
                   ))}
                 </BlockStack>
               </div>
               {formData.items.length > 0 && (
-                <Text as="p" variant="bodySm" tone="success">
-                  Selected: {formData.items.length} product(s)
-                </Text>
+                <div>
+                  <Text as="p" variant="bodySm" tone="success">
+                    Selected: {formData.items.length} product(s)
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Total price: <strong>${selectedTotalPrice.toFixed(2)}</strong>
+                  </Text>
+                </div>
               )}
             </BlockStack>
             <TextField
