@@ -17,6 +17,10 @@ export default async function handleRequest(
   remixContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
+  
+  // Remove X-Frame-Options to allow the app to run in Shopify iframe
+  responseHeaders.delete("X-Frame-Options");
+  
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
