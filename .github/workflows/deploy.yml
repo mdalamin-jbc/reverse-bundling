@@ -1,0 +1,58 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to Oracle Cloud
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.ORACLE_HOST }}
+        username: ${{ secrets.ORACLE_USER }}
+        key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        port: 22
+        script: |
+          cd /home/opc/reverse-bundling
+
+          # Pull latest changes
+          echo "Pulling latest changes..."
+          git pull origin main
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          npm install
+
+          # Build the application
+          echo "Building application..."
+          npm run build
+
+          # Kill existing process
+          echo "Stopping existing application..."
+          pkill -f 'remix-serve' || true
+
+          # Wait a moment
+          sleep 2
+
+          # Start the application
+          echo "Starting application..."
+          nohup node node_modules/.bin/remix-serve ./build/server/index.js > app.log 2>&1 &
+
+          # Wait a moment for app to start
+          sleep 3
+
+          # Check if app is running
+          if curl -s http://localhost:3000/health > /dev/null; then
+            echo "✅ Application deployed successfully!"
+          else
+            echo "❌ Application failed to start"
+            exit 1
+          fi
