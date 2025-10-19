@@ -67,6 +67,12 @@ jobs:
             log "⚠️ Warning: .env.production not found, using system environment"
           fi
 
+                    # Clean node_modules if it exists to avoid npm ci issues
+          log "🧹 Cleaning node_modules..."
+          if [ -d "node_modules" ]; then
+            rm -rf node_modules || log "⚠️ Warning: Could not remove node_modules, continuing..."
+          fi
+
           # Install dependencies
           log "📦 Installing dependencies..."
           npm ci --production=false || error_exit "npm ci"
