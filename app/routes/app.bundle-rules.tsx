@@ -157,14 +157,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const items = formData.get("items") as string;
     const bundledSku = formData.get("bundledSku") as string;
     const savings = parseFloat(formData.get("savings") as string) || 0;
-    
+
+    // Basic validation
+    if (!name?.trim() || !bundledSku?.trim() || !items?.trim()) {
+      return json({ 
+        success: false, 
+        message: "Please fill in all required fields (Name, Products, and Bundled SKU)",
+        errors: {
+          name: !name?.trim(),
+          bundledSku: !bundledSku?.trim(),
+          items: !items?.trim()
+        }
+      });
+    }
+
     // Create new rule in database
     await db.bundleRule.create({
       data: {
         shop: session.shop,
-        name,
+        name: name.trim(),
         items: JSON.stringify(items.split(",").filter(item => item.trim())),
-        bundledSku,
+        bundledSku: bundledSku.trim(),
         status: "active",
         frequency: 0,
         savings,
@@ -177,16 +190,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     
     logInfo('Bundle rule created successfully', { 
       shop: session.shop, 
-      ruleName: name, 
+      ruleName: name,
       bundledSku,
       itemCount: items.split(",").filter(item => item.trim()).length 
     });
     
-    // Redirect to refresh the page and show the new rule
-    return redirect("/app/bundle-rules");
+    return json({ 
+      success: true, 
+      message: `Bundle rule "${name}" created successfully!`,
+      reload: true
+    });
   }
 
-  if (action === "toggleStatus") {
+  if (action === "updateRule") {
+    const ruleId = formData.get("ruleId") as string;
+    const name = formData.get("name") as string;
+    const items = formData.get("items") as string;
+    const bundledSku = formData.get("bundledSku") as string;
+    const savings = parseFloat(formData.get("savings") as string) || 0;
+
+    // Basic validation
+    if (!name?.trim() || !bundledSku?.trim() || !items?.trim()) {
+      return json({ 
+        success: false, 
+        message: "Please fill in all required fields (Name, Products, and Bundled SKU)",
+        errors: {
+          name: !name?.trim(),
+          bundledSku: !bundledSku?.trim(),
+          items: !items?.trim()
+        }
+      });
+    }
+
+    // Update rule in database
+    await db.bundleRule.update({
+      where: {
+        id: ruleId,
+        shop: session.shop
+      },
+      data: {
+        name: name.trim(),
+        items: JSON.stringify(items.split(",").filter(item => item.trim())),
+        bundledSku: bundledSku.trim(),
+        savings,
+      }
+    });
+
+    // Invalidate cache for this shop's bundle rules
+    const rulesKey = cacheKeys.bundleRules(session.shop);
+    cache.delete(rulesKey);
+    
+    logInfo('Bundle rule updated successfully', { 
+      shop: session.shop, 
+      ruleId,
+      ruleName: name,
+      bundledSku,
+      itemCount: items.split(",").filter(item => item.trim()).length 
+    });
+    
+    return json({ 
+      success: true, 
+      message: `Bundle rule "${name}" updated successfully!`,
+      reload: true
+    });
+  }  if (action === "toggleStatus") {
     const ruleId = formData.get("ruleId") as string;
     const rule = await db.bundleRule.findFirst({
       where: {
@@ -233,10 +300,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function BundleRules() {
   const { bundleRules, products, productMap, pagination } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
+  const fetcher = useFetcher<{
+    success: boolean;
+    message: string;
+    reload?: boolean;
+    errors?: {
+      name?: boolean;
+      bundledSku?: boolean;
+      items?: boolean;
+    };
+  }>();
   const shopify = useAppBridge();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingRule, setEditingRule] = useState<any>(null);
     const [formData, setFormData] = useState({
     name: '',
     items: [] as string[],
@@ -247,18 +324,45 @@ export default function BundleRules() {
   const isLoading = fetcher.state === "submitting";
 
   useEffect(() => {
-    if (fetcher.data?.success && !fetcher.data.message?.includes("created")) {
+    if (fetcher.data?.success) {
       shopify.toast.show(fetcher.data.message);
+      if (fetcher.data.reload) {
+        // Close modal and reset form
+        setIsModalOpen(false);
+        setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+        // Reload page to show new rule
+        window.location.reload();
+      }
+    } else if (fetcher.data?.success === false && fetcher.data.message) {
+      // Show error message
+      shopify.toast.show(fetcher.data.message, { isError: true });
     }
   }, [fetcher.data, shopify]);
 
-  const handleOpenModal = useCallback(() => setIsModalOpen(true), []);
+  const handleOpenModal = useCallback((rule?: any) => {
+    if (rule) {
+      // Edit mode
+      setEditingRule(rule);
+      setFormData({
+        name: rule.name,
+        items: JSON.parse(rule.items || '[]'),
+        bundledSku: rule.bundledSku,
+        savings: rule.savings?.toString() || '',
+      });
+    } else {
+      // Create mode
+      setEditingRule(null);
+      setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+    }
+    setIsModalOpen(true);
+  }, []);
   const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
 
   const handleSubmit = useCallback(() => {
     fetcher.submit(
       { 
-        action: "createRule",
+        action: editingRule ? "updateRule" : "createRule",
+        ruleId: editingRule?.id,
         name: formData.name,
         items: formData.items.join(","),
         bundledSku: formData.bundledSku,
@@ -266,7 +370,7 @@ export default function BundleRules() {
       },
       { method: "POST" }
     );
-  }, [fetcher, formData]);
+  }, [fetcher, formData, editingRule]);
 
   const toggleRuleStatus = useCallback((ruleId: string) => {
     fetcher.submit({ action: "toggleStatus", ruleId }, { method: "POST" });
@@ -282,9 +386,7 @@ export default function BundleRules() {
     <Page>
       <>
       <TitleBar title="Bundle Rules Management">
-        <button variant="primary" onClick={handleOpenModal}>
-          Create Bundle Rule
-        </button>
+        {/* Button moved to main content area */}
       </TitleBar>
       
       <BlockStack gap="600">
@@ -380,41 +482,43 @@ export default function BundleRules() {
                     marginTop: '8px',
                     borderRadius: '16px',
                     overflow: 'hidden',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                    border: '1px solid #e5e7eb'
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                    border: '1px solid #e5e7eb',
+                    background: 'white'
                   }}>
                     {/* Table Header */}
                     <div
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1.2fr 2fr 1fr 0.8fr 0.7fr 0.7fr 1.2fr',
-                        gap: '12px',
-                        padding: '16px 20px',
+                        gridTemplateColumns: '1.5fr 3fr 1.5fr 1fr 0.8fr 0.8fr 1.5fr',
+                        gap: '16px',
+                        padding: '20px 24px',
                         background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-                        borderBottom: '3px solid #0ea5e9',
+                        borderBottom: '2px solid #0ea5e9',
                         fontWeight: '600',
+                        borderRadius: '12px 12px 0 0',
                       }}
                     >
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>📋 RULE</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>📋 RULE NAME</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>🔗 ITEMS</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>🔗 BUNDLED PRODUCTS</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>🏷️ SKU</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>🏷️ BUNDLED SKU</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>⚡ STATUS</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>⚡ STATUS</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>📊 FREQ</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>📊 FREQUENCY</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>💰 SAVE</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>💰 SAVINGS</span>
                       </Text>
                       <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '12px', letterSpacing: '0.3px' }}>⚙️ ACTIONS</span>
+                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>⚙️ ACTIONS</span>
                       </Text>
                     </div>
 
@@ -437,17 +541,18 @@ export default function BundleRules() {
                             key={rule.id}
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: '1.2fr 2fr 1fr 0.8fr 0.7fr 0.7fr 1.2fr',
-                              gap: '12px',
-                              padding: '18px 20px',
+                              gridTemplateColumns: '1.5fr 3fr 1.5fr 1fr 0.8fr 0.8fr 1.5fr',
+                              gap: '16px',
+                              padding: '24px',
                               background: index % 2 === 0 ? '#ffffff' : '#fafbfc',
                               borderBottom: index < bundleRules.length - 1 ? '1px solid #e5e7eb' : 'none',
                               alignItems: 'center',
                               transition: 'all 0.3s ease',
+                              borderRadius: index === 0 ? '0' : '0',
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.background = '#f0f9ff';
-                              e.currentTarget.style.transform = 'translateX(4px)';
+                              e.currentTarget.style.transform = 'translateX(2px)';
                               e.currentTarget.style.boxShadow = 'inset 4px 0 0 #0ea5e9';
                             }}
                             onMouseLeave={(e) => {
@@ -457,9 +562,8 @@ export default function BundleRules() {
                             }}
                           >
                             <div style={{ 
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
+                              overflow: 'visible',
+                              wordBreak: 'break-word'
                             }}>
                               <Text as="p" variant="bodySm" fontWeight="semibold">
                                 <span style={{ color: '#1e293b', fontSize: '13px' }} title={rule.name}>{rule.name}</span>
@@ -467,22 +571,18 @@ export default function BundleRules() {
                             </div>
                             <div style={{ 
                               lineHeight: '1.4',
-                              maxHeight: '40px',
-                              overflow: 'hidden',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                            } as React.CSSProperties}>
+                              wordBreak: 'break-word',
+                              whiteSpace: 'normal'
+                            }}>
                               <Text as="p" variant="bodySm">
-                                <span style={{ color: '#64748b', fontSize: '12px', lineHeight: '1.4' }} title={displayItems}>
+                                <span style={{ color: '#64748b', fontSize: '12px', lineHeight: '1.4' }}>
                                   {displayItems}
                                 </span>
                               </Text>
                             </div>
                             <div style={{ 
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
+                              overflow: 'visible',
+                              wordBreak: 'break-word'
                             }}>
                               <div
                                 style={{
@@ -492,18 +592,16 @@ export default function BundleRules() {
                                   display: 'inline-block',
                                   border: '1.5px solid #f59e0b',
                                   boxShadow: '0 1px 3px rgba(245, 158, 11, 0.2)',
-                                  maxWidth: '100%',
+                                  wordBreak: 'break-word',
+                                  whiteSpace: 'normal'
                                 }}
                               >
                                 <span style={{ 
                                   color: '#92400e', 
                                   fontSize: '12px',
                                   fontWeight: '600',
-                                  display: 'block',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap'
-                                }} title={rule.bundledSku}>{rule.bundledSku}</span>
+                                  display: 'block'
+                                }}>{rule.bundledSku}</span>
                               </div>
                             </div>
                             <div style={{
@@ -562,6 +660,13 @@ export default function BundleRules() {
                               <InlineStack gap="200">
                                 <Button
                                   size="micro"
+                                  onClick={() => handleOpenModal(rule)}
+                                  variant="secondary"
+                                >
+                                  ✏️
+                                </Button>
+                                <Button
+                                  size="micro"
                                   onClick={() => toggleRuleStatus(rule.id)}
                                   variant={rule.status === "active" ? "secondary" : "primary"}
                                   tone={rule.status === "active" ? undefined : "success"}
@@ -618,11 +723,12 @@ export default function BundleRules() {
                 {pagination.totalPages > 1 && (
                   <div
                     style={{
-                      marginTop: '24px',
-                      padding: '20px',
+                      marginTop: '32px',
+                      padding: '24px',
                       background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                      borderRadius: '12px',
+                      borderRadius: '16px',
                       border: '1px solid #cbd5e1',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
                     }}
                   >
                     <BlockStack gap="300">
@@ -637,7 +743,7 @@ export default function BundleRules() {
                             onClick={() => {
                               const newUrl = new URL(window.location.href);
                               newUrl.searchParams.set('page', (pagination.page - 1).toString());
-                              window.location.href = newUrl.toString();
+                              window.location.assign(newUrl.toString());
                             }}
                           >
                             ← Previous
@@ -653,7 +759,7 @@ export default function BundleRules() {
                                   onClick={() => {
                                     const newUrl = new URL(window.location.href);
                                     newUrl.searchParams.set('page', pageNum.toString());
-                                    window.location.href = newUrl.toString();
+                                    window.location.assign(newUrl.toString());
                                   }}
                                 >
                                   {pageNum.toString()}
@@ -667,7 +773,7 @@ export default function BundleRules() {
                             onClick={() => {
                               const newUrl = new URL(window.location.href);
                               newUrl.searchParams.set('page', (pagination.page + 1).toString());
-                              window.location.href = newUrl.toString();
+                              window.location.assign(newUrl.toString());
                             }}
                           >
                             Next →
@@ -950,9 +1056,9 @@ export default function BundleRules() {
       <Modal
         open={isModalOpen}
         onClose={handleCloseModal}
-        title="Create New Bundle Rule"
+        title={editingRule ? "Edit Bundle Rule" : "Create New Bundle Rule"}
         primaryAction={{
-          content: 'Create Rule',
+          content: editingRule ? 'Update Rule' : 'Create Rule',
           onAction: handleSubmit,
           loading: isLoading,
         }}
