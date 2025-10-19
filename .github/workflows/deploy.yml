@@ -82,9 +82,11 @@ jobs:
           npm run setup || error_exit "database setup"
           log "✅ Database setup completed"
 
-          # Build the application
-          log "🔨 Building application..."
-          npm run build || error_exit "npm run build"
+          # Copy nginx configuration if it exists
+          if [ -f "nginx.conf" ]; then
+            log "� Updating nginx configuration..."
+            sudo cp nginx.conf /usr/local/nginx/conf/nginx.conf || log "⚠️ Warning: Could not update nginx config"
+          fi
 
           # Kill existing process gracefully - be more specific and add debugging
           log "🛑 Stopping existing application..."
@@ -127,7 +129,11 @@ jobs:
             error_exit "application startup - process died immediately"
           fi
 
-          # Wait for app to start with better error handling
+          # Reload nginx to pick up any configuration changes
+          log "🔄 Reloading nginx configuration..."
+          sudo systemctl reload nginx || log "⚠️ Warning: Could not reload nginx"
+
+          log "⏳ Waiting for application to start..."
           log "⏳ Waiting for application to start..."
           MAX_WAIT=60  # 60 seconds
           for i in $(seq 1 $MAX_WAIT); do
