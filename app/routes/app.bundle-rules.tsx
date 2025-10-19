@@ -424,6 +424,11 @@ export default function BundleRules() {
     savings: '',
   });
 
+  // Products modal and hover state
+  const [showProductsModal, setShowProductsModal] = useState(false);
+  const [selectedRuleProducts, setSelectedRuleProducts] = useState<{ruleName: string, products: string[]} | null>(null);
+  const [hoveredProducts, setHoveredProducts] = useState<string[] | null>(null);
+
   // Filter state
   const [searchValue, setSearchValue] = useState(filters.search);
   const [statusFilter, setStatusFilter] = useState(filters.status);
@@ -774,10 +779,15 @@ export default function BundleRules() {
                   >
                     {bundleRules.map((rule: any, index: number) => {
                       const itemsArray = JSON.parse(rule.items || '[]');
-                      const displayItems = itemsArray.map((item: string) => {
+                      
+                      // Create compact product display - show all products
+                      const productNames = itemsArray.map((item: string) => {
                         const cleanItem = productMap[item] || item.replace(/gid:\/\/shopify\/ProductVariant\/\d+/, 'Unknown Product');
-                        return cleanItem.length > 35 ? cleanItem.substring(0, 32) + '...' : cleanItem;
-                      }).join(" + ");
+                        // Extract just the product name (remove SKU info for brevity)
+                        const productName = cleanItem.split(' [')[0] || cleanItem;
+                        // Shorten very long names
+                        return productName.length > 15 ? productName.substring(0, 12) + '...' : productName;
+                      });
 
                       return (
                         <IndexTable.Row
@@ -787,59 +797,131 @@ export default function BundleRules() {
                           position={index}
                         >
                           <IndexTable.Cell>
-                            <Text variant="bodyMd" fontWeight="semibold" as="span">
-                              {rule.name}
-                            </Text>
+                            <div style={{ maxWidth: '200px' }}>
+                              <Text variant="bodyMd" fontWeight="semibold" as="span" truncate>
+                                {rule.name}
+                              </Text>
+                            </div>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Text variant="bodyMd" as="span" tone="subdued">
-                              {displayItems}
-                            </Text>
+                            <div style={{ maxWidth: '250px' }}>
+                              <div 
+                                style={{ 
+                                  cursor: 'pointer',
+                                  display: 'inline-block'
+                                }}
+                                onClick={() => {
+                                  // Show modal with products
+                                  setSelectedRuleProducts({
+                                    ruleName: rule.name,
+                                    products: productNames
+                                  });
+                                  setShowProductsModal(true);
+                                }}
+                                onMouseEnter={() => {
+                                  setHoveredProducts(productNames);
+                                }}
+                                onMouseLeave={() => {
+                                  setHoveredProducts(null);
+                                }}
+                              >
+                                <Badge size="small" tone="success">
+                                  {`${itemsArray.length} item${itemsArray.length !== 1 ? 's' : ''}`}
+                                </Badge>
+                              </div>
+                              
+                              {/* Hover Tooltip */}
+                              {hoveredProducts && hoveredProducts === productNames && (
+                                <div style={{
+                                  position: 'absolute',
+                                  backgroundColor: 'white',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                                  zIndex: 1000,
+                                  maxWidth: '300px',
+                                  marginTop: '8px'
+                                }}>
+                                  <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>
+                                    Bundled Products:
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {hoveredProducts.map((productName: string, idx: number) => (
+                                      <div key={idx} style={{ 
+                                        fontSize: '13px', 
+                                        color: '#6b7280',
+                                        padding: '4px 8px',
+                                        backgroundColor: '#f8fafc',
+                                        borderRadius: '4px',
+                                        border: '1px solid #e2e8f0'
+                                      }}>
+                                        {productName}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Badge tone="warning">{rule.bundledSku}</Badge>
+                            <div style={{ maxWidth: '150px' }}>
+                              <Badge tone="warning" size="small">
+                                {rule.bundledSku.length > 15 ? rule.bundledSku.substring(0, 12) + '...' : rule.bundledSku}
+                              </Badge>
+                            </div>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Badge tone={rule.status === "active" ? "success" : "attention"}>
+                            <Badge 
+                              tone={rule.status === "active" ? "success" : "attention"} 
+                              size="small"
+                            >
                               {rule.status === "active" ? "Active" : "Paused"}
                             </Badge>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Text variant="bodyMd" as="span">
-                              {rule.frequency || 0}/mo
-                            </Text>
+                            <div style={{ textAlign: 'center', minWidth: '60px' }}>
+                              <Text variant="bodyMd" as="span" fontWeight="medium">
+                                {rule.frequency || 0}
+                              </Text>
+                              <div style={{ fontSize: '11px', color: '#6b7280' }}>/mo</div>
+                            </div>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <Text variant="bodyMd" as="span" tone="success">
-                              ${rule.savings || 0}
-                            </Text>
+                            <div style={{ textAlign: 'center', minWidth: '70px' }}>
+                              <Text variant="bodyMd" as="span" tone="success" fontWeight="medium">
+                                ${rule.savings || 0}
+                              </Text>
+                            </div>
                           </IndexTable.Cell>
                           <IndexTable.Cell>
-                            <InlineStack gap="200">
-                              <Button
-                                size="micro"
-                                onClick={() => handleOpenModal(rule)}
-                                variant="secondary"
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                size="micro"
-                                onClick={() => toggleRuleStatus(rule.id)}
-                                variant={rule.status === "active" ? "secondary" : "primary"}
-                                tone={rule.status === "active" ? undefined : "success"}
-                              >
-                                {rule.status === "active" ? "Pause" : "Activate"}
-                              </Button>
-                              <Button
-                                size="micro"
-                                variant="secondary"
-                                tone="critical"
-                                onClick={() => deleteRule(rule.id)}
-                              >
-                                Delete
-                              </Button>
-                            </InlineStack>
+                            <div style={{ minWidth: '140px' }}>
+                              <InlineStack gap="200" wrap={false}>
+                                <Button
+                                  size="slim"
+                                  onClick={() => handleOpenModal(rule)}
+                                  variant="secondary"
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="slim"
+                                  onClick={() => toggleRuleStatus(rule.id)}
+                                  variant={rule.status === "active" ? "secondary" : "primary"}
+                                  tone={rule.status === "active" ? undefined : "success"}
+                                >
+                                  {rule.status === "active" ? "Pause" : "Activate"}
+                                </Button>
+                                <Button
+                                  size="slim"
+                                  variant="secondary"
+                                  tone="critical"
+                                  onClick={() => deleteRule(rule.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </InlineStack>
+                            </div>
                           </IndexTable.Cell>
                         </IndexTable.Row>
                       );
@@ -1226,6 +1308,56 @@ export default function BundleRules() {
               prefix="$"
             />
           </FormLayout>
+        </Modal.Section>
+      </Modal>
+
+      {/* Products Modal */}
+      <Modal
+        open={showProductsModal}
+        onClose={() => setShowProductsModal(false)}
+        title={selectedRuleProducts ? `Products in "${selectedRuleProducts.ruleName}"` : "Bundled Products"}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text variant="bodyMd" as="p">
+              The following products are bundled together in this rule:
+            </Text>
+            <div style={{ 
+              backgroundColor: '#f8fafc', 
+              borderRadius: '8px', 
+              padding: '16px',
+              border: '1px solid #e2e8f0'
+            }}>
+              <BlockStack gap="200">
+                {selectedRuleProducts?.products.map((productName: string, idx: number) => (
+                  <div key={idx} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '12px',
+                    padding: '8px 12px',
+                    backgroundColor: 'white',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                  }}>
+                    <div style={{ 
+                      fontSize: '18px', 
+                      lineHeight: '1',
+                      color: '#6b7280'
+                    }}>
+                      📦
+                    </div>
+                    <Text variant="bodyMd" as="span" fontWeight="medium">
+                      {productName}
+                    </Text>
+                  </div>
+                ))}
+              </BlockStack>
+            </div>
+            <Text variant="bodySm" tone="subdued" as="p">
+              Total items: {selectedRuleProducts?.products.length || 0}
+            </Text>
+          </BlockStack>
         </Modal.Section>
       </Modal>
       </>
