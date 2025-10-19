@@ -28,7 +28,9 @@ import { withCache, cacheKeys, cache } from "../cache.server";
 import db from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  console.log('Bundle rules loader called');
   const { admin, session } = await authenticate.admin(request);
+  console.log('Authentication successful for shop:', session.shop);
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = parseInt(url.searchParams.get("limit") || "20");
@@ -243,7 +245,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  console.log('Bundle rules action called');
   const { session } = await authenticate.admin(request);
+  console.log('Action authentication successful for shop:', session.shop);
   const formData = await request.formData();
   const action = formData.get("action");
 
