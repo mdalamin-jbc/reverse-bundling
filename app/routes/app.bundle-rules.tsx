@@ -26,52 +26,74 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const limit = parseInt(url.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
 
-  // Fetch real products from Shopify
+  // Fetch real products from Shopify with caching (products don't change frequently)
   let products: Array<{label: string, value: string}> = [];
   let productMap: {[key: string]: string} = {};
   try {
-    const response = await admin.graphql(`#graphql
-      query getProducts {
-        products(first: 100) {
-          edges {
-            node {
-              id
-              title
-              status
-              variants(first: 10) {
-                edges {
-                  node {
-                    id
-                    sku
-                    title
-                    price
+    const productsKey = cacheKeys.shopProducts(session.shop);
+    const cachedProducts = await withCache(productsKey, 60 * 60 * 1000, async () => { // Cache for 1 hour
+      const response = await admin.graphql(`#graphql
+        query getProducts {
+          products(first: 100) {
+            edges {
+              node {
+                id
+                title
+                status
+                variants(first: 10) {
+                  edges {
+                    node {
+                      id
+                      sku
+                      title
+                      price
+                    }
                   }
                 }
               }
             }
           }
         }
+      `);
+      const responseJson = await response.json();
+      return responseJson.data.products.edges.flatMap((edge: any) => {
+        const product = edge.node;
+        return product.variants.edges.map((variant: any) => {
+          // Use variant ID as value if SKU is empty
+          const value = variant.node.sku || variant.node.id;
+          const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
+          return {
+            label,
+            value
+          };
+        });
+      }).filter((product: any) => product.label && product.value);
+    });
+
+    products = cachedProducts;
+    
+    // Create product map for display
+    products.forEach(product => {
+      productMap[product.value] = product.label;
+      // Also map variant IDs for backward compatibility
+      if (product.value.includes('gid://shopify/ProductVariant/')) {
+        productMap[product.value] = product.label;
       }
-    `);
-    const responseJson = await response.json();
-    products = responseJson.data.products.edges.flatMap((edge: any) => {
-      const product = edge.node;
-      return product.variants.edges.map((variant: any) => {
-        // Use variant ID as value if SKU is empty
-        const value = variant.node.sku || variant.node.id;
-        const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
-        // Create a mapping from value to value
-        productMap[value] = label;
-        productMap[variant.node.id] = label; // Also map the ID
-        return {
-          label,
-          value
-        };
-      });
-    }).filter((product: any) => product.label && product.value); // Filter out empty products
+    });
   } catch (e) {
-    // fallback to empty
-    products = [];
+    logError(e instanceof Error ? e : new Error('Failed to fetch products from Shopify'), { shop: session.shop });
+    // Try to get from cache even if expired
+    const productsKey = cacheKeys.shopProducts(session.shop);
+    const cachedProducts = cache.get<Array<{label: string, value: string}>>(productsKey);
+    if (cachedProducts) {
+      products = cachedProducts;
+      cachedProducts.forEach(product => {
+        productMap[product.value] = product.label;
+      });
+      logInfo('Using expired cached products as fallback', { shop: session.shop, productCount: products.length });
+    } else {
+      products = [];
+    }
   }
 
   try {
@@ -153,11 +175,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const rulesKey = cacheKeys.bundleRules(session.shop);
     cache.delete(rulesKey);
     
-    return json({ 
-      success: true, 
-      message: `Bundle rule "${name}" created successfully!`,
-      reload: true
+    logInfo('Bundle rule created successfully', { 
+      shop: session.shop, 
+      ruleName: name, 
+      bundledSku,
+      itemCount: items.split(",").filter(item => item.trim()).length 
     });
+    
+    // Redirect to refresh the page and show the new rule
+    return redirect("/app/bundle-rules");
   }
 
   if (action === "toggleStatus") {
@@ -221,14 +247,8 @@ export default function BundleRules() {
   const isLoading = fetcher.state === "submitting";
 
   useEffect(() => {
-    if (fetcher.data?.success) {
+    if (fetcher.data?.success && !fetcher.data.message?.includes("created")) {
       shopify.toast.show(fetcher.data.message);
-      if (fetcher.data.message.includes("created")) {
-        setIsModalOpen(false);
-        setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-        // Force a full page reload to show the new rule
-        window.location.reload();
-      }
     }
   }, [fetcher.data, shopify]);
 

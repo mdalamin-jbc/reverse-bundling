@@ -81,5 +81,6 @@ export const cacheKeys = {
   bundleRules: (shop: string) => `bundle:rules:${shop}`,
   bundleAnalytics: (shop: string) => `bundle:analytics:${shop}`,
   analyticsSummary: (shop: string, period: string) => `analytics:summary:${shop}:${period}`,
-  orderConversions: (shop: string, limit: number) => `orders:conversions:${shop}:${limit}`
+  orderConversions: (shop: string, limit: number) => `orders:conversions:${shop}:${limit}`,
+  shopProducts: (shop: string) => `shop:products:${shop}`
 };
