@@ -80,22 +80,27 @@ jobs:
           # Database setup
           log "🗄️ Setting up database..."
           npm run setup || error_exit "database setup"
+          log "✅ Database setup completed"
 
           # Build the application
           log "🔨 Building application..."
           npm run build || error_exit "npm run build"
 
-          # Kill existing process gracefully
+          # Kill existing process gracefully - be more specific and add debugging
           log "🛑 Stopping existing application..."
-          if pgrep -f 'remix-serve' > /dev/null; then
-            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not terminate gracefully"
+          if pgrep -f 'remix-serve' > /dev/null 2>&1; then
+            log "Found running Remix processes:"
+            ps aux | grep remix-serve | grep -v grep || true
+            pkill -TERM -f 'remix-serve' 2>/dev/null || log "⚠️ Warning: Could not terminate gracefully"
             sleep 5
-            if pgrep -f 'remix-serve' > /dev/null; then
+            if pgrep -f 'remix-serve' > /dev/null 2>&1; then
               log "Force killing remaining processes..."
-              pkill -KILL -f 'remix-serve' || true
+              pkill -KILL -f 'remix-serve' 2>/dev/null || true
+            else
+              log "✅ All processes terminated gracefully"
             fi
           else
-            log "No existing process found"
+            log "No existing Remix processes found"
           fi
 
           # Wait a moment
@@ -110,6 +115,17 @@ jobs:
           nohup node node_modules/.bin/remix-serve ./build/server/index.js > app.log 2>&1 &
           APP_PID=$!
           log "Application started with PID: $APP_PID"
+
+          # Give the app a moment to start up
+          sleep 3
+
+          # Check if the process is still running
+          if kill -0 $APP_PID 2>/dev/null; then
+            log "✅ Application process is running"
+          else
+            log "❌ Application process failed to start"
+            error_exit "application startup - process died immediately"
+          fi
 
           # Wait for app to start with better error handling
           log "⏳ Waiting for application to start..."
