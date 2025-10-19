@@ -104,26 +104,14 @@ jobs:
           log "🧹 Cleaning up old logs..."
           find . -name "*.log" -mtime +7 -delete 2>/dev/null || true
 
-          # Start the application
-          log "▶️ Starting application..."
-          nohup node node_modules/.bin/remix-serve ./build/server/index.js > app.log 2>&1 &
-          APP_PID=$!
-          log "Application started with PID: $APP_PID"
-
-          # Give the app a moment to start up
-          sleep 3
-
-          # Check if the process is still running
-          if kill -0 $APP_PID 2>/dev/null; then
-            log "✅ Application process is running"
-          else
-            log "❌ Application process failed to start"
-            error_exit "application startup - process died immediately"
-          fi
+          # Start the application using systemd
+          log "▶️ Restarting application via systemd..."
+          sudo systemctl restart reverse-bundling.service || error_exit "systemctl restart"
+          log "Application restarted via systemd"
 
           # Reload nginx to pick up any configuration changes
           log "🔄 Reloading nginx configuration..."
-          sudo systemctl reload nginx || log "⚠️ Warning: Could not reload nginx"
+          sudo /usr/local/nginx/sbin/nginx -s reload || log "⚠️ Warning: Could not reload nginx"
 
           log "⏳ Waiting for application to start..."
           MAX_WAIT=60  # 60 seconds
