@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: # Allow manual deployment
 
 jobs:
   deploy:
@@ -20,39 +21,74 @@ jobs:
         username: ${{ secrets.ORACLE_USER }}
         key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
         port: 22
+        timeout: 30s
         script: |
+          # Set up error handling
+          set -e
+          set -o pipefail
+
           cd /home/opc/reverse-bundling
 
+          echo "🚀 Starting deployment..."
+
+          # Check git status
+          echo "📋 Checking git status..."
+          git status
+
           # Pull latest changes
-          echo "Pulling latest changes..."
-          git pull origin main
+          echo "⬇️ Pulling latest changes..."
+          git pull origin main --no-edit
+
+          # Show latest commit
+          echo "📝 Latest commit:"
+          git log -1 --oneline
 
           # Install dependencies
-          echo "Installing dependencies..."
-          npm install
+          echo "📦 Installing dependencies..."
+          npm ci --production=false
 
           # Build the application
-          echo "Building application..."
+          echo "🔨 Building application..."
           npm run build
 
-          # Kill existing process
-          echo "Stopping existing application..."
-          pkill -f 'remix-serve' || true
+          # Kill existing process gracefully
+          echo "🛑 Stopping existing application..."
+          if pgrep -f 'remix-serve' > /dev/null; then
+            pkill -TERM -f 'remix-serve'
+            sleep 5
+            if pgrep -f 'remix-serve' > /dev/null; then
+              echo "Force killing remaining processes..."
+              pkill -KILL -f 'remix-serve' || true
+            fi
+          else
+            echo "No existing process found"
+          fi
 
           # Wait a moment
           sleep 2
 
+          # Clean up old build files (optional)
+          echo "🧹 Cleaning up old logs..."
+          find . -name "*.log" -mtime +7 -delete 2>/dev/null || true
+
           # Start the application
-          echo "Starting application..."
+          echo "▶️ Starting application..."
           nohup node node_modules/.bin/remix-serve ./build/server/index.js > app.log 2>&1 &
 
-          # Wait a moment for app to start
-          sleep 3
+          # Wait for app to start
+          echo "⏳ Waiting for application to start..."
+          for i in {1..30}; do
+            if curl -s -f http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Application deployed successfully!"
+              echo "📊 Application status:"
+              curl -s http://localhost:3000/health
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
 
-          # Check if app is running
-          if curl -s http://localhost:3000/health > /dev/null; then
-            echo "✅ Application deployed successfully!"
-          else
-            echo "❌ Application failed to start"
-            exit 1
-          fi
+          echo "❌ Application failed to start within 60 seconds"
+          echo "📋 Last 20 lines of app.log:"
+          tail -20 app.log || echo "No log file found"
+          exit 1
