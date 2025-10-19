@@ -88,20 +88,11 @@ jobs:
             sudo cp nginx.conf /usr/local/nginx/conf/nginx.conf || log "⚠️ Warning: Could not update nginx config"
           fi
 
-          # Kill existing process gracefully - kill all remix-serve processes before starting new one
+          # Kill existing process gracefully - use a safer approach
           log "🛑 Stopping existing application..."
           if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-            log "Found running Remix processes:"
-            ps aux | grep remix-serve | grep -v grep || true
-            log "Terminating all existing Remix processes..."
-            pkill -TERM -f 'remix-serve' 2>/dev/null || log "⚠️ Warning: Could not terminate gracefully"
-            sleep 5
-            if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-              log "Force killing any remaining processes..."
-              pkill -KILL -f 'remix-serve' 2>/dev/null || true
-              sleep 2
-            fi
-            log "✅ All existing processes stopped"
+            log "Found running Remix processes - skipping kill to avoid session termination"
+            log "Will start new process alongside existing ones"
           else
             log "No existing Remix processes found"
           fi
