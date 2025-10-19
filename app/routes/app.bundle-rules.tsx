@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useNavigate } from "@remix-run/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import React, { useState, useCallback, useEffect } from "react";
@@ -429,6 +429,7 @@ export default function BundleRules() {
     };
   }>();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<any>(null);
@@ -559,14 +560,14 @@ export default function BundleRules() {
         // Close modal and reset form
         setIsModalOpen(false);
         setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-        // Redirect to the same page instead of reload to maintain auth context
-        window.location.href = window.location.pathname + window.location.search;
+        // Navigate to the same page to refresh data
+        navigate(window.location.pathname + window.location.search, { replace: true });
       }
     } else if (fetcher.data?.success === false && fetcher.data.message) {
       // Show error message
       shopify.toast.show(fetcher.data.message, { isError: true });
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, navigate]);
 
   const handleOpenModal = useCallback((rule?: any) => {
     if (rule) {
