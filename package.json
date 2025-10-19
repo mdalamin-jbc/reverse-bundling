@@ -7,6 +7,7 @@
     "predev": "cp prisma/schema.dev.prisma prisma/schema.prisma",
     "prebuild": "cp prisma/schema.production.prisma prisma/schema.prisma",
     "predeploy": "cp prisma/schema.production.prisma prisma/schema.prisma",
+    "postinstall": "prisma generate",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
     "config:link": "shopify app config link",

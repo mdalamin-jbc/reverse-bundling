@@ -12,10 +12,32 @@ jobs:
 
     - name: Install SSH key
       run: |
+        set -e
+        echo "Setting up SSH configuration..."
+
+        # Create SSH directory with proper permissions
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        # Setup SSH key
+        if [ -z "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" ]; then
+          echo "❌ ORACLE_SSH_PRIVATE_KEY secret is not set"
+          exit 1
+        fi
+
         echo "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
+
+        # Setup known hosts
+        if [ -z "${{ secrets.ORACLE_HOST }}" ]; then
+          echo "❌ ORACLE_HOST secret is not set"
+          exit 1
+        fi
+
         ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
+
+        echo "✅ SSH setup completed"
 
     - name: Deploy to Oracle Cloud
       run: |
@@ -43,32 +65,44 @@ jobs:
           sudo swapon /swapfile 2>/dev/null || true
 
           echo "📦 Installing dependencies efficiently..."
-          # Use npm install with script skipping for problematic packages
+          # Use npm install with better memory management and retry logic
           set +e  # Temporarily disable exit on error for retry logic
 
-          echo "🔄 Installing dependencies (skipping scripts first)..."
-          timeout 600 npm install --prefer-offline --no-audit --no-fund --no-progress --ignore-scripts
+          echo "🔄 Installing dependencies with memory optimization..."
+          # Increase Node.js memory limit and use production install
+          NODE_OPTIONS="--max-old-space-size=1024" timeout 900 npm ci --prefer-offline --no-audit --no-fund --no-progress
           INSTALL_EXIT_CODE=$?
 
-          if [ $INSTALL_EXIT_CODE -eq 0 ]; then
-            echo "✅ Dependencies installed, now running postinstall scripts..."
-            timeout 300 npm run postinstall 2>/dev/null || echo "Postinstall scripts completed with warnings"
-          else
-            echo "⚠️ Script-skipping install failed, trying normal install..."
-            timeout 600 npm install --prefer-offline --no-audit --no-fund --no-progress
+          if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Production install failed, trying development install..."
+            NODE_OPTIONS="--max-old-space-size=1024" timeout 900 npm install --prefer-offline --no-audit --no-fund --no-progress
             INSTALL_EXIT_CODE=$?
+          fi
+
+          if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Standard install failed, trying with script skipping..."
+            NODE_OPTIONS="--max-old-space-size=1024" timeout 900 npm install --prefer-offline --no-audit --no-fund --no-progress --ignore-scripts
+            INSTALL_EXIT_CODE=$?
+
+            if [ $INSTALL_EXIT_CODE -eq 0 ]; then
+              echo "✅ Dependencies installed, now running Prisma generate manually..."
+              NODE_OPTIONS="--max-old-space-size=1024" timeout 300 npx prisma generate
+              if [ $? -ne 0 ]; then
+                echo "⚠️ Prisma generate failed, but continuing..."
+              fi
+            fi
           fi
 
           set -e  # Re-enable exit on error
 
           if [ $INSTALL_EXIT_CODE -ne 0 ]; then
-            echo "❌ Dependency installation failed"
+            echo "❌ Dependency installation failed after all attempts"
             exit 1
           fi
 
           echo "🔨 Building application..."
-          # Set memory limit and build with extended timeout
-          NODE_OPTIONS="--max-old-space-size=512" timeout 600 npm run build
+          # Set higher memory limit and build with extended timeout
+          NODE_OPTIONS="--max-old-space-size=1024" timeout 900 npm run build
 
           echo "🧹 Cleaning up temporary files..."
           sudo swapoff /swapfile 2>/dev/null || true
@@ -82,7 +116,7 @@ jobs:
           # Kill existing process and start new one
           pkill -f "remix-serve" || true
           cd /home/opc/reverse-bundling
-          nohup node --max-old-space-size=64 ./node_modules/.bin/remix-serve ./build/server/index.js >> app.log 2>&1 &
+          nohup node --max-old-space-size=128 ./node_modules/.bin/remix-serve ./build/server/index.js >> app.log 2>&1 &
 
           echo "⏳ Waiting for application to start..."
           sleep 15
