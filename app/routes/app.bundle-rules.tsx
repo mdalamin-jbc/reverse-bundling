@@ -359,7 +359,6 @@ export default function BundleRules() {
   }, [fetcher.data, shopify]);
 
   const handleOpenModal = useCallback((rule?: any) => {
-    console.log('handleOpenModal called with rule:', rule);
     if (rule) {
       // Edit mode
       setEditingRule(rule);
@@ -369,12 +368,10 @@ export default function BundleRules() {
         bundledSku: rule.bundledSku,
         savings: rule.savings?.toString() || '',
       });
-      console.log('Set to edit mode, editingRule:', rule);
     } else {
       // Create mode
       setEditingRule(null);
       setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-      console.log('Set to create mode, editingRule: null');
     }
     setIsModalOpen(true);
   }, []);
@@ -385,13 +382,10 @@ export default function BundleRules() {
   }, []);
 
   const handleSubmit = useCallback(() => {
-    console.log('handleSubmit called', { editingRule, formData });
-    if (editingRule) {
-      console.log('Editing rule:', editingRule.id, editingRule);
-    }
+    const isUpdate = editingRule && editingRule.id;
     fetcher.submit(
       { 
-        action: editingRule ? "updateRule" : "createRule",
+        action: isUpdate ? "updateRule" : "createRule",
         ruleId: editingRule?.id,
         name: formData.name,
         items: formData.items.join(","),
@@ -1088,11 +1082,7 @@ export default function BundleRules() {
         onClose={handleCloseModal}
         title={editingRule ? "Edit Bundle Rule" : "Create New Bundle Rule"}
         primaryAction={{
-          content: (() => {
-            const buttonText = editingRule ? 'Update Rule' : 'Create Rule';
-            console.log('Modal button text:', buttonText, 'editingRule:', editingRule);
-            return buttonText;
-          })(),
+          content: editingRule ? 'Update Rule' : 'Create Rule',
           onAction: handleSubmit,
           loading: isLoading,
         }}
