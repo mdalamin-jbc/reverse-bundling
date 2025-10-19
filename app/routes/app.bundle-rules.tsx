@@ -555,8 +555,8 @@ export default function BundleRules() {
         // Close modal and reset form
         setIsModalOpen(false);
         setFormData({ name: "", items: [], bundledSku: "", savings: "" });
-        // Reload page to show new rule
-        window.location.reload();
+        // Redirect to the same page instead of reload to maintain auth context
+        window.location.href = window.location.pathname + window.location.search;
       }
     } else if (fetcher.data?.success === false && fetcher.data.message) {
       // Show error message
