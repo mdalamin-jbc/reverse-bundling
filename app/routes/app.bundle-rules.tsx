@@ -209,6 +209,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const bundledSku = formData.get("bundledSku") as string;
     const savings = parseFloat(formData.get("savings") as string) || 0;
 
+    console.log('updateRule action received:', { ruleId, name, items, bundledSku, savings, shop: session.shop });
+
     // Basic validation
     if (!name?.trim() || !bundledSku?.trim() || !items?.trim()) {
       return json({ 
@@ -219,6 +221,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           bundledSku: !bundledSku?.trim(),
           items: !items?.trim()
         }
+      });
+    }
+
+    // Check if rule exists first
+    const existingRule = await db.bundleRule.findFirst({
+      where: {
+        id: ruleId,
+        shop: session.shop
+      }
+    });
+
+    if (!existingRule) {
+      logError(new Error(`Bundle rule not found for update: ruleId=${ruleId}, shop=${session.shop}`), { ruleId, shop: session.shop });
+      return json({ 
+        success: false, 
+        message: "Bundle rule not found. It may have been deleted or you may not have permission to edit it.",
+        errors: {}
       });
     }
 
@@ -340,6 +359,7 @@ export default function BundleRules() {
   }, [fetcher.data, shopify]);
 
   const handleOpenModal = useCallback((rule?: any) => {
+    console.log('handleOpenModal called with rule:', rule);
     if (rule) {
       // Edit mode
       setEditingRule(rule);
@@ -349,16 +369,26 @@ export default function BundleRules() {
         bundledSku: rule.bundledSku,
         savings: rule.savings?.toString() || '',
       });
+      console.log('Set to edit mode, editingRule:', rule);
     } else {
       // Create mode
       setEditingRule(null);
       setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+      console.log('Set to create mode, editingRule: null');
     }
     setIsModalOpen(true);
   }, []);
-  const handleCloseModal = useCallback(() => setIsModalOpen(false), []);
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingRule(null);
+    setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+  }, []);
 
   const handleSubmit = useCallback(() => {
+    console.log('handleSubmit called', { editingRule, formData });
+    if (editingRule) {
+      console.log('Editing rule:', editingRule.id, editingRule);
+    }
     fetcher.submit(
       { 
         action: editingRule ? "updateRule" : "createRule",
@@ -1058,7 +1088,11 @@ export default function BundleRules() {
         onClose={handleCloseModal}
         title={editingRule ? "Edit Bundle Rule" : "Create New Bundle Rule"}
         primaryAction={{
-          content: editingRule ? 'Update Rule' : 'Create Rule',
+          content: (() => {
+            const buttonText = editingRule ? 'Update Rule' : 'Create Rule';
+            console.log('Modal button text:', buttonText, 'editingRule:', editingRule);
+            return buttonText;
+          })(),
           onAction: handleSubmit,
           loading: isLoading,
         }}
