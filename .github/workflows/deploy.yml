@@ -21,7 +21,7 @@ jobs:
         username: ${{ secrets.ORACLE_USER }}
         key: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
         port: 22
-        timeout: 30s
+        timeout: 15m  # Increased from 30s to 15 minutes
         script: |
           # Set up error handling
           set -e
@@ -29,66 +29,105 @@ jobs:
 
           cd /home/opc/reverse-bundling
 
-          echo "🚀 Starting deployment..."
+          echo "🚀 Starting deployment at $(date)..."
+
+          # Function to log with timestamp
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+          }
+
+          # Function to handle errors
+          error_exit() {
+            log "❌ Deployment failed at step: $1"
+            log "📋 Last 50 lines of app.log:"
+            tail -50 app.log 2>/dev/null || echo "No log file found"
+            exit 1
+          }
 
           # Check git status
-          echo "📋 Checking git status..."
-          git status
+          log "📋 Checking git status..."
+          git status || error_exit "git status"
 
           # Pull latest changes
-          echo "⬇️ Pulling latest changes..."
-          git pull origin main --no-edit
+          log "⬇️ Pulling latest changes..."
+          git pull origin main --no-edit || error_exit "git pull"
 
           # Show latest commit
-          echo "📝 Latest commit:"
+          log "📝 Latest commit:"
           git log -1 --oneline
 
+          # Load environment variables
+          log "🔧 Loading environment variables..."
+          if [ -f ".env.production" ]; then
+            set -a
+            source .env.production
+            set +a
+            log "✅ Environment variables loaded"
+          else
+            log "⚠️ Warning: .env.production not found, using system environment"
+          fi
+
           # Install dependencies
-          echo "📦 Installing dependencies..."
-          npm ci --production=false
+          log "📦 Installing dependencies..."
+          npm ci --production=false || error_exit "npm ci"
+
+          # Database setup
+          log "🗄️ Setting up database..."
+          npm run setup || error_exit "database setup"
 
           # Build the application
-          echo "🔨 Building application..."
-          npm run build
+          log "🔨 Building application..."
+          npm run build || error_exit "npm run build"
 
           # Kill existing process gracefully
-          echo "🛑 Stopping existing application..."
+          log "🛑 Stopping existing application..."
           if pgrep -f 'remix-serve' > /dev/null; then
-            pkill -TERM -f 'remix-serve'
+            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not terminate gracefully"
             sleep 5
             if pgrep -f 'remix-serve' > /dev/null; then
-              echo "Force killing remaining processes..."
+              log "Force killing remaining processes..."
               pkill -KILL -f 'remix-serve' || true
             fi
           else
-            echo "No existing process found"
+            log "No existing process found"
           fi
 
           # Wait a moment
           sleep 2
 
           # Clean up old build files (optional)
-          echo "🧹 Cleaning up old logs..."
+          log "🧹 Cleaning up old logs..."
           find . -name "*.log" -mtime +7 -delete 2>/dev/null || true
 
           # Start the application
-          echo "▶️ Starting application..."
+          log "▶️ Starting application..."
           nohup node node_modules/.bin/remix-serve ./build/server/index.js > app.log 2>&1 &
+          APP_PID=$!
+          log "Application started with PID: $APP_PID"
 
-          # Wait for app to start
-          echo "⏳ Waiting for application to start..."
-          for i in {1..30}; do
+          # Wait for app to start with better error handling
+          log "⏳ Waiting for application to start..."
+          MAX_WAIT=60  # 60 seconds
+          for i in $(seq 1 $MAX_WAIT); do
             if curl -s -f http://localhost:3000/health > /dev/null 2>&1; then
-              echo "✅ Application deployed successfully!"
-              echo "📊 Application status:"
-              curl -s http://localhost:3000/health
+              log "✅ Application deployed successfully!"
+              log "📊 Application status:"
+              curl -s http://localhost:3000/health || true
+
+              # Verify database connectivity
+              log "🔍 Verifying database connectivity..."
+              if curl -s http://localhost:3000/health | grep -q "database.*ok"; then
+                log "✅ Database connection verified"
+              else
+                log "⚠️ Database status unclear, but app is responding"
+              fi
+
+              log "🎉 Deployment completed successfully at $(date)"
               exit 0
             fi
-            echo "Waiting... ($i/30)"
-            sleep 2
+            echo "Waiting... ($i/$MAX_WAIT)"
+            sleep 1
           done
 
-          echo "❌ Application failed to start within 60 seconds"
-          echo "📋 Last 20 lines of app.log:"
-          tail -20 app.log || echo "No log file found"
-          exit 1
+          log "❌ Application failed to start within $MAX_WAIT seconds"
+          error_exit "application startup"
