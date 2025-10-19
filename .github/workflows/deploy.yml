@@ -19,14 +19,23 @@ jobs:
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
 
-        # Setup SSH key
+        # Setup SSH key - handle multiline key properly
         if [ -z "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" ]; then
-          echo "❌ ORACLE_SSH_PRIVATE_KEY secret is not set"
+          echo "❌ ORACLE_SSH_PRIVATE_KEY secret is not set or empty"
           exit 1
         fi
 
-        echo "${{ secrets.ORACLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        # Write SSH key with proper formatting
+        cat > ~/.ssh/id_rsa << EOF
+        ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+        EOF
         chmod 600 ~/.ssh/id_rsa
+
+        # Validate SSH key format
+        if ! ssh-keygen -l -f ~/.ssh/id_rsa > /dev/null 2>&1; then
+          echo "❌ ORACLE_SSH_PRIVATE_KEY is not a valid SSH private key"
+          exit 1
+        fi
 
         # Setup known hosts
         if [ -z "${{ secrets.ORACLE_HOST }}" ]; then
@@ -34,10 +43,28 @@ jobs:
           exit 1
         fi
 
-        ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts
+        if [ -z "${{ secrets.ORACLE_USER }}" ]; then
+          echo "❌ ORACLE_USER secret is not set"
+          exit 1
+        fi
+
+        ssh-keyscan -H ${{ secrets.ORACLE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
         chmod 644 ~/.ssh/known_hosts
 
-        echo "✅ SSH setup completed"
+        echo "✅ SSH setup completed successfully"
+
+        # Test SSH connection
+        echo "🔍 Testing SSH connection..."
+        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes ${{ secrets.ORACLE_USER }}@${{ secrets.ORACLE_HOST }} "echo 'SSH connection successful'" 2>/dev/null; then
+          echo "✅ SSH connection test passed"
+        else
+          echo "❌ SSH connection test failed"
+          echo "🔧 Please verify:"
+          echo "   - SSH private key is correct and matches the public key on Oracle Cloud"
+          echo "   - ORACLE_HOST is the correct IP/hostname"
+          echo "   - ORACLE_USER has SSH access to the instance"
+          exit 1
+        fi
 
     - name: Deploy to Oracle Cloud
       run: |
