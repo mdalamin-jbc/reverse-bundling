@@ -12,6 +12,14 @@ import {
   Modal,
   FormLayout,
   TextField,
+  IndexTable,
+  Pagination,
+  Badge,
+  useIndexResourceState,
+  Icon,
+  Filters,
+  ChoiceList,
+  Select,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -24,6 +32,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = parseInt(url.searchParams.get("limit") || "20");
+  const sortBy = url.searchParams.get("sortBy") || "createdAt";
+  const sortDirection = url.searchParams.get("sortDirection") || "desc";
+  const search = url.searchParams.get("search") || "";
+  const statusFilter = url.searchParams.get("status") || "";
   const offset = (page - 1) * limit;
 
   // Fetch real products from Shopify with caching (products don't change frequently)
@@ -99,18 +111,74 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     // Cache bundle rules for 10 minutes (rules don't change frequently)
     const rulesKey = cacheKeys.bundleRules(session.shop);
-    const bundleRules = await withCache(rulesKey, 10 * 60 * 1000, async () => {
+    const allBundleRules = await withCache(rulesKey, 10 * 60 * 1000, async () => {
       return db.bundleRule.findMany({
         where: { shop: session.shop },
         orderBy: { createdAt: 'desc' }
       });
     });
 
-    // Get total count for pagination
-    const totalRules = bundleRules.length;
+    // Apply filters
+    let filteredRules = allBundleRules;
 
-    // Apply pagination to the cached results
-    const paginatedRules = bundleRules.slice(offset, offset + limit);
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredRules = filteredRules.filter(rule => 
+        rule.name.toLowerCase().includes(searchLower) ||
+        rule.bundledSku.toLowerCase().includes(searchLower) ||
+        JSON.parse(rule.items || '[]').some((item: string) => 
+          productMap[item]?.toLowerCase().includes(searchLower) || 
+          item.toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter) {
+      filteredRules = filteredRules.filter(rule => rule.status === statusFilter);
+    }
+
+    // Apply sorting
+    const sortedRules = [...filteredRules].sort((a, b) => {
+      let aValue: any, bValue: any;
+      
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'frequency':
+          aValue = a.frequency || 0;
+          bValue = b.frequency || 0;
+          break;
+        case 'savings':
+          aValue = a.savings || 0;
+          bValue = b.savings || 0;
+          break;
+        case 'createdAt':
+        default:
+          aValue = new Date(a.createdAt);
+          bValue = new Date(b.createdAt);
+          break;
+      }
+      
+      if (sortDirection === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    // Get total count for pagination (after filtering)
+    const totalRules = sortedRules.length;
+
+    // Apply pagination to the sorted results
+    const paginatedRules = sortedRules.slice(offset, offset + limit);
 
     logInfo('Loaded paginated bundle rules', {
       shop: session.shop,
@@ -129,6 +197,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         limit,
         total: totalRules,
         totalPages: Math.ceil(totalRules / limit)
+      },
+      sorting: {
+        sortBy,
+        sortDirection
+      },
+      filters: {
+        search,
+        status: statusFilter
       }
     });
   } catch (error) {
@@ -142,6 +218,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         limit,
         total: 0,
         totalPages: 0
+      },
+      sorting: {
+        sortBy,
+        sortDirection
+      },
+      filters: {
+        search,
+        status: statusFilter
       }
     });
   }
@@ -318,7 +402,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 
 export default function BundleRules() {
-  const { bundleRules, products, productMap, pagination } = useLoaderData<typeof loader>();
+  const { bundleRules, products, productMap, pagination, sorting, filters } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{
     success: boolean;
     message: string;
@@ -332,15 +416,134 @@ export default function BundleRules() {
   const shopify = useAppBridge();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingRule, setEditingRule] = useState<any>(null);
-    const [formData, setFormData] = useState({
+  const [editingRule, setEditingRule] = useState<any>(null);
+  const [formData, setFormData] = useState({
     name: '',
     items: [] as string[],
     bundledSku: '',
     savings: '',
   });
 
+  // Filter state
+  const [searchValue, setSearchValue] = useState(filters.search);
+  const [statusFilter, setStatusFilter] = useState(filters.status);
+  const [appliedFilters, setAppliedFilters] = useState<any[]>([]);
+
+  // IndexTable resource management
+  const resourceName = {
+    singular: 'bundle rule',
+    plural: 'bundle rules',
+  };
+
+  const { selectedResources, allResourcesSelected, handleSelectionChange } = useIndexResourceState(bundleRules);
+
   const isLoading = fetcher.state === "submitting";
+
+  // Bulk actions
+  const bulkActions = [
+    {
+      content: 'Activate selected',
+      onAction: () => {
+        selectedResources.forEach(ruleId => {
+          fetcher.submit({ action: "toggleStatus", ruleId }, { method: "POST" });
+        });
+      },
+    },
+    {
+      content: 'Pause selected',
+      onAction: () => {
+        selectedResources.forEach(ruleId => {
+          fetcher.submit({ action: "toggleStatus", ruleId }, { method: "POST" });
+        });
+      },
+    },
+    {
+      content: 'Delete selected',
+      onAction: () => {
+        if (confirm(`Are you sure you want to delete ${selectedResources.length} rule(s)?`)) {
+          selectedResources.forEach(ruleId => {
+            fetcher.submit({ action: "deleteRule", ruleId }, { method: "POST" });
+          });
+        }
+      },
+    },
+  ];
+
+  // Handle sorting
+  const handleSort = useCallback((headingIndex: number, direction: 'ascending' | 'descending') => {
+    const sortFields = ['name', 'bundledSku', 'status', 'frequency', 'savings', 'createdAt'];
+    const sortBy = sortFields[headingIndex];
+    const sortDirection = direction === 'ascending' ? 'asc' : 'desc';
+    
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('sortBy', sortBy);
+    newUrl.searchParams.set('sortDirection', sortDirection);
+    newUrl.searchParams.set('page', '1'); // Reset to first page when sorting
+    window.location.assign(newUrl.toString());
+  }, []);
+
+  // Handle filters
+  const handleFiltersQueryChange = useCallback((value: string) => {
+    setSearchValue(value);
+  }, []);
+
+  const handleStatusFilterChange = useCallback((value: string) => {
+    setStatusFilter(value);
+  }, []);
+
+  const handleFiltersClearAll = useCallback(() => {
+    setSearchValue('');
+    setStatusFilter('');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('search');
+    newUrl.searchParams.delete('status');
+    newUrl.searchParams.set('page', '1');
+    window.location.assign(newUrl.toString());
+  }, []);
+
+  const handleFiltersApply = useCallback(() => {
+    const newUrl = new URL(window.location.href);
+    if (searchValue) {
+      newUrl.searchParams.set('search', searchValue);
+    } else {
+      newUrl.searchParams.delete('search');
+    }
+    if (statusFilter) {
+      newUrl.searchParams.set('status', statusFilter);
+    } else {
+      newUrl.searchParams.delete('status');
+    }
+    newUrl.searchParams.set('page', '1'); // Reset to first page when filtering
+    window.location.assign(newUrl.toString());
+  }, [searchValue, statusFilter]);
+
+  // Update applied filters
+  useEffect(() => {
+    const filterTags: any[] = [];
+    if (filters.search) {
+      filterTags.push({
+        key: 'search',
+        label: `Search: ${filters.search}`,
+        onRemove: () => {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('search');
+          window.location.assign(newUrl.toString());
+        },
+      });
+    }
+    if (filters.status) {
+      filterTags.push({
+        key: 'status',
+        label: `Status: ${filters.status}`,
+        onRemove: () => {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('status');
+          window.location.assign(newUrl.toString());
+        },
+      });
+    }
+    setAppliedFilters(filterTags);
+  }, [filters]);
 
   useEffect(() => {
     if (fetcher.data?.success) {
@@ -500,218 +703,148 @@ export default function BundleRules() {
                   </InlineStack>
                 </div>
 
-                {/* Premium Table with Custom Styling */}
+                {/* Filters */}
+                <Filters
+                  queryValue={searchValue}
+                  filters={[
+                    {
+                      key: 'status',
+                      label: 'Status',
+                      filter: (
+                        <ChoiceList
+                          title="Status"
+                          titleHidden
+                          choices={[
+                            { label: 'Active', value: 'active' },
+                            { label: 'Paused', value: 'draft' },
+                          ]}
+                          selected={statusFilter ? [statusFilter] : []}
+                          onChange={(selected) => handleStatusFilterChange(selected[0] || '')}
+                        />
+                      ),
+                      shortcut: true,
+                    },
+                  ]}
+                  appliedFilters={appliedFilters}
+                  onQueryChange={handleFiltersQueryChange}
+                  onQueryClear={() => setSearchValue('')}
+                  onClearAll={handleFiltersClearAll}
+                  queryPlaceholder="Search bundle rules..."
+                />
+
+                {/* Enterprise IndexTable */}
                 {bundleRules.length > 0 ? (
-                  <div style={{ 
-                    marginTop: '8px',
-                    borderRadius: '16px',
-                    overflow: 'hidden',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                    border: '1px solid #e5e7eb',
-                    background: 'white'
-                  }}>
-                    {/* Table Header */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1.5fr 3fr 1.5fr 1fr 0.8fr 0.8fr 1.5fr',
-                        gap: '16px',
-                        padding: '20px 24px',
-                        background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-                        borderBottom: '2px solid #0ea5e9',
-                        fontWeight: '600',
-                        borderRadius: '12px 12px 0 0',
-                      }}
-                    >
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>📋 RULE NAME</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>🔗 BUNDLED PRODUCTS</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>🏷️ BUNDLED SKU</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>⚡ STATUS</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>📊 FREQUENCY</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>💰 SAVINGS</span>
-                      </Text>
-                      <Text as="p" variant="bodySm" fontWeight="bold">
-                        <span style={{ color: 'white', fontSize: '13px', letterSpacing: '0.5px' }}>⚙️ ACTIONS</span>
-                      </Text>
-                    </div>
+                  <IndexTable
+                    resourceName={resourceName}
+                    itemCount={bundleRules.length}
+                    selectedItemsCount={selectedResources.length}
+                    onSelectionChange={handleSelectionChange}
+                    hasMoreItems={pagination.page < pagination.totalPages}
+                    loading={isLoading}
+                    bulkActions={bulkActions}
+                    promotedBulkActions={bulkActions.slice(0, 2)}
+                    sortable={[true, false, true, true, true, true, false]}
+                    sortDirection={sorting.sortDirection === 'asc' ? 'ascending' : 'descending'}
+                    sortColumnIndex={['name', 'bundledSku', 'status', 'frequency', 'savings', 'createdAt'].indexOf(sorting.sortBy)}
+                    onSort={handleSort}
+                    pagination={{
+                      hasNext: pagination.page < pagination.totalPages,
+                      hasPrevious: pagination.page > 1,
+                      onNext: () => {
+                        const newUrl = new URL(window.location.href);
+                        newUrl.searchParams.set('page', (pagination.page + 1).toString());
+                        window.location.assign(newUrl.toString());
+                      },
+                      onPrevious: () => {
+                        const newUrl = new URL(window.location.href);
+                        newUrl.searchParams.set('page', (pagination.page - 1).toString());
+                        window.location.assign(newUrl.toString());
+                      },
+                      label: `Page ${pagination.page} of ${pagination.totalPages}`,
+                    }}
+                    headings={[
+                      { title: 'Rule Name', defaultSortDirection: 'ascending' },
+                      { title: 'Bundled Products' },
+                      { title: 'Bundled SKU', defaultSortDirection: 'ascending' },
+                      { title: 'Status', defaultSortDirection: 'ascending' },
+                      { title: 'Frequency', defaultSortDirection: 'descending' },
+                      { title: 'Savings', defaultSortDirection: 'descending' },
+                      { title: 'Actions' },
+                    ]}
+                  >
+                    {bundleRules.map((rule: any, index: number) => {
+                      const itemsArray = JSON.parse(rule.items || '[]');
+                      const displayItems = itemsArray.map((item: string) => {
+                        const cleanItem = productMap[item] || item.replace(/gid:\/\/shopify\/ProductVariant\/\d+/, 'Unknown Product');
+                        return cleanItem.length > 35 ? cleanItem.substring(0, 32) + '...' : cleanItem;
+                      }).join(" + ");
 
-                    {/* Table Rows */}
-                    <div
-                      style={{
-                        background: 'white',
-                      }}
-                    >
-                      {bundleRules.map((rule: any, index: number) => {
-                        const itemsArray = JSON.parse(rule.items || '[]');
-                        const displayItems = itemsArray.map((item: string) => {
-                          const cleanItem = productMap[item] || item.replace(/gid:\/\/shopify\/ProductVariant\/\d+/, 'Unknown Product');
-                          // Shorten product names
-                          return cleanItem.length > 35 ? cleanItem.substring(0, 32) + '...' : cleanItem;
-                        }).join(" + ");
-
-                        return (
-                          <div
-                            key={rule.id}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1.5fr 3fr 1.5fr 1fr 0.8fr 0.8fr 1.5fr',
-                              gap: '16px',
-                              padding: '24px',
-                              background: index % 2 === 0 ? '#ffffff' : '#fafbfc',
-                              borderBottom: index < bundleRules.length - 1 ? '1px solid #e5e7eb' : 'none',
-                              alignItems: 'center',
-                              transition: 'all 0.3s ease',
-                              borderRadius: index === 0 ? '0' : '0',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = '#f0f9ff';
-                              e.currentTarget.style.transform = 'translateX(2px)';
-                              e.currentTarget.style.boxShadow = 'inset 4px 0 0 #0ea5e9';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = index % 2 === 0 ? '#ffffff' : '#fafbfc';
-                              e.currentTarget.style.transform = 'translateX(0)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }}
-                          >
-                            <div style={{ 
-                              overflow: 'visible',
-                              wordBreak: 'break-word'
-                            }}>
-                              <Text as="p" variant="bodySm" fontWeight="semibold">
-                                <span style={{ color: '#1e293b', fontSize: '13px' }} title={rule.name}>{rule.name}</span>
-                              </Text>
-                            </div>
-                            <div style={{ 
-                              lineHeight: '1.4',
-                              wordBreak: 'break-word',
-                              whiteSpace: 'normal'
-                            }}>
-                              <Text as="p" variant="bodySm">
-                                <span style={{ color: '#64748b', fontSize: '12px', lineHeight: '1.4' }}>
-                                  {displayItems}
-                                </span>
-                              </Text>
-                            </div>
-                            <div style={{ 
-                              overflow: 'visible',
-                              wordBreak: 'break-word'
-                            }}>
-                              <div
-                                style={{
-                                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                                  padding: '5px 10px',
-                                  borderRadius: '6px',
-                                  display: 'inline-block',
-                                  border: '1.5px solid #f59e0b',
-                                  boxShadow: '0 1px 3px rgba(245, 158, 11, 0.2)',
-                                  wordBreak: 'break-word',
-                                  whiteSpace: 'normal'
-                                }}
+                      return (
+                        <IndexTable.Row
+                          id={rule.id}
+                          key={rule.id}
+                          selected={selectedResources.includes(rule.id)}
+                          position={index}
+                        >
+                          <IndexTable.Cell>
+                            <Text variant="bodyMd" fontWeight="semibold" as="span">
+                              {rule.name}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text variant="bodyMd" as="span" tone="subdued">
+                              {displayItems}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Badge tone="warning">{rule.bundledSku}</Badge>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Badge tone={rule.status === "active" ? "success" : "attention"}>
+                              {rule.status === "active" ? "Active" : "Paused"}
+                            </Badge>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text variant="bodyMd" as="span">
+                              {rule.frequency || 0}/mo
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text variant="bodyMd" as="span" tone="success">
+                              ${rule.savings || 0}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <InlineStack gap="200">
+                              <Button
+                                size="micro"
+                                onClick={() => handleOpenModal(rule)}
+                                variant="secondary"
                               >
-                                <span style={{ 
-                                  color: '#92400e', 
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  display: 'block'
-                                }}>{rule.bundledSku}</span>
-                              </div>
-                            </div>
-                            <div style={{
-                              display: 'flex',
-                              justifyContent: 'flex-start'
-                            }}>
-                              <div
-                                style={{
-                                  background: rule.status === "active" 
-                                    ? 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)'
-                                    : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                                  padding: '5px 8px',
-                                  borderRadius: '6px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  border: rule.status === "active" ? '1.5px solid #10b981' : '1.5px solid #f59e0b',
-                                  fontWeight: '600',
-                                  fontSize: '11px',
-                                  color: rule.status === "active" ? '#065f46' : '#92400e',
-                                }}
+                                Edit
+                              </Button>
+                              <Button
+                                size="micro"
+                                onClick={() => toggleRuleStatus(rule.id)}
+                                variant={rule.status === "active" ? "secondary" : "primary"}
+                                tone={rule.status === "active" ? undefined : "success"}
                               >
-                                <span style={{ fontSize: '8px' }}>{rule.status === "active" ? "●" : "○"}</span>
-                                {rule.status === "active" ? "Active" : "Paused"}
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{
-                                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                                padding: '5px 8px',
-                                borderRadius: '6px',
-                                display: 'inline-block',
-                                border: '1px solid #3b82f6',
-                                textAlign: 'center',
-                              }}>
-                                <span style={{ color: '#1e40af', fontSize: '12px', fontWeight: '600' }}>
-                                  {rule.frequency || 0}/mo
-                                </span>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{
-                                background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                                padding: '5px 8px',
-                                borderRadius: '6px',
-                                display: 'inline-block',
-                                border: '1.5px solid #10b981',
-                                textAlign: 'center',
-                              }}>
-                                <span style={{ color: '#065f46', fontSize: '13px', fontWeight: '600' }}>
-                                  ${rule.savings || 0}
-                                </span>
-                              </div>
-                            </div>
-                            <div>
-                              <InlineStack gap="200">
-                                <Button
-                                  size="micro"
-                                  onClick={() => handleOpenModal(rule)}
-                                  variant="secondary"
-                                >
-                                  ✏️
-                                </Button>
-                                <Button
-                                  size="micro"
-                                  onClick={() => toggleRuleStatus(rule.id)}
-                                  variant={rule.status === "active" ? "secondary" : "primary"}
-                                  tone={rule.status === "active" ? undefined : "success"}
-                                >
-                                  {rule.status === "active" ? "⏸" : "▶"}
-                                </Button>
-                                <Button
-                                  size="micro"
-                                  variant="secondary"
-                                  tone="critical"
-                                  onClick={() => deleteRule(rule.id)}
-                                >
-                                  🗑
-                                </Button>
-                              </InlineStack>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                                {rule.status === "active" ? "Pause" : "Activate"}
+                              </Button>
+                              <Button
+                                size="micro"
+                                variant="secondary"
+                                tone="critical"
+                                onClick={() => deleteRule(rule.id)}
+                              >
+                                Delete
+                              </Button>
+                            </InlineStack>
+                          </IndexTable.Cell>
+                        </IndexTable.Row>
+                      );
+                    })}
+                  </IndexTable>
                 ) : (
                   <div
                     style={{
@@ -743,70 +876,12 @@ export default function BundleRules() {
                   </div>
                 )}
 
-                {/* Pagination Controls */}
-                {pagination.totalPages > 1 && (
-                  <div
-                    style={{
-                      marginTop: '32px',
-                      padding: '24px',
-                      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                      borderRadius: '16px',
-                      border: '1px solid #cbd5e1',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-                    }}
-                  >
-                    <BlockStack gap="300">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} rules
-                        </Text>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <Button
-                            variant="secondary"
-                            disabled={pagination.page <= 1}
-                            onClick={() => {
-                              const newUrl = new URL(window.location.href);
-                              newUrl.searchParams.set('page', (pagination.page - 1).toString());
-                              window.location.assign(newUrl.toString());
-                            }}
-                          >
-                            ← Previous
-                          </Button>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                              const pageNum = i + 1;
-                              return (
-                                <Button
-                                  key={pageNum}
-                                  variant={pageNum === pagination.page ? "primary" : "secondary"}
-                                  size="slim"
-                                  onClick={() => {
-                                    const newUrl = new URL(window.location.href);
-                                    newUrl.searchParams.set('page', pageNum.toString());
-                                    window.location.assign(newUrl.toString());
-                                  }}
-                                >
-                                  {pageNum.toString()}
-                                </Button>
-                              );
-                            })}
-                          </div>
-                          <Button
-                            variant="secondary"
-                            disabled={pagination.page >= pagination.totalPages}
-                            onClick={() => {
-                              const newUrl = new URL(window.location.href);
-                              newUrl.searchParams.set('page', (pagination.page + 1).toString());
-                              window.location.assign(newUrl.toString());
-                            }}
-                          >
-                            Next →
-                          </Button>
-                        </div>
-                      </div>
-                    </BlockStack>
-                  </div>
-                )}
+                {/* Pagination Summary */}
+                <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                  <Text variant="bodySm" tone="subdued" as="p">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} rules
+                  </Text>
+                </div>
               </BlockStack>
             </Card>
 
