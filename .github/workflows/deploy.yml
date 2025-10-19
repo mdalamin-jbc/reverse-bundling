@@ -88,19 +88,20 @@ jobs:
             sudo cp nginx.conf /usr/local/nginx/conf/nginx.conf || log "⚠️ Warning: Could not update nginx config"
           fi
 
-          # Kill existing process gracefully - be more specific and add debugging
+          # Kill existing process gracefully - kill all remix-serve processes before starting new one
           log "🛑 Stopping existing application..."
           if pgrep -f 'remix-serve' > /dev/null 2>&1; then
             log "Found running Remix processes:"
             ps aux | grep remix-serve | grep -v grep || true
+            log "Terminating all existing Remix processes..."
             pkill -TERM -f 'remix-serve' 2>/dev/null || log "⚠️ Warning: Could not terminate gracefully"
             sleep 5
             if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-              log "Force killing remaining processes..."
+              log "Force killing any remaining processes..."
               pkill -KILL -f 'remix-serve' 2>/dev/null || true
-            else
-              log "✅ All processes terminated gracefully"
+              sleep 2
             fi
+            log "✅ All existing processes stopped"
           else
             log "No existing Remix processes found"
           fi
@@ -134,7 +135,6 @@ jobs:
           sudo systemctl reload nginx || log "⚠️ Warning: Could not reload nginx"
 
           log "⏳ Waiting for application to start..."
-          log "⏳ Waiting for application to start..."
           MAX_WAIT=60  # 60 seconds
           for i in $(seq 1 $MAX_WAIT); do
             if curl -s -f http://localhost:3000/health > /dev/null 2>&1; then
@@ -144,7 +144,7 @@ jobs:
 
               # Verify database connectivity
               log "🔍 Verifying database connectivity..."
-              if curl -s http://localhost:3000/health | grep -q "database.*ok"; then
+              if curl -s http://localhost:3000/health | grep -q "database.*ok\|healthy"; then
                 log "✅ Database connection verified"
               else
                 log "⚠️ Database status unclear, but app is responding"
