@@ -1080,9 +1080,9 @@ export default function BundleRules() {
       <Modal
         open={isModalOpen}
         onClose={handleCloseModal}
-        title={editingRule ? "Edit Bundle Rule" : "Create New Bundle Rule"}
+        title={(editingRule && editingRule.id) ? "Edit Bundle Rule" : "Create New Bundle Rule"}
         primaryAction={{
-          content: editingRule ? 'Update Rule' : 'Create Rule',
+          content: (editingRule && editingRule.id) ? 'Update Rule' : 'Create Rule',
           onAction: handleSubmit,
           loading: isLoading,
         }}
