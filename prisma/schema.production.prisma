@@ -40,6 +40,8 @@ model BundleRule {
   status      String   @default("draft") // draft, active, paused
   frequency   Int      @default(0)
   savings     Float    @default(0.0)
+  category    String?
+  tags        String?  // JSON array of tags
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
