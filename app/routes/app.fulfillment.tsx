@@ -651,7 +651,7 @@ export default function FulfillmentIntegration() {
         >
           <BlockStack gap="400">
             <div style={{ textAlign: 'center' }}>
-              <Text as="h1" variant="heading3xl" fontWeight="bold">
+              <Text as="h1" variant="heading2xl" fontWeight="bold">
                 <span style={{ color: 'white' }}>🏭 Fulfillment Status</span>
               </Text>
             </div>

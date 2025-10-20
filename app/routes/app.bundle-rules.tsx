@@ -13,17 +13,14 @@ import {
   FormLayout,
   TextField,
   IndexTable,
-  Pagination,
   Badge,
   useIndexResourceState,
-  Icon,
   Filters,
   ChoiceList,
-  Select,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { logInfo, logError } from "../logger.server";
+import { logInfo, logError, logWarning } from "../logger.server";
 import { withCache, cacheKeys, cache } from "../cache.server";
 import db from "../db.server";
 
@@ -80,8 +77,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return responseJson.data.products.edges.flatMap((edge: any) => {
         const product = edge.node;
         return product.variants.edges.map((variant: any) => {
-          // Use variant ID as value if SKU is empty
-          const value = variant.node.sku || variant.node.id;
+          // Always use variant ID as value for GraphQL queries
+          const value = variant.node.id;
           const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
           return {
             label,
@@ -97,12 +94,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     products = cachedProducts;
     
-    // Create product map for display
+    // Create product map for display (map both variant IDs and SKUs to labels)
     products.forEach(product => {
+      // Map variant ID to label
       productMap[product.value] = product.label;
-      // Also map variant IDs for backward compatibility
-      if (product.value.includes('gid://shopify/ProductVariant/')) {
-        productMap[product.value] = product.label;
+      // Also map SKU to label for backward compatibility with existing rules
+      if (product.sku) {
+        productMap[product.sku] = product.label;
       }
     });
   } catch (e) {
@@ -256,18 +254,355 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const items = formData.get("items") as string;
     const bundledSku = formData.get("bundledSku") as string;
     const savings = parseFloat(formData.get("savings") as string) || 0;
+    const autoCreateProduct = formData.get("autoCreateProduct") === "true";
 
     // Basic validation
-    if (!name?.trim() || !bundledSku?.trim() || !items?.trim()) {
+    if (!name?.trim() || !items?.trim()) {
       return json({ 
         success: false, 
-        message: "Please fill in all required fields (Name, Products, and Bundled SKU)",
+        message: "Please fill in all required fields (Name and Products)",
         errors: {
           name: !name?.trim(),
-          bundledSku: !bundledSku?.trim(),
           items: !items?.trim()
         }
       });
+    }
+
+    // If not auto-creating, require SKU
+    if (!autoCreateProduct && !bundledSku?.trim()) {
+      return json({ 
+        success: false, 
+        message: "Please provide a Bundled SKU for your existing product",
+        errors: {
+          bundledSku: true
+        }
+      });
+    }
+
+    let finalBundledSku = bundledSku?.trim() || '';
+
+    // Auto-create Shopify product if requested
+    if (autoCreateProduct) {
+      console.log('Action: Starting auto-create with bundledSku from form:', bundledSku);
+      let itemIds: string[] = [];
+      let variantIds: string[] = [];
+      let bundlePrice = 0;
+      let finalBundledSku = bundledSku?.trim() || '';
+
+      try {
+        console.log('Starting auto-create product process');
+        const { admin } = await authenticate.admin(request);
+        
+        // Generate rule ID for tags (not for SKU since it's already generated in form)
+        const ruleId = Date.now().toString();
+        
+        // Use the SKU that was already generated in the form
+        console.log('Using SKU from form:', finalBundledSku);
+        
+        // Parse items to calculate bundle price
+        itemIds = items.split(",").filter(item => item.trim());
+        console.log('Parsed itemIds:', itemIds);
+        
+        // Convert any SKUs to variant IDs (for backward compatibility with existing rules)
+        for (const itemId of itemIds) {
+          if (itemId.startsWith('gid://shopify/ProductVariant/')) {
+            // Already a variant ID
+            variantIds.push(itemId);
+          } else {
+            // It's a SKU, need to find the variant ID
+            console.log('Resolving SKU to variant ID:', itemId);
+            try {
+              const variantResponse = await admin.graphql(`
+                query getVariantBySku($sku: String!) {
+                  productVariants(first: 1, query: "sku:$sku") {
+                    edges {
+                      node {
+                        id
+                      }
+                    }
+                  }
+                }
+              `, {
+                variables: { sku: itemId }
+              });
+              const variantData = await variantResponse.json();
+              console.log('Variant lookup response:', variantData);
+              const foundVariant = variantData.data?.productVariants?.edges?.[0]?.node;
+              if (foundVariant) {
+                variantIds.push(foundVariant.id);
+                console.log('Found variant ID:', foundVariant.id);
+              } else {
+                logWarning(`Could not find variant for SKU: ${itemId}`, { shop: session.shop });
+              }
+            } catch (skuError) {
+              logWarning(`Error resolving SKU to variant ID: ${itemId}`, { shop: session.shop, error: skuError });
+            }
+          }
+        }
+        
+        console.log('Final variantIds:', variantIds);
+        
+        // Ensure we have valid variant IDs
+        if (variantIds.length === 0) {
+          return json({ 
+            success: false, 
+            message: "No valid products found for bundle creation. Please check that the selected products exist and have valid SKUs.",
+            errors: {}
+          });
+        }
+
+        // Validate variant IDs format
+        const invalidIds = variantIds.filter(id => !id.startsWith('gid://shopify/ProductVariant/'));
+        if (invalidIds.length > 0) {
+          console.error('Invalid variant IDs found:', invalidIds);
+          return json({ 
+            success: false, 
+            message: "Invalid product variant IDs detected. Please refresh the page and try again.",
+            errors: {}
+          });
+        }
+        
+        // Get product prices from cached data (we'll need to pass this from loader)
+        // For now, use a simplified calculation - in production you'd fetch fresh prices
+        let totalIndividualPrice = 0;
+
+        // This is a placeholder - in a real implementation, you'd have access to product prices
+        // For now, assume we need to fetch them
+        console.log('About to fetch prices for variantIds:', variantIds);
+        try {
+          const productsResponse = await admin.graphql(`
+            query getProductVariants($ids: [ID!]!) {
+              nodes(ids: $ids) {
+                ... on ProductVariant {
+                  price
+                }
+              }
+            }
+          `, {
+            variables: {
+              ids: variantIds
+            }
+          });
+
+          const productsData = await productsResponse.json();
+          console.log('Price fetch response status:', productsResponse.status);
+          console.log('Price fetch response data:', JSON.stringify(productsData, null, 2));
+
+          // Check for GraphQL errors
+          if ((productsData as any).errors) {
+            console.error('GraphQL errors in price fetch:', (productsData as any).errors);
+            throw new Error(`GraphQL errors: ${JSON.stringify((productsData as any).errors)}`);
+          }
+
+          if (productsData.data?.errors) {
+            console.error('Data errors in price fetch:', productsData.data.errors);
+            throw new Error(`Data errors: ${JSON.stringify(productsData.data.errors)}`);
+          }
+
+          const variants = productsData.data?.nodes || [];
+          console.log('Found variants:', variants.length);
+          
+          if (variants.length !== variantIds.length) {
+            console.warn(`Expected ${variantIds.length} variants but got ${variants.length}`);
+          }
+
+          totalIndividualPrice = variants.reduce((sum: number, variant: any) => {
+            if (!variant) {
+              console.warn('Null variant found in response');
+              return sum;
+            }
+            const price = parseFloat(variant?.price || '0');
+            console.log('Variant price:', variant?.price, 'parsed:', price);
+            return sum + price;
+          }, 0);
+          console.log('Total individual price calculated:', totalIndividualPrice);
+        } catch (priceError) {
+          const errorMessage = priceError instanceof Error ? priceError.message : String(priceError);
+          console.error('Price fetch error details:', errorMessage);
+          logWarning('Could not fetch product prices for bundle calculation, using default', {
+            shop: session.shop,
+            error: errorMessage,
+            variantIds
+          });
+          totalIndividualPrice = variantIds.length * 10; // Fallback
+          console.log('Using fallback price:', totalIndividualPrice);
+        }
+        
+        bundlePrice = totalIndividualPrice; // Keep original total price, savings applied separately
+        console.log('Bundle price set to original total (savings applied separately):', bundlePrice, 'from total:', totalIndividualPrice, 'savings will be applied at checkout:', savings);
+        
+        // Create Shopify product
+        console.log('Creating Shopify product with input:', {
+          title: `${name} Bundle`,
+          status: "DRAFT",
+          productType: "Bundle",
+          tags: ["auto-generated", "bundle", `rule-${ruleId}`]
+        });
+
+        try {
+          // Create Shopify product first (this creates a default variant)
+          console.log('Creating Shopify product (step 1) with input:', {
+            title: `${name} Bundle`,
+            status: "DRAFT",
+            productType: "Bundle",
+            tags: ["auto-generated", "bundle", `rule-${ruleId}`]
+          });
+
+          const productCreateResponse = await admin.graphql(`
+            mutation productCreate($input: ProductInput!) {
+              productCreate(input: $input) {
+                product {
+                  id
+                  title
+                  variants(first: 1) {
+                    edges {
+                      node {
+                        id
+                        sku
+                        price
+                      }
+                    }
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `, {
+            variables: {
+              input: {
+                title: `${name} Bundle`,
+                status: "ACTIVE",
+                productType: "Bundle",
+                tags: ["auto-generated", "bundle", `rule-${ruleId}`]
+              }
+            }
+          });
+
+          const productCreateData = await productCreateResponse.json();
+          console.log('Product create response status:', productCreateResponse.status);
+          console.log('Product create response data:', JSON.stringify(productCreateData, null, 2));
+          
+          if ((productCreateData as any).errors) {
+            console.error('GraphQL errors in product creation:', (productCreateData as any).errors);
+            throw new Error(`GraphQL errors in product creation: ${JSON.stringify((productCreateData as any).errors)}`);
+          }
+
+          if (productCreateData.data?.productCreate?.userErrors?.length > 0) {
+            const errors = productCreateData.data.productCreate.userErrors;
+            console.error('User errors in product creation:', errors);
+            const errorMessages = errors.map((err: any) => `${err.field}: ${err.message}`).join(', ');
+            throw new Error(`Product creation failed: ${errorMessages}`);
+          }
+
+          const product = productCreateData.data?.productCreate?.product;
+          if (!product) {
+            throw new Error('Product creation failed: No product returned');
+          }
+
+          const productId = product.id;
+          const defaultVariant = product.variants?.edges?.[0]?.node;
+          
+          if (!defaultVariant) {
+            throw new Error('Product creation failed: No default variant created');
+          }
+
+          console.log('Product created successfully with ID:', productId);
+          console.log('Default variant ID:', defaultVariant.id);
+
+          // Update the default variant with correct SKU and price using REST API
+          console.log('Updating default variant (step 2) with REST API:', {
+            variantId: defaultVariant.id,
+            sku: finalBundledSku,
+            price: bundlePrice.toFixed(2),
+            inventory_policy: "deny"
+          });
+
+          if (!session.accessToken) {
+            throw new Error('No access token available for REST API call');
+          }
+
+          const variantId = defaultVariant.id.split('/').pop(); // Extract numeric ID from GID
+          const updateVariantUrl = `https://${session.shop}/admin/api/2024-10/variants/${variantId}.json`;
+
+          const updateResponse = await fetch(updateVariantUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': session.accessToken,
+            },
+            body: JSON.stringify({
+              variant: {
+                sku: finalBundledSku,
+                price: bundlePrice.toFixed(2),
+                inventory_policy: "deny"
+              }
+            })
+          });
+
+          if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error('REST API error in variant update:', updateResponse.status, errorText);
+            throw new Error(`Variant update failed: ${updateResponse.status} ${errorText}`);
+          }
+
+          const updateData = await updateResponse.json();
+          console.log('Variant update REST response:', JSON.stringify(updateData, null, 2));
+
+          if (updateData.errors) {
+            console.error('Errors in variant update:', updateData.errors);
+            throw new Error(`Variant update failed: ${JSON.stringify(updateData.errors)}`);
+          }
+
+          logInfo('Auto-created Shopify bundle product and updated variant', { 
+            shop: session.shop, 
+            productId,
+            variantId: defaultVariant.id,
+            sku: finalBundledSku,
+            title: `${name} Bundle`
+          });
+        } catch (createError) {
+          const errorMessage = createError instanceof Error ? createError.message : String(createError);
+          console.error('Product/variant creation failed:', errorMessage);
+          logError(createError instanceof Error ? createError : new Error(errorMessage), { 
+            context: 'product_variant_creation', 
+            shop: session.shop,
+            input: {
+              title: `${name} Bundle`,
+              status: "DRAFT",
+              productType: "Bundle",
+              tags: ["auto-generated", "bundle", `rule-${ruleId}`],
+              sku: finalBundledSku,
+              price: bundlePrice.toFixed(2),
+              inventoryPolicy: "DENY"
+            }
+          });
+          return json({ 
+            success: false, 
+            message: `Failed to create bundle product in Shopify: ${errorMessage}`,
+            errors: {}
+          });
+        }
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Auto-create product failed:', errorMessage);
+        logError(error instanceof Error ? error : new Error(errorMessage), { 
+          context: 'auto_create_product', 
+          shop: session.shop,
+          itemIds,
+          variantIds: variantIds.length,
+          finalBundledSku,
+          bundlePrice
+        });
+        return json({ 
+          success: false, 
+          message: `Failed to create bundle product automatically: ${errorMessage}`,
+          errors: {}
+        });
+      }
     }
 
     // Create new rule in database
@@ -276,7 +611,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shop: session.shop,
         name: name.trim(),
         items: JSON.stringify(items.split(",").filter(item => item.trim())),
-        bundledSku: bundledSku.trim(),
+        bundledSku: finalBundledSku,
         status: "active",
         frequency: 0,
         savings,
@@ -290,13 +625,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     logInfo('Bundle rule created successfully', { 
       shop: session.shop, 
       ruleName: name,
-      bundledSku,
-      itemCount: items.split(",").filter(item => item.trim()).length 
+      bundledSku: finalBundledSku,
+      itemCount: items.split(",").filter(item => item.trim()).length,
+      autoCreated: autoCreateProduct
     });
     
     return json({ 
       success: true, 
-      message: `Bundle rule "${name}" created successfully!`,
+      message: autoCreateProduct 
+        ? `Bundle rule created and Shopify product auto-generated with combined price (savings: $${savings})!`
+        : `Bundle rule "${name}" created successfully!`,
       reload: true
     });
   }
@@ -438,6 +776,7 @@ export default function BundleRules() {
     items: [] as string[],
     bundledSku: '',
     savings: '',
+    autoCreateProduct: true, // Default to true for simplified experience
   });
   const [selectedTotalPrice, setSelectedTotalPrice] = useState(0);
 
@@ -559,7 +898,7 @@ export default function BundleRules() {
       if (fetcher.data.reload) {
         // Close modal and reset form
         setIsModalOpen(false);
-        setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+        setFormData({ name: "", items: [], bundledSku: "", savings: "", autoCreateProduct: true });
         // Navigate to the same page to refresh data
         navigate(window.location.pathname + window.location.search, { replace: true });
       }
@@ -578,18 +917,19 @@ export default function BundleRules() {
         items: JSON.parse(rule.items || '[]'),
         bundledSku: rule.bundledSku,
         savings: rule.savings?.toString() || '',
+        autoCreateProduct: false, // For existing rules, assume they use manual SKUs
       });
     } else {
       // Create mode
       setEditingRule(null);
-      setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+      setFormData({ name: "", items: [], bundledSku: "", savings: "", autoCreateProduct: true });
     }
     setIsModalOpen(true);
   }, []);
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingRule(null);
-    setFormData({ name: "", items: [], bundledSku: "", savings: "" });
+    setFormData({ name: "", items: [], bundledSku: "", savings: "", autoCreateProduct: true });
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -602,6 +942,7 @@ export default function BundleRules() {
         items: formData.items.join(","),
         bundledSku: formData.bundledSku,
         savings: formData.savings,
+        autoCreateProduct: formData.autoCreateProduct.toString(),
       },
       { method: "POST" }
     );
@@ -637,7 +978,7 @@ export default function BundleRules() {
         >
           <BlockStack gap="400">
             <div style={{ textAlign: 'center' }}>
-              <Text as="h1" variant="heading3xl" fontWeight="bold">
+              <Text as="h1" variant="heading2xl" fontWeight="bold">
                 <span style={{ color: 'white' }}>📦 Bundle Rules Management</span>
               </Text>
             </div>
@@ -696,7 +1037,7 @@ export default function BundleRules() {
             >
               <InlineStack align="space-between" blockAlign="center">
                 <BlockStack gap="100">
-                      <Text as="h2" variant="heading2xl" fontWeight="bold">
+                        <Text as="h2" variant="heading2xl" fontWeight="bold">
                         📋 Bundle Rules ({pagination.total})
                       </Text>
                       <Text variant="bodyLg" as="p">
@@ -1259,10 +1600,30 @@ export default function BundleRules() {
               label="Rule Name"
               value={formData.name}
               onChange={(value) => setFormData({...formData, name: value})}
-              placeholder="e.g., Main Product Bundle"
+              placeholder="e.g., Office Essentials Bundle"
               helpText="Give your bundle rule a descriptive name"
               autoComplete="off"
             />
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={formData.autoCreateProduct}
+                  onChange={(e) => setFormData({...formData, autoCreateProduct: e.target.checked})}
+                />
+                <Text as="span" variant="bodyMd" fontWeight="medium">
+                  🤖 Auto-create bundle product in Shopify
+                </Text>
+              </label>
+              <div style={{ marginLeft: '24px', marginTop: '4px' }}>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {formData.autoCreateProduct 
+                    ? "We'll create a Shopify product with the combined price (savings applied automatically at checkout)" 
+                    : "You'll need to manually create a Shopify product with the SKU you specify"
+                  }
+                </Text>
+              </div>
+            </div>
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd">Select Products/Variants for Bundle</Text>
               <Text as="p" variant="bodySm" tone="subdued">Choose multiple products/variants from your store</Text>
@@ -1274,25 +1635,33 @@ export default function BundleRules() {
                         type="checkbox"
                         checked={formData.items.includes(product.value)}
                         onChange={(e) => {
+                          console.log('Checkbox changed:', e.target.checked, 'for product:', product.value);
+                          console.log('Current formData:', formData);
+                          
                           const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
-                          setFormData({...formData, items: nextItems});
-
+                          console.log('Next items:', nextItems);
+                          
                           // Update total price from products list
                           const priceMap: Record<string, number> = {};
                           products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
                           const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
                           setSelectedTotalPrice(total);
 
-                          // Suggest a bundled SKU based on selected SKUs or count if none
-                          const selectedSkus = nextItems.map(i => {
-                            const p = products.find((x: any) => x.value === i);
-                            return (p && (p.sku || '') ) || '';
-                          }).filter(Boolean);
-                          const suggested = selectedSkus.length > 0 ? `BUNDLE-${selectedSkus.join('-').slice(0, 40)}` : `BUNDLE-${nextItems.length}`;
-                          // Only auto-fill bundledSku if user hasn't typed one yet (allow edit)
-                          if (!formData.bundledSku) {
-                            setFormData(prev => ({ ...prev, bundledSku: suggested }));
+                          // Auto-generate SKU if auto-create is enabled
+                          let newBundledSku = formData.bundledSku;
+                          console.log('Auto-create enabled:', formData.autoCreateProduct, 'items length:', nextItems.length);
+                          if (formData.autoCreateProduct && nextItems.length > 0) {
+                            const timestamp = Date.now();
+                            newBundledSku = `BUNDLE-${timestamp}`;
+                            console.log('Form: Generating SKU:', newBundledSku, 'from timestamp:', timestamp);
                           }
+
+                          console.log('Setting bundledSku to:', newBundledSku);
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            bundledSku: newBundledSku, 
+                            items: nextItems 
+                          }));
                         }}
                       />
                       <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
@@ -1308,24 +1677,41 @@ export default function BundleRules() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Total price: <strong>${selectedTotalPrice.toFixed(2)}</strong>
                   </Text>
+                  {formData.autoCreateProduct && (
+                    <Text as="p" variant="bodySm" tone="success">
+                      Bundle price will be: <strong>${(selectedTotalPrice - parseFloat(formData.savings || '0')).toFixed(2)}</strong> (savings applied at checkout)
+                    </Text>
+                  )}
                 </div>
               )}
             </BlockStack>
-            <TextField
-              label="Bundled SKU"
-              value={formData.bundledSku}
-              onChange={(value) => setFormData({...formData, bundledSku: value})}
-              placeholder="e.g., SKU-ABC"
-              helpText="The pre-bundled SKU that will be sent to fulfillment"
-              autoComplete="off"
-            />
+            {!formData.autoCreateProduct && (
+              <TextField
+                label="Bundled SKU"
+                value={formData.bundledSku}
+                onChange={(value) => setFormData({...formData, bundledSku: value})}
+                placeholder="e.g., BUNDLE-OFFICE-SET"
+                helpText="The SKU of your existing Shopify product that contains this bundle"
+                autoComplete="off"
+              />
+            )}
+            {formData.autoCreateProduct && (
+              <div style={{ padding: '12px', backgroundColor: '#f0f9ff', border: '1px solid #0ea5e9', borderRadius: '6px' }}>
+                <Text as="p" variant="bodySm" fontWeight="medium">
+                  📦 Auto-generated SKU: <strong>{formData.bundledSku || 'Will be generated on save'}</strong>
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  We'll create a Shopify product with this SKU automatically
+                </Text>
+              </div>
+            )}
             <TextField
               label="Expected Savings"
               type="number"
               value={formData.savings}
               onChange={(value) => setFormData({...formData, savings: value})}
-              placeholder="e.g., 45"
-              helpText="Expected savings per bundle in dollars (e.g., 45 for $45.00)"
+              placeholder="e.g., 10"
+              helpText="Savings per bundle in dollars (e.g., 10 for $10.00 savings)"
               autoComplete="off"
               prefix="$"
             />
