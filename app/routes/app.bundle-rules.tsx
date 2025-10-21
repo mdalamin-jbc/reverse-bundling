@@ -67,7 +67,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       id
                       sku
                       title
-                      price
+                      price {
+                        amount
+                        currencyCode
+                      }
                     }
                   }
                 }
@@ -87,7 +90,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             label,
             value,
             sku: variant.node.sku || '',
-            price: parseFloat(variant.node.price || '0') || 0,
+            price: parseFloat(variant.node.price?.amount || '0') || 0,
             productTitle: product.title,
             variantTitle: variant.node.title || ''
           };

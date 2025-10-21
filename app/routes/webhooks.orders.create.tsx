@@ -239,7 +239,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                           node {
                             id
                             sku
-                            price
+                            price {
+                              amount
+                              currencyCode
+                            }
                           }
                         }
                       }
