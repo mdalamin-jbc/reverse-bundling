@@ -12,6 +12,13 @@ const prisma = global.prismaGlobal ?? new PrismaClient({
       url: process.env.DATABASE_URL,
     },
   },
+  // Connection timeout for production
+  ...(process.env.NODE_ENV === "production" ? {
+    transactionOptions: {
+      maxWait: parseInt(process.env.DATABASE_CONNECTION_TIMEOUT || '60000'),
+      timeout: parseInt(process.env.DATABASE_CONNECTION_TIMEOUT || '60000'),
+    },
+  } : {}),
 });
 
 // In development, save to global to avoid creating multiple instances
