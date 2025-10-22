@@ -48,9 +48,23 @@ jobs:
           log "📋 Checking git status..."
           git status || error_exit "git status"
 
-          # Pull latest changes
+          # Handle any uncommitted changes by stashing them
+          log "💾 Stashing any local changes..."
+          if ! git diff --quiet || ! git diff --staged --quiet; then
+            git stash push -m "Auto-stash before deployment $(date)" || log "⚠️ Warning: Could not stash changes"
+          fi
+
+          # Reset any divergent branches to match remote
+          log "🔄 Resetting to match remote main..."
+          git fetch origin || error_exit "git fetch"
+          git reset --hard origin/main || error_exit "git reset"
+
+          # Clean any untracked files
+          git clean -fd || log "⚠️ Warning: Could not clean untracked files"
+
+          # Pull latest changes (should be fast-forward now)
           log "⬇️ Pulling latest changes..."
-          git pull origin main --no-edit || error_exit "git pull"
+          git pull origin main --ff-only || error_exit "git pull"
 
           # Show latest commit
           log "📝 Latest commit:"
