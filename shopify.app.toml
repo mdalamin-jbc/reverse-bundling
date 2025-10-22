@@ -2,7 +2,7 @@
 
 client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
 name = "Reverse Bundle Pro"
-application_url = "https://reverse-bundling.me"
+application_url = "https://71fd9bfaa51d9b70a3b6511192fafe4b.shopifyapps.com"
 embedded = true
 
 [build]
@@ -40,7 +40,7 @@ scopes = "write_products,read_all_orders,read_products,write_orders,read_locatio
 
 [auth]
 redirect_urls = [
-  "https://reverse-bundling.me/auth/callback",
-  "https://reverse-bundling.me/auth/shopify/callback",
-  "https://reverse-bundling.me/api/auth/callback"
+  "https://71fd9bfaa51d9b70a3b6511192fafe4b.shopifyapps.com/auth/callback",
+  "https://71fd9bfaa51d9b70a3b6511192fafe4b.shopifyapps.com/auth/shopify/callback",
+  "https://71fd9bfaa51d9b70a3b6511192fafe4b.shopifyapps.com/api/auth/callback"
 ]
