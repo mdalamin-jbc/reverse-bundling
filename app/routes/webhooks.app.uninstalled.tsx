@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { logInfo } from "../logger.server";
+import { cache, cacheKeys } from "../cache.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   let shop = "unknown";
@@ -45,6 +46,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const rejected = results.filter(r => r.status === 'rejected').length;
 
     logInfo(`Cleanup completed for shop ${shop}: ${fulfilled} successful, ${rejected} failed`);
+
+    // Invalidate all caches for this shop
+    const shopCacheKeys = [
+      cacheKeys.bundleRules(shop),
+      cacheKeys.bundleAnalytics(shop),
+      cacheKeys.shopStats(shop),
+      cacheKeys.shopProducts(shop),
+      cacheKeys.orderConversions(shop, 10),
+      cacheKeys.analyticsSummary(shop, '30d')
+    ];
+
+    shopCacheKeys.forEach(key => {
+      cache.delete(key);
+      logInfo(`Invalidated cache key: ${key}`);
+    });
 
     // Verify cleanup by checking if any data remains
     const remainingData = await Promise.all([
