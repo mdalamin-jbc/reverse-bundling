@@ -53,9 +53,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const productsKey = cacheKeys.shopProducts(session.shop);
     const cachedProducts = await withCache(productsKey, 60 * 60 * 1000, async () => { // Cache for 1 hour
+      console.log('Fetching products from Shopify for shop:', session.shop);
       const response = await admin.graphql(`#graphql
-        query getProducts {
-          products(first: 100) {
+        query getProducts($query: String) {
+          products(first: 100, query: $query) {
             edges {
               node {
                 id
@@ -67,10 +68,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       id
                       sku
                       title
-                      price {
-                        amount
-                        currencyCode
-                      }
+                      price
                     }
                   }
                 }
@@ -78,19 +76,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             }
           }
         }
-      `);
+      `, {
+        variables: {
+          query: "status:active"
+        }
+      });
       const responseJson = await response.json();
-      return responseJson.data.products.edges.flatMap((edge: any) => {
+      console.log('Shopify products response:', JSON.stringify(responseJson, null, 2));
+      
+      if ((responseJson as any).errors) {
+        console.error('GraphQL errors:', (responseJson as any).errors);
+        throw new Error(`GraphQL errors: ${JSON.stringify((responseJson as any).errors)}`);
+      }
+      
+      const productsData = responseJson.data?.products?.edges || [];
+      console.log(`Found ${productsData.length} products`);
+      
+      return productsData.flatMap((edge: any) => {
         const product = edge.node;
+        console.log(`Processing product: ${product.title}, status: ${product.status}, variants: ${product.variants.edges.length}`);
         return product.variants.edges.map((variant: any) => {
           // Use variant ID as value if SKU is empty
           const value = variant.node.sku || variant.node.id;
           const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
+          console.log(`Variant: ${label}, value: ${value}, price: ${variant.node.price}`);
           return {
             label,
             value,
             sku: variant.node.sku || '',
-            price: parseFloat(variant.node.price?.amount || '0') || 0,
+            price: parseFloat(variant.node.price || '0') || 0,
             productTitle: product.title,
             variantTitle: variant.node.title || ''
           };
@@ -99,6 +113,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
 
     products = cachedProducts;
+    console.log(`Final products array length: ${products.length}`);
     
     // Create product map for display
     products.forEach(product => {
@@ -109,6 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     });
   } catch (e) {
+    console.error('Error fetching products:', e);
     logError(e instanceof Error ? e : new Error('Failed to fetch products from Shopify'), { shop: session.shop });
     // Try to get from cache even if expired
     const productsKey = cacheKeys.shopProducts(session.shop);
@@ -1271,36 +1287,51 @@ export default function BundleRules() {
               <Text as="p" variant="bodySm" tone="subdued">Choose multiple products/variants from your store</Text>
               <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
                 <BlockStack gap="100">
-                  {products.map((product) => (
-                    <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
-                      <input
-                        type="checkbox"
-                        checked={formData.items.includes(product.value)}
-                        onChange={(e) => {
-                          const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
-                          setFormData({...formData, items: nextItems});
+                  {products.length > 0 ? (
+                    products.map((product) => (
+                      <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                        <input
+                          type="checkbox"
+                          checked={formData.items.includes(product.value)}
+                          onChange={(e) => {
+                            const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
+                            setFormData({...formData, items: nextItems});
 
-                          // Update total price from products list
-                          const priceMap: Record<string, number> = {};
-                          products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
-                          const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
-                          setSelectedTotalPrice(total);
+                            // Update total price from products list
+                            const priceMap: Record<string, number> = {};
+                            products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
+                            const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
+                            setSelectedTotalPrice(total);
 
-                          // Suggest a bundled SKU based on selected SKUs or count if none
-                          const selectedSkus = nextItems.map(i => {
-                            const p = products.find((x: any) => x.value === i);
-                            return (p && (p.sku || '') ) || '';
-                          }).filter(Boolean);
-                          const suggested = selectedSkus.length > 0 ? `BUNDLE-${selectedSkus.join('-').slice(0, 40)}` : `BUNDLE-${nextItems.length}`;
-                          // Only auto-fill bundledSku if user hasn't typed one yet (allow edit)
-                          if (!formData.bundledSku) {
-                            setFormData(prev => ({ ...prev, bundledSku: suggested }));
-                          }
-                        }}
-                      />
-                      <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
-                    </label>
-                  ))}
+                            // Suggest a bundled SKU based on selected SKUs or count if none
+                            const selectedSkus = nextItems.map(i => {
+                              const p = products.find((x: any) => x.value === i);
+                              return (p && (p.sku || '') ) || '';
+                            }).filter(Boolean);
+                            const suggested = selectedSkus.length > 0 ? `BUNDLE-${selectedSkus.join('-').slice(0, 40)}` : `BUNDLE-${nextItems.length}`;
+                            // Only auto-fill bundledSku if user hasn't typed one yet (allow edit)
+                            if (!formData.bundledSku) {
+                              setFormData(prev => ({ ...prev, bundledSku: suggested }));
+                            }
+                          }}
+                        />
+                        <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
+                      </label>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📦</div>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        No products found in your store.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Make sure you have active products with variants in your Shopify store.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Try refreshing the page to reload products.
+                      </Text>
+                    </div>
+                  )}
                 </BlockStack>
               </div>
               {formData.items.length > 0 && (
