@@ -4,37 +4,73 @@ import db from "../db.server";
 import { logInfo } from "../logger.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, session } = await authenticate.webhook(request);
-
-  logInfo(`App uninstalled - cleaning up all data for shop: ${shop}`);
+  let shop = "unknown";
 
   try {
-    // Clean up all app data when uninstalled
-    // This ensures users start fresh when reinstalling and prevents free tier abuse
-    await Promise.all([
-      // Delete session
-      session ? db.session.deleteMany({ where: { shop } }) : Promise.resolve(),
-      
-      // Delete all bundle rules
-      db.bundleRule.deleteMany({ where: { shop } }),
-      
-      // Delete all order conversions
-      db.orderConversion.deleteMany({ where: { shop } }),
-      
-      // Delete bundle analytics
-      db.bundleAnalytics.deleteMany({ where: { shop } }),
-      
-      // Delete app settings
-      db.appSettings.deleteMany({ where: { shop } }),
-      
-      // Delete fulfillment providers
-      db.fulfillmentProvider.deleteMany({ where: { shop } })
+    const { shop: authenticatedShop, session } = await authenticate.webhook(request);
+    shop = authenticatedShop;
+
+    logInfo(`App uninstalled - starting cleanup for shop: ${shop}`);
+
+    // Delete data in the correct order to handle foreign key constraints
+    // BundleRule has cascade delete for BundleAnalytics and OrderConversion
+    const results = await Promise.allSettled([
+      // Delete fulfillment providers first (no dependencies)
+      db.fulfillmentProvider.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete fulfillment providers for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      // Delete app settings (no dependencies)
+      db.appSettings.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete app settings for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      // Delete bundle rules (this will cascade delete analytics and conversions)
+      db.bundleRule.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete bundle rules for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      // Delete session last
+      session ? db.session.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete session for ${shop}: ${err.message}`);
+        return null;
+      }) : Promise.resolve(null)
     ]);
 
-    logInfo(`Successfully cleaned up all data for uninstalled shop: ${shop}`);
+    // Log results
+    const fulfilled = results.filter(r => r.status === 'fulfilled').length;
+    const rejected = results.filter(r => r.status === 'rejected').length;
+
+    logInfo(`Cleanup completed for shop ${shop}: ${fulfilled} successful, ${rejected} failed`);
+
+    // Verify cleanup by checking if any data remains
+    const remainingData = await Promise.all([
+      db.bundleRule.count({ where: { shop } }),
+      db.orderConversion.count({ where: { shop } }),
+      db.bundleAnalytics.count({ where: { shop } }),
+      db.appSettings.count({ where: { shop } }),
+      db.fulfillmentProvider.count({ where: { shop } })
+    ]);
+
+    const [rules, conversions, analytics, settings, providers] = remainingData;
+
+    if (rules > 0 || conversions > 0 || analytics > 0 || settings > 0 || providers > 0) {
+      logInfo(`WARNING: Data still remains after cleanup for shop ${shop}:`, {
+        rules, conversions, analytics, settings, providers
+      });
+    } else {
+      logInfo(`✅ Complete data cleanup verified for shop ${shop}`);
+    }
+
   } catch (error) {
-    logInfo(`Error during cleanup for shop ${shop}:`, { error: (error as Error).message });
-    // Don't fail the webhook if cleanup has issues
+    logInfo(`Critical error during uninstall cleanup for shop ${shop}:`, {
+      error: (error as Error).message,
+      stack: (error as Error).stack
+    });
+    // Still return success to Shopify - don't fail the webhook
   }
 
   return new Response();
