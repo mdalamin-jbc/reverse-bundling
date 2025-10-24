@@ -55,9 +55,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const productsKey = cacheKeys.shopProducts(session.shop);
     const cachedProducts = await withCache(productsKey, 60 * 60 * 1000, async () => { // Cache for 1 hour
+      console.log('Fetching products from Shopify for shop:', session.shop);
       const response = await admin.graphql(`#graphql
-        query getProducts {
-          products(first: 100) {
+        query getProducts($query: String) {
+          products(first: 100, query: $query) {
             edges {
               node {
                 id
@@ -85,14 +86,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             }
           }
         }
-      `);
+      `, {
+        variables: {
+          query: "status:active"
+        }
+      });
       const responseJson = await response.json();
-      return responseJson.data.products.edges.flatMap((edge: any) => {
+      console.log('Shopify products response:', JSON.stringify(responseJson, null, 2));
+      
+      if ((responseJson as any).errors) {
+        console.error('GraphQL errors:', (responseJson as any).errors);
+        throw new Error(`GraphQL errors: ${JSON.stringify((responseJson as any).errors)}`);
+      }
+      
+      const productsData = responseJson.data?.products?.edges || [];
+      console.log(`Found ${productsData.length} products`);
+      
+      return productsData.flatMap((edge: any) => {
         const product = edge.node;
+        console.log(`Processing product: ${product.title}, status: ${product.status}, variants: ${product.variants.edges.length}`);
         return product.variants.edges.map((variant: any) => {
           // Always use variant ID as value for GraphQL queries
           const value = variant.node.id;
           const label = `${product.title}${variant.node.sku ? ` [${variant.node.sku}]` : ' [No SKU]'}`;
+          console.log(`Variant: ${label}, value: ${value}, price: ${variant.node.price}`);
           return {
             label,
             value,
@@ -108,6 +125,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
 
     products = cachedProducts;
+    console.log(`Final products array length: ${products.length}`);
     
     // Extract unique categories from products
     const categoriesSet = new Set<string>();
@@ -141,6 +159,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.log('Dynamic categories extracted:', dynamicCategories);
     console.log('Sample products:', products.slice(0, 2));
   } catch (e) {
+    console.error('Error fetching products:', e);
     logError(e instanceof Error ? e : new Error('Failed to fetch products from Shopify'), { shop: session.shop });
     // Try to get from cache even if expired
     const productsKey = cacheKeys.shopProducts(session.shop);
@@ -2774,44 +2793,59 @@ export default function BundleRules() {
               
               <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
                 <BlockStack gap="100">
-                  {filteredProducts.map((product: any) => (
-                    <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
-                      <input
-                        type="checkbox"
-                        checked={formData.items.includes(product.value)}
-                        onChange={(e) => {
-                          console.log('Checkbox changed:', e.target.checked, 'for product:', product.value);
-                          console.log('Current formData:', formData);
-                          
-                          const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
-                          console.log('Next items:', nextItems);
-                          
-                          // Update total price from products list
-                          const priceMap: Record<string, number> = {};
-                          products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
-                          const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
-                          setSelectedTotalPrice(total);
+                  {products.length > 0 ? (
+                    products.map((product) => (
+                      <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                        <input
+                          type="checkbox"
+                          checked={formData.items.includes(product.value)}
+                          onChange={(e) => {
+                            console.log('Checkbox changed:', e.target.checked, 'for product:', product.value);
+                            console.log('Current formData:', formData);
 
-                          // Auto-generate SKU if auto-create is enabled
-                          let newBundledSku = formData.bundledSku;
-                          console.log('Auto-create enabled:', formData.autoCreateProduct, 'items length:', nextItems.length);
-                          if (formData.autoCreateProduct && nextItems.length > 0) {
-                            const timestamp = Date.now();
-                            newBundledSku = `BUNDLE-${timestamp}`;
-                            console.log('Form: Generating SKU:', newBundledSku, 'from timestamp:', timestamp);
-                          }
+                            const nextItems = e.target.checked ? [...formData.items, product.value] : formData.items.filter(item => item !== product.value);
+                            console.log('Next items:', nextItems);
 
-                          console.log('Setting bundledSku to:', newBundledSku);
-                          setFormData(prev => ({ 
-                            ...prev, 
-                            bundledSku: newBundledSku, 
-                            items: nextItems 
-                          }));
-                        }}
-                      />
-                      <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
-                    </label>
-                  ))}
+                            // Update total price from products list
+                            const priceMap: Record<string, number> = {};
+                            products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
+                            const total = nextItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
+                            setSelectedTotalPrice(total);
+
+                            // Auto-generate SKU if auto-create is enabled
+                            let newBundledSku = formData.bundledSku;
+                            console.log('Auto-create enabled:', formData.autoCreateProduct, 'items length:', nextItems.length);
+                            if (formData.autoCreateProduct && nextItems.length > 0) {
+                              const timestamp = Date.now();
+                              newBundledSku = `BUNDLE-${timestamp}`;
+                              console.log('Form: Generating SKU:', newBundledSku, 'from timestamp:', timestamp);
+                            }
+
+                            console.log('Setting bundledSku to:', newBundledSku);
+                            setFormData(prev => ({
+                              ...prev,
+                              bundledSku: newBundledSku,
+                              items: nextItems
+                            }));
+                          }}
+                        />
+                        <Text as="span" variant="bodySm">{product.label} — ${product.price?.toFixed ? product.price.toFixed(2) : (product.price || 0).toFixed(2)}</Text>
+                      </label>
+                    ))
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📦</div>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        No products found in your store.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Make sure you have active products with variants in your Shopify store.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Try refreshing the page to reload products.
+                      </Text>
+                    </div>
+                  )}
                 </BlockStack>
                 {filteredProducts.length === 0 && searchQuery && (
                   <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>

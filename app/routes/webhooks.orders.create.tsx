@@ -21,9 +21,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   
   const authResult = await authenticate.webhook(request);
-  const { shop, topic, payload } = authResult;
-  // Try to get admin from webhook auth (might not be available)
-  const admin = (authResult as any).admin;
+  const { shop, topic, payload, admin } = authResult;
 
   logInfo(`Received ${topic} webhook`, { shop, topic });
 
@@ -49,6 +47,103 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
 
     logInfo(`Processing order: ${order.name || order.id}`, { shop, orderId: String(order.id) });
+
+    // Check plan limits before processing (only if admin API is available)
+    if (admin) {
+      try {
+        const { hasActiveSubscription } = await import("../billing.server");
+        const hasSubscription = await hasActiveSubscription(admin, shop);
+        
+        let planLimit = 50; // Free plan default
+        
+        if (hasSubscription) {
+          // Get current subscription details
+          const subscriptionResponse = await admin.graphql(
+            `#graphql
+              query {
+                currentAppInstallation {
+                  activeSubscriptions {
+                    id
+                    name
+                    status
+                    lineItems {
+                      plan {
+                        pricingDetails {
+                          ... on AppRecurringPricing {
+                            price {
+                              amount
+                            }
+                            interval
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`
+          );
+          const subscriptionData = await subscriptionResponse.json();
+          const subscriptions = subscriptionData.data?.currentAppInstallation?.activeSubscriptions || [];
+          const activeSubscription = subscriptions.find((sub: any) => sub.status === 'ACTIVE');
+          
+          if (activeSubscription) {
+            const pricing = activeSubscription.lineItems?.[0]?.plan?.pricingDetails;
+            if (pricing) {
+              const amount = pricing.price?.amount || 0;
+              const interval = pricing.interval;
+              
+              // Map pricing to plan limits
+              if (interval === 'ANNUAL') {
+                if (amount >= 1000) planLimit = 999999; // Enterprise
+                else if (amount >= 500) planLimit = 2050; // Professional
+                else if (amount >= 200) planLimit = 550; // Starter
+              } else {
+                if (amount >= 199) planLimit = 999999; // Enterprise
+                else if (amount >= 79) planLimit = 2050; // Professional
+                else if (amount >= 29) planLimit = 550; // Starter
+              }
+            }
+          }
+        }
+        
+        // Check current order count for this month
+        const currentMonth = new Date();
+        currentMonth.setDate(1);
+        currentMonth.setHours(0, 0, 0, 0);
+        
+        const orderCountThisMonth = await db.orderConversion.count({
+          where: {
+            shop,
+            convertedAt: {
+              gte: currentMonth
+            }
+          }
+        });
+        
+        if (orderCountThisMonth >= planLimit) {
+          logWarning(`Plan limit exceeded - skipping bundle processing`, {
+            shop,
+            orderId: String(order.id),
+            orderCountThisMonth,
+            planLimit,
+            planName: planLimit === 999999 ? 'Enterprise' : planLimit === 2050 ? 'Professional' : planLimit === 550 ? 'Starter' : 'Free'
+          });
+          
+          perfMonitor.end({ shop, orderId: String(order.id), limitExceeded: true });
+          return new Response("Plan limit exceeded", { status: 200 });
+        }
+        
+      } catch (limitCheckError) {
+        logError(limitCheckError as Error, { 
+          context: 'plan_limit_check', 
+          shop, 
+          orderId: String(order.id) 
+        });
+        // Continue processing if limit check fails (fail open)
+      }
+    } else {
+      logInfo('Admin API not available in webhook context, skipping plan limit check', { shop, orderId: String(order.id) });
+    }
 
     // Get active bundle rules for this shop
     const bundleRules = await db.bundleRule.findMany({
@@ -257,7 +352,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             const bundleProduct = productData.data?.products?.edges?.[0]?.node;
 
             if (!bundleProduct) {
-              throw new Error(`Bundle product not found for SKU: ${rule.bundledSku}. Please create this product in Shopify first!`);
+              const errorMsg = `Bundle product not found for SKU: ${rule.bundledSku}. Please create this product in Shopify first with the exact SKU "${rule.bundledSku}". The bundle rule "${rule.name}" requires this product to exist.`;
+              logError(new Error(errorMsg), { 
+                shop, 
+                bundledSku: rule.bundledSku, 
+                ruleName: rule.name,
+                orderId: String(order.id)
+              });
+              throw new Error(errorMsg);
             }
 
             const bundleVariantId = bundleProduct.variants.edges[0]?.node?.id;

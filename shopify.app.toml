@@ -1,42 +1,17 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# Shopify App Configuration
+# Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
 name = "Reverse Bundle Pro"
-application_url = "https://reverse-bundling.me"  # Updated for Oracle Cloud production
+client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
+application_url = "https://reverse-bundling.me"
 embedded = true
 
-[build]
-automatically_update_urls_on_dev = true
-
-[webhooks]
-api_version = "2025-10"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
-
-  [[webhooks.subscriptions]]
-  topics = [ "orders/create" ]
-  uri = "/webhooks/orders/create"
-
-  [[webhooks.subscriptions]]
-  topics = [ "orders/updated" ]
-  uri = "/webhooks/orders/updated"
-
-  [[webhooks.subscriptions]]
-  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-  uri = "/webhooks/compliance"
-
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-# Using read_all_orders for complete historical order analysis (required for bundle pattern detection)
-# read_locations enables auto-detection of fulfillment providers
-# write_order_edits enables automatic order modification for bundle conversion
-scopes = "write_products,read_all_orders,read_products,write_orders,read_locations,write_order_edits"
+# Scopes required for bundle management and automation
+# read_all_orders → needed for historical order analysis
+# write_order_edits → allows order modification for bundle conversion
+# read_locations → detects fulfillment providers automatically
+scopes = "read_products,write_products,read_all_orders,read_locations,write_orders,write_order_edits"
 
 [auth]
 redirect_urls = [
@@ -44,3 +19,34 @@ redirect_urls = [
   "https://reverse-bundling.me/auth/shopify/callback",
   "https://reverse-bundling.me/api/auth/callback"
 ]
+
+[webhooks]
+# Use stable API version (Shopify recommends using a fixed version, not a future date)
+api_version = "2025-01"
+
+  # App lifecycle webhooks
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/scopes_update"]
+  uri = "/webhooks/app/scopes_update"
+
+  # Order-related webhooks
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/updated"]
+  uri = "/webhooks/orders/updated"
+
+  # GDPR compliance webhooks
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/compliance"
+
+[build]
+# Automatically updates the URLs in Partner Dashboard when running "shopify app dev"
+automatically_update_urls_on_dev = true

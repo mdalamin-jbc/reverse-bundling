@@ -20,7 +20,6 @@ import { authenticate } from "../shopify.server";
 import { useState, useMemo } from "react";
 import db from "../db.server";
 import { logInfo, logError } from "../logger.server";
-import { withCache, cacheKeys } from "../cache.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -30,9 +29,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const offset = (page - 1) * limit;
 
   try {
-    // Cache expensive stats calculation for 5 minutes
-    const statsKey = cacheKeys.shopStats(session.shop);
-    const stats = await withCache(statsKey, 5 * 60 * 1000, async () => {
+    // Get fresh stats (don't cache critical conversion counts)
+    const stats = await (async () => {
       // Get summary statistics with optimized queries
       const [totalConversions, totalSavingsResult, avgSavingsResult] = await Promise.all([
         db.orderConversion.count({ where: { shop: session.shop } }),
@@ -51,7 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalSavings: totalSavingsResult._sum.savingsAmount || 0,
         avgSavings: avgSavingsResult._avg.savingsAmount || 0
       };
-    });
+    })();
 
     // Fetch paginated conversions with optimized query
     const conversions = await db.orderConversion.findMany({
