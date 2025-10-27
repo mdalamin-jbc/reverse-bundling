@@ -681,7 +681,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               variant: {
                 sku: finalBundledSku,
                 price: bundlePrice.toFixed(2),
-                inventory_policy: "deny"
+                inventory_policy: "deny",
+                inventory_management: null, // Explicitly disable inventory tracking for bundle products
+                inventory_quantity: null // No inventory quantity for virtual bundle products
               }
             })
           });
@@ -1600,7 +1602,7 @@ export default function BundleRules() {
       setEditingRule(rule);
       setFormData({
         name: rule.name,
-        items: JSON.parse(rule.items || '[]'),
+        items: JSON.parse(rule.items || '[]').filter((item: string) => item.trim()),
         bundledSku: rule.bundledSku,
         savings: rule.savings ? parseFloat(rule.savings).toFixed(2) : '',
         autoCreateProduct: false, // For existing rules, assume they use manual SKUs
@@ -1981,7 +1983,7 @@ export default function BundleRules() {
                     ]}
                   >
                     {bundleRules.map((rule: any, index: number) => {
-                      const itemsArray = JSON.parse(rule.items || '[]');
+                      const itemsArray = JSON.parse(rule.items || '[]').filter((item: string) => item.trim());
                       
                       // Calculate performance metrics
                       const conversionRate = rule.conversionRate || 0;
@@ -2159,9 +2161,14 @@ export default function BundleRules() {
                     </thead>
                     <tbody>
                       {suggestions.map((suggestion: any, index: number) => {
-                        const itemsArray = JSON.parse(suggestion.items || '[]');
+                        const itemsArray = JSON.parse(suggestion.items || '[]').filter((item: string) => item.trim());
                         const productNames = itemsArray.map((itemId: string) => {
-                          const product = products.find((p: any) => p.value === itemId);
+                          // Try to find product by variant ID first, then by SKU
+                          let product = products.find((p: any) => p.value === itemId);
+                          if (!product && itemId) {
+                            // If not found by variant ID, try by SKU
+                            product = products.find((p: any) => p.sku === itemId);
+                          }
                           return product ? product.label.split(' [')[0] : itemId;
                         });
 
@@ -2220,7 +2227,7 @@ export default function BundleRules() {
                                     fullWidth
                                     onClick={() => {
                                       // Create bundle rule from suggestion
-                                      const itemsArray = JSON.parse(suggestion.items || '[]');
+                                      const itemsArray = JSON.parse(suggestion.items || '[]').filter((item: string) => item.trim());
                                       const ruleName = generateProfessionalRuleName(productNames, itemsArray);
                                       const bundledSku = `BUNDLE-STAT-${Date.now()}`;
                                       
@@ -2793,8 +2800,8 @@ export default function BundleRules() {
               
               <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
                 <BlockStack gap="100">
-                  {products.length > 0 ? (
-                    products.map((product) => (
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.map((product) => (
                       <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
                         <input
                           type="checkbox"
@@ -3059,7 +3066,7 @@ export default function BundleRules() {
                   <BlockStack gap="200">
                     <Text variant="bodyMd" as="p" fontWeight="semibold">
                       {(() => {
-                        const itemsArray = JSON.parse(selectedSuggestion.items || '[]');
+                        const itemsArray = JSON.parse(selectedSuggestion.items || '[]').filter((item: string) => item.trim());
                         const productNames = itemsArray.map((itemId: string) => {
                           const product = products.find((p: any) => p.value === itemId);
                           return product ? product.label.split(' [')[0] : itemId;
