@@ -113,8 +113,9 @@ jobs:
           # Kill existing process gracefully - use a safer approach
           log "🛑 Stopping existing application..."
           if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-            log "Found running Remix processes - skipping kill to avoid session termination"
-            log "Will start new process alongside existing ones"
+            log "Found running Remix processes, killing them..."
+            pkill -f 'remix-serve' || log "⚠️ Warning: Could not kill existing processes"
+            sleep 3  # Wait for processes to die
           else
             log "No existing Remix processes found"
           fi
