@@ -106,13 +106,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Map normalized amount to plan details based on interval
         if (planInterval === 'ANNUAL') {
           // For yearly plans, match the yearly amounts
-          if (normalizedAmount === 60 || normalizedAmount === 60.00) {
+          if (normalizedAmount === 50 || normalizedAmount === 50.00) {
             planName = "Starter";
             planLimit = 125;
-          } else if (normalizedAmount === 120 || normalizedAmount === 120.00) {
+          } else if (normalizedAmount === 100 || normalizedAmount === 100.00) {
             planName = "Professional"; 
             planLimit = 525;
-          } else if (normalizedAmount === 180 || normalizedAmount === 180.00) {
+          } else if (normalizedAmount === 150 || normalizedAmount === 150.00) {
             planName = "Enterprise";
             planLimit = 999999; // Unlimited
           } else {
@@ -121,15 +121,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             if (subName.includes('enterprise')) {
               planName = "Enterprise";
               planLimit = 999999;
-              planAmount = 180;
+              planAmount = 150;
             } else if (subName.includes('professional')) {
               planName = "Professional";
               planLimit = 525;
-              planAmount = 120;
+              planAmount = 100;
             } else if (subName.includes('starter')) {
               planName = "Starter";
               planLimit = 125;
-              planAmount = 60;
+              planAmount = 50;
             }
           }
         } else {
@@ -329,21 +329,23 @@ export default function Billing() {
 
     // Helper function to get pricing display for a plan
   const getPlanPricing = (monthlyPrice: number) => {
-    // Define yearly prices based on the discounted rates from Shopify
+    // Define yearly prices based on the discounted rates
     let yearlyPrice: number;
 
     // Use precise comparison for pricing lookup
     if (Math.abs(monthlyPrice - 4.99) < 0.01) {
-      yearlyPrice = 60;   // Starter: $60/year instead of $59.88
+      yearlyPrice = 50;   // Starter: $50/year
     } else if (Math.abs(monthlyPrice - 9.99) < 0.01) {
-      yearlyPrice = 120;  // Professional: $120/year instead of $119.88
+      yearlyPrice = 100;  // Professional: $100/year
     } else if (Math.abs(monthlyPrice - 14.99) < 0.01) {
-      yearlyPrice = 180;  // Enterprise: $180/year instead of $179.88
+      yearlyPrice = 150;  // Enterprise: $150/year
     } else {
       yearlyPrice = monthlyPrice * 12; // Fallback
     }
 
-    const savings = (monthlyPrice * 12) - yearlyPrice;
+    const monthlyYearly = monthlyPrice * 12;
+    const savingsAmount = monthlyYearly - yearlyPrice;
+    const savingsPercent = Math.round((savingsAmount / monthlyYearly) * 100);
 
     if (billingInterval === 'monthly') {
       return {
@@ -351,7 +353,7 @@ export default function Billing() {
         primaryPeriod: '/month',
         secondaryPrice: yearlyPrice,
         secondaryPeriod: '/year',
-        savings: savings > 0 ? `$${Math.round(savings * 100) / 100} off` : null
+        savings: `save ${savingsPercent}%`
       };
     } else {
       return {
@@ -359,7 +361,7 @@ export default function Billing() {
         primaryPeriod: '/year',
         secondaryPrice: monthlyPrice,
         secondaryPeriod: '/month',
-        savings: savings > 0 ? `$${Math.round(savings * 100) / 100} off` : null
+        savings: `save ${savingsPercent}%`
       };
     }
   };
@@ -677,7 +679,7 @@ export default function Billing() {
                           )}
                         </div>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          ${pricing.secondaryPrice}{pricing.secondaryPeriod}{pricing.savings ? ` (${pricing.savings})` : ''}
+                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
                         </Text>
                       </div>
                     );
@@ -737,7 +739,7 @@ export default function Billing() {
                           )}
                         </div>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          ${pricing.secondaryPrice}{pricing.secondaryPeriod}{pricing.savings ? ` (${pricing.savings})` : ''}
+                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
                         </Text>
                       </div>
                     );
@@ -797,7 +799,7 @@ export default function Billing() {
                           )}
                         </div>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          ${pricing.secondaryPrice}{pricing.secondaryPeriod}{pricing.savings ? ` (${pricing.savings})` : ''}
+                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
                         </Text>
                       </div>
                     );
