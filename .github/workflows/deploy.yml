@@ -84,12 +84,20 @@ jobs:
                     # Clean node_modules if it exists to avoid npm ci issues
           log "🧹 Cleaning node_modules..."
           if [ -d "node_modules" ]; then
-            rm -rf node_modules || log "⚠️ Warning: Could not remove node_modules, continuing..."
+            rm -rf node_modules || {
+              log "⚠️ Warning: Could not remove node_modules, trying alternative cleanup..."
+              # Try to remove package-lock.json and do fresh install
+              rm -f package-lock.json
+              npm cache clean --force 2>/dev/null || true
+            }
           fi
 
-          # Install dependencies
+          # Install dependencies with timeout
           log "📦 Installing dependencies..."
-          npm ci --production=false || error_exit "npm ci"
+          timeout 600 npm ci --production=false || {
+            log "⚠️ npm ci failed, trying npm install..."
+            timeout 600 npm install || error_exit "dependency installation"
+          }
 
           # Database setup
           log "🗄️ Setting up database..."
