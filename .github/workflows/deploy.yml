@@ -112,25 +112,51 @@ jobs:
 
           # Kill existing process gracefully - use a safer approach
           log "🛑 Stopping existing application..."
+          log "Checking for running processes..."
           if pgrep -f 'remix-serve' > /dev/null 2>&1; then
             log "Found running Remix processes, killing them..."
-            pkill -f 'remix-serve' || log "⚠️ Warning: Could not kill existing processes"
-            sleep 3  # Wait for processes to die
+            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not kill existing processes"
+            sleep 5  # Wait longer for processes to die
+            # Check if processes are still running
+            if pgrep -f 'remix-serve' > /dev/null 2>&1; then
+              log "Processes still running, force killing..."
+              pkill -KILL -f 'remix-serve' || log "⚠️ Warning: Could not force kill processes"
+              sleep 2
+            else
+              log "Processes killed successfully"
+            fi
           else
             log "No existing Remix processes found"
           fi
 
+          # Double check - kill any remaining node processes on port 3000
+          log "Checking for processes on port 3000..."
+          PORT_PID=$(lsof -ti:3000 2>/dev/null || echo "")
+          if [ ! -z "$PORT_PID" ]; then
+            log "Found process on port 3000, killing: $PORT_PID"
+            kill -TERM $PORT_PID || log "⚠️ Warning: Could not kill port 3000 process"
+            sleep 3
+          fi
+
           # Wait a moment
-          sleep 2
+          sleep 3
+          log "Process cleanup completed"
 
           # Clean up old build files (optional)
           log "🧹 Cleaning up old logs..."
           find . -name "*.log" -mtime +7 -delete 2>/dev/null || true
 
+          # Build the application
+          log "🔨 Building application..."
+          npm run build || error_exit "build failed"
+
           # Start the application using systemd
-          log "▶️ Restarting application via systemd..."
-          sudo systemctl restart reverse-bundling.service || error_exit "systemctl restart"
-          log "Application restarted via systemd"
+          log "▶️ Starting application via systemd..."
+          sudo systemctl restart reverse-bundling.service || {
+            log "❌ Systemctl restart failed, trying to start..."
+            sudo systemctl start reverse-bundling.service || error_exit "systemctl start"
+          }
+          log "Application started via systemd"
 
           # Reload nginx to pick up any configuration changes
           log "🔄 Reloading nginx configuration..."
