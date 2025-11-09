@@ -40,6 +40,8 @@ model BundleRule {
   status      String   @default("draft") // draft, active, paused
   frequency   Int      @default(0)
   savings     Float    @default(0.0)
+  category    String?
+  tags        String?  // JSON array of tags
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -120,4 +122,63 @@ model AppSettings {
   updatedAt             DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+model OrderHistory {
+  id              String   @id @default(cuid())
+  shop            String
+  orderId         String
+  orderNumber     String?
+  orderDate       DateTime
+  customerId      String?
+  lineItems       String   // JSON array of line items with SKUs, quantities, prices
+  totalValue      Float
+  processed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([shop, orderId])
+  @@index([shop])
+  @@index([shop, processed])
+  @@index([shop, orderDate])
+  @@map("order_history")
+}
+
+model ItemCooccurrence {
+  id              String   @id @default(cuid())
+  shop            String
+  itemA           String   // SKU or variant ID
+  itemB           String   // SKU or variant ID
+  cooccurrenceCount Int    @default(0)
+  totalOrders     Int      @default(0)
+  confidence      Float    @default(0.0) // Confidence score 0-1
+  lift            Float    @default(0.0) // Lift score for association rules
+  lastAnalyzed    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, itemA, itemB])
+  @@index([shop])
+  @@index([shop, confidence])
+  @@index([shop, cooccurrenceCount])
+  @@map("item_cooccurrence")
+}
+
+model BundleSuggestion {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  items           String   // JSON array of item identifiers
+  confidence      Float    @default(0.0) // Overall confidence score
+  potentialSavings Float   @default(0.0) // Estimated monthly savings
+  orderFrequency  Int      @default(0)   // How often this combination appears
+  status          String   @default("pending") // pending, applied, dismissed
+  appliedRuleId   String?  // If suggestion was converted to a rule
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop])
+  @@index([shop, status])
+  @@index([shop, confidence])
+  @@index([shop, potentialSavings])
+  @@map("bundle_suggestions")
 }

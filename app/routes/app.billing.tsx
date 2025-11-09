@@ -78,7 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const subscriptionToUse = chargeSubscription || activeSubscription;
 
     // Determine plan based on subscription or usage
-    let planLimit = 50, planName = "Free", planAmount = 0, planInterval = "EVERY_30_DAYS";
+    let planLimit = 25, planName = "Free", planAmount = 0, planInterval = "EVERY_30_DAYS";
     
     if (subscriptionToUse && subscriptionToUse.status === 'ACTIVE') {
       // Extract plan details from subscription
@@ -106,13 +106,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Map normalized amount to plan details based on interval
         if (planInterval === 'ANNUAL') {
           // For yearly plans, match the yearly amounts
-          if (normalizedAmount === 200 || normalizedAmount === 200.00) {
+          if (normalizedAmount === 60 || normalizedAmount === 60.00) {
             planName = "Starter";
-            planLimit = 550;
-          } else if (normalizedAmount === 500 || normalizedAmount === 500.00) {
+            planLimit = 125;
+          } else if (normalizedAmount === 120 || normalizedAmount === 120.00) {
             planName = "Professional"; 
-            planLimit = 2050;
-          } else if (normalizedAmount === 1000 || normalizedAmount === 1000.00) {
+            planLimit = 525;
+          } else if (normalizedAmount === 180 || normalizedAmount === 180.00) {
             planName = "Enterprise";
             planLimit = 999999; // Unlimited
           } else {
@@ -121,26 +121,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             if (subName.includes('enterprise')) {
               planName = "Enterprise";
               planLimit = 999999;
-              planAmount = 1000;
+              planAmount = 180;
             } else if (subName.includes('professional')) {
               planName = "Professional";
-              planLimit = 2050;
-              planAmount = 500;
+              planLimit = 525;
+              planAmount = 120;
             } else if (subName.includes('starter')) {
               planName = "Starter";
-              planLimit = 550;
-              planAmount = 200;
+              planLimit = 125;
+              planAmount = 60;
             }
           }
         } else {
           // For monthly plans, match the monthly amounts
-          if (normalizedAmount === 29 || normalizedAmount === 29.00) {
+          if (normalizedAmount === 4.99 || normalizedAmount === 4.99) {
             planName = "Starter";
-            planLimit = 550;
-          } else if (normalizedAmount === 79 || normalizedAmount === 79.00) {
+            planLimit = 125;
+          } else if (normalizedAmount === 9.99 || normalizedAmount === 9.99) {
             planName = "Professional"; 
-            planLimit = 2050;
-          } else if (normalizedAmount === 199 || normalizedAmount === 199.00) {
+            planLimit = 525;
+          } else if (normalizedAmount === 14.99 || normalizedAmount === 14.99) {
             planName = "Enterprise";
             planLimit = 999999; // Unlimited
           } else {
@@ -149,15 +149,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             if (subName.includes('enterprise')) {
               planName = "Enterprise";
               planLimit = 999999;
-              planAmount = 199;
+              planAmount = 14.99;
             } else if (subName.includes('professional')) {
               planName = "Professional";
-              planLimit = 2050;
-              planAmount = 79;
+              planLimit = 525;
+              planAmount = 9.99;
             } else if (subName.includes('starter')) {
               planName = "Starter";
-              planLimit = 550;
-              planAmount = 29;
+              planLimit = 125;
+              planAmount = 4.99;
             }
             
             logInfo("Plan detected by name fallback", { 
@@ -176,15 +176,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         if (subName.includes('enterprise')) {
           planName = "Enterprise";
           planLimit = 999999;
-          planAmount = planInterval === "ANNUAL" ? 1000 : 199;
+          planAmount = planInterval === "ANNUAL" ? 180 : 14.99;
         } else if (subName.includes('professional')) {
           planName = "Professional";
-          planLimit = 2050;
-          planAmount = planInterval === "ANNUAL" ? 500 : 79;
+          planLimit = 525;
+          planAmount = planInterval === "ANNUAL" ? 120 : 9.99;
         } else if (subName.includes('starter')) {
           planName = "Starter";
-          planLimit = 550;
-          planAmount = planInterval === "ANNUAL" ? 200 : 29;
+          planLimit = 125;
+          planAmount = planInterval === "ANNUAL" ? 60 : 4.99;
         }
         
         logInfo("No pricing details, using name-based detection", { 
@@ -237,7 +237,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({
       hasSubscription: false,
       orderCount: 0,
-      planLimit: 50,
+      planLimit: 25,
       planName: "Free",
       planAmount: 0,
       planInterval: "EVERY_30_DAYS",
@@ -330,13 +330,19 @@ export default function Billing() {
     // Helper function to get pricing display for a plan
   const getPlanPricing = (monthlyPrice: number) => {
     // Define yearly prices based on the discounted rates from Shopify
-    const yearlyPrices: { [key: number]: number } = {
-      29: 200,   // Starter: $200/year instead of $348
-      79: 500,   // Professional: $500/year instead of $948
-      199: 1000  // Enterprise: $1000/year instead of $2388
-    };
+    let yearlyPrice: number;
 
-    const yearlyPrice = yearlyPrices[monthlyPrice] || (monthlyPrice * 12);
+    // Use precise comparison for pricing lookup
+    if (Math.abs(monthlyPrice - 4.99) < 0.01) {
+      yearlyPrice = 60;   // Starter: $60/year instead of $59.88
+    } else if (Math.abs(monthlyPrice - 9.99) < 0.01) {
+      yearlyPrice = 120;  // Professional: $120/year instead of $119.88
+    } else if (Math.abs(monthlyPrice - 14.99) < 0.01) {
+      yearlyPrice = 180;  // Enterprise: $180/year instead of $179.88
+    } else {
+      yearlyPrice = monthlyPrice * 12; // Fallback
+    }
+
     const savings = (monthlyPrice * 12) - yearlyPrice;
 
     if (billingInterval === 'monthly') {
@@ -345,7 +351,7 @@ export default function Billing() {
         primaryPeriod: '/month',
         secondaryPrice: yearlyPrice,
         secondaryPeriod: '/year',
-        savings: savings > 0 ? `$${savings} off` : null
+        savings: savings > 0 ? `$${Math.round(savings * 100) / 100} off` : null
       };
     } else {
       return {
@@ -353,7 +359,7 @@ export default function Billing() {
         primaryPeriod: '/year',
         secondaryPrice: monthlyPrice,
         secondaryPeriod: '/month',
-        savings: savings > 0 ? `$${savings} off` : null
+        savings: savings > 0 ? `$${Math.round(savings * 100) / 100} off` : null
       };
     }
   };
@@ -380,8 +386,16 @@ export default function Billing() {
       }
     }
 
-    const planNames = { 29: 'Starter', 79: 'Professional', 199: 'Enterprise' };
-    const cardPlanName = planNames[monthlyPrice as keyof typeof planNames] || planCardName;
+    let cardPlanName: string = planCardName;
+    if (monthlyPrice) {
+      if (Math.abs(monthlyPrice - 4.99) < 0.01) {
+        cardPlanName = 'Starter';
+      } else if (Math.abs(monthlyPrice - 9.99) < 0.01) {
+        cardPlanName = 'Professional';
+      } else if (Math.abs(monthlyPrice - 14.99) < 0.01) {
+        cardPlanName = 'Enterprise';
+      }
+    }
     // If no subscription, show upgrade button
     if (!hasSubscription) {
       return {
@@ -545,10 +559,10 @@ export default function Billing() {
             )}
 
             {/* Over-limit warning for Free plan */}
-            {!hasSubscription && orderCount >= 45 && (
+            {!hasSubscription && orderCount >= 20 && (
               <Banner tone="warning" title="Free Plan Limit Warning">
                 <p>
-                  You've processed {orderCount} orders this month. The Free plan limit is 50 orders.
+                  You've processed {orderCount} orders this month. The Free plan limit is 25 orders.
                   Consider upgrading to avoid service interruption.
                 </p>
               </Banner>
@@ -611,7 +625,7 @@ export default function Billing() {
                   </div>
 
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 50 orders per month</Text>
+                    <Text as="p" variant="bodySm">• 25 orders per month</Text>
                     <Text as="p" variant="bodySm">• Basic bundling rules</Text>
                     <Text as="p" variant="bodySm">• Email support</Text>
                   </BlockStack>
@@ -646,7 +660,7 @@ export default function Billing() {
                   </div>
 
                   {(() => {
-                    const pricing = getPlanPricing(29);
+                    const pricing = getPlanPricing(4.99);
                     return (
                       <div>
                         <div style={{ marginBottom: '4px' }}>
@@ -670,14 +684,14 @@ export default function Billing() {
                   })()}
 
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 550 orders per month</Text>
+                    <Text as="p" variant="bodySm">• 125 orders per month</Text>
                     <Text as="p" variant="bodySm">• Unlimited bundle rules</Text>
                     <Text as="p" variant="bodySm">• Real-time analytics</Text>
                     <Text as="p" variant="bodySm">• Email support</Text>
                   </BlockStack>
 
                   {(() => {
-                    const buttonConfig = getPlanButton('Starter', 29);
+                    const buttonConfig = getPlanButton('Starter', 4.99);
                     return (
                       <Button
                         variant={buttonConfig.variant}
@@ -706,7 +720,7 @@ export default function Billing() {
                   </div>
 
                   {(() => {
-                    const pricing = getPlanPricing(79);
+                    const pricing = getPlanPricing(9.99);
                     return (
                       <div>
                         <div style={{ marginBottom: '4px' }}>
@@ -730,14 +744,14 @@ export default function Billing() {
                   })()}
 
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 2,050 orders per month</Text>
+                    <Text as="p" variant="bodySm">• 525 orders per month</Text>
                     <Text as="p" variant="bodySm">• Advanced analytics</Text>
                     <Text as="p" variant="bodySm">• Priority support</Text>
                     <Text as="p" variant="bodySm">• API access</Text>
                   </BlockStack>
 
                   {(() => {
-                    const buttonConfig = getPlanButton('Professional', 79);
+                    const buttonConfig = getPlanButton('Professional', 9.99);
                     return (
                       <Button
                         variant={buttonConfig.variant}
@@ -766,7 +780,7 @@ export default function Billing() {
                   </div>
 
                   {(() => {
-                    const pricing = getPlanPricing(199);
+                    const pricing = getPlanPricing(14.99);
                     return (
                       <div>
                         <div style={{ marginBottom: '4px' }}>
@@ -797,7 +811,7 @@ export default function Billing() {
                   </BlockStack>
 
                   {(() => {
-                    const buttonConfig = getPlanButton('Enterprise', 199);
+                    const buttonConfig = getPlanButton('Enterprise', 14.99);
                     return (
                       <Button
                         variant={buttonConfig.variant}
@@ -851,8 +865,8 @@ export default function Billing() {
                   What happens if I exceed my order limit?
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  For the Free plan (50 orders/month): Bundle processing will stop until you upgrade or the next billing cycle begins.
-                  Paid plans have higher limits - Starter (550), Professional (2,050), Enterprise (unlimited).
+                  For the Free plan (25 orders/month): Bundle processing will stop until you upgrade or the next billing cycle begins.
+                  Paid plans have higher limits - Starter (125), Professional (525), Enterprise (unlimited).
                   You'll receive notifications at 80% usage to upgrade before hitting the limit.
                 </Text>
               </div>

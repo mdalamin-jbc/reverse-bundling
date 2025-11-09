@@ -230,6 +230,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             },
           });
 
+          // 🔥 CRITICAL FIX: Mark the order as processed in OrderHistory to prevent circular analysis
+          // This ensures the bundle analysis algorithm only uses raw customer orders, not processed bundles
+          try {
+            const orderHistoryUpdate = await db.orderHistory.updateMany({
+              where: {
+                shop,
+                orderId: String(order.id),
+                processed: false, // Only update if not already processed
+              },
+              data: {
+                processed: true,
+              },
+            });
+
+            if (orderHistoryUpdate.count > 0) {
+              logInfo(`Order marked as processed in OrderHistory`, {
+                shop,
+                orderId: String(order.id),
+                recordsUpdated: orderHistoryUpdate.count
+              });
+            } else {
+              logWarning(`Order not found in OrderHistory or already processed`, {
+                shop,
+                orderId: String(order.id)
+              });
+            }
+          } catch (historyUpdateError) {
+            logError(historyUpdateError as Error, {
+              context: 'order_history_update',
+              shop,
+              orderId: String(order.id)
+            });
+            // Don't fail the webhook if history update fails
+          }
+
           // Update bundle rule statistics
           await db.bundleRule.update({
             where: { id: rule.id },
