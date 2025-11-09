@@ -116,14 +116,16 @@ jobs:
 
           # Kill any remaining processes
           log "Checking for running processes..."
-          if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-            log "Found remaining Remix processes, killing them..."
-            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not kill remaining processes"
+          REMIX_PIDS=$(ps aux | grep 'remix-serve' | grep -v grep | grep -v "$$" | awk '{print $2}')
+          if [ ! -z "$REMIX_PIDS" ]; then
+            log "Found remaining Remix processes (PIDs: $REMIX_PIDS), killing them..."
+            kill -TERM $REMIX_PIDS || log "⚠️ Warning: Could not kill remaining processes"
             sleep 5  # Wait for processes to die
             # Check if processes are still running
-            if pgrep -f 'remix-serve' > /dev/null 2>&1; then
+            REMIX_PIDS_CHECK=$(ps aux | grep 'remix-serve' | grep -v grep | grep -v "$$" | awk '{print $2}')
+            if [ ! -z "$REMIX_PIDS_CHECK" ]; then
               log "Processes still running, force killing..."
-              pkill -KILL -f 'remix-serve' || log "⚠️ Warning: Could not force kill processes"
+              kill -KILL $REMIX_PIDS_CHECK || log "⚠️ Warning: Could not force kill processes"
               sleep 2
             else
               log "Processes killed successfully"
