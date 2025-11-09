@@ -110,13 +110,16 @@ jobs:
             sudo cp nginx.conf /usr/local/nginx/conf/nginx.conf || log "⚠️ Warning: Could not update nginx config"
           fi
 
-          # Kill existing process gracefully - use a safer approach
+          # Stop the systemd service first
           log "🛑 Stopping existing application..."
+          sudo systemctl stop reverse-bundling.service || log "⚠️ Warning: Could not stop service via systemctl"
+
+          # Kill any remaining processes
           log "Checking for running processes..."
           if pgrep -f 'remix-serve' > /dev/null 2>&1; then
-            log "Found running Remix processes, killing them..."
-            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not kill existing processes"
-            sleep 5  # Wait longer for processes to die
+            log "Found remaining Remix processes, killing them..."
+            pkill -TERM -f 'remix-serve' || log "⚠️ Warning: Could not kill remaining processes"
+            sleep 5  # Wait for processes to die
             # Check if processes are still running
             if pgrep -f 'remix-serve' > /dev/null 2>&1; then
               log "Processes still running, force killing..."
@@ -126,7 +129,7 @@ jobs:
               log "Processes killed successfully"
             fi
           else
-            log "No existing Remix processes found"
+            log "No remaining Remix processes found"
           fi
 
           # Double check - kill any remaining node processes on port 3000
