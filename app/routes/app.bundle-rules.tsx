@@ -434,7 +434,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       let itemIds: string[] = [];
       let variantIds: string[] = [];
       let bundlePrice = 0;
-      let finalBundledSku = bundledSku?.trim() || '';
+
+      // Generate a unique SKU for auto-created products if none provided
+      if (!finalBundledSku) {
+        finalBundledSku = `BUNDLE-${ruleId}`;
+      }
+
+      console.log('Using generated/final bundled SKU:', finalBundledSku);
 
       try {
         console.log('Starting auto-create product process');
@@ -575,28 +581,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         bundlePrice = totalIndividualPrice; // Keep original total price, savings applied separately
         console.log('Bundle price set to original total (savings applied separately):', bundlePrice, 'from total:', totalIndividualPrice, 'savings will be applied at checkout:', savings);
         
-        // Create Shopify product
+        // Create Shopify product using productSet mutation
         console.log('Creating Shopify product with input:', {
           title: `${name} Bundle`,
-          status: "DRAFT",
+          status: "ACTIVE",
           productType: "Bundle",
-          tags: ["auto-generated", "bundle", `rule-${ruleId}`]
+          tags: ["auto-generated", "bundle", `rule-${ruleId}`],
+          productOptions: [{
+            name: "Title",
+            values: [{ name: "Default Title" }]
+          }],
+          variants: [{
+            optionValues: [{
+              name: "Default Title",
+              optionName: "Title"
+            }],
+            sku: finalBundledSku,
+            price: bundlePrice.toFixed(2),
+            inventoryPolicy: "DENY"
+          }]
         });
 
         try {
-          // Create Shopify product first (this creates a default variant)
-          console.log('Creating Shopify product (step 1) with input:', {
-            title: `${name} Bundle`,
-            status: "DRAFT",
-            productType: "Bundle",
-            tags: ["auto-generated", "bundle", `rule-${ruleId}`]
-          });
-
           const { admin } = await authenticate.admin(request);
 
-          const productCreateResponse = await admin.graphql(`
-            mutation productCreate($input: ProductInput!) {
-              productCreate(input: $input) {
+          const productSetMutation = `
+            mutation productSet($input: ProductSetInput!) {
+              productSet(input: $input) {
                 product {
                   id
                   title
@@ -606,6 +617,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                         id
                         sku
                         price
+                        inventoryPolicy
                       }
                     }
                   }
@@ -616,103 +628,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
               }
             }
-          `, {
+          `;
+
+          const productSetResponse = await admin.graphql(productSetMutation, {
             variables: {
               input: {
                 title: `${name} Bundle`,
                 status: "ACTIVE",
                 productType: "Bundle",
-                tags: ["auto-generated", "bundle", `rule-${ruleId}`]
+                tags: ["auto-generated", "bundle", `rule-${ruleId}`],
+                productOptions: [{
+                  name: "Title",
+                  values: [{ name: "Default Title" }]
+                }],
+                variants: [{
+                  optionValues: [{
+                    name: "Default Title",
+                    optionName: "Title"
+                  }],
+                  sku: finalBundledSku,
+                  price: bundlePrice.toFixed(2),
+                  inventoryPolicy: "DENY"
+                }]
               }
             }
           });
 
-          const productCreateData = await productCreateResponse.json();
-          console.log('Product create response status:', productCreateResponse.status);
-          console.log('Product create response data:', JSON.stringify(productCreateData, null, 2));
+          const productSetData = await productSetResponse.json();
+          console.log('Product set response status:', productSetResponse.status);
+          console.log('Product set response data:', JSON.stringify(productSetData, null, 2));
           
-          if ((productCreateData as any).errors) {
-            console.error('GraphQL errors in product creation:', (productCreateData as any).errors);
-            throw new Error(`GraphQL errors in product creation: ${JSON.stringify((productCreateData as any).errors)}`);
+          if ((productSetData as any).errors) {
+            console.error('GraphQL errors in product creation:', (productSetData as any).errors);
+            throw new Error(`GraphQL errors in product creation: ${JSON.stringify((productSetData as any).errors)}`);
           }
 
-          if (productCreateData.data?.productCreate?.userErrors?.length > 0) {
-            const errors = productCreateData.data.productCreate.userErrors;
+          if (productSetData.data?.productSet?.userErrors?.length > 0) {
+            const errors = productSetData.data.productSet.userErrors;
             console.error('User errors in product creation:', errors);
             const errorMessages = errors.map((err: any) => `${err.field}: ${err.message}`).join(', ');
             throw new Error(`Product creation failed: ${errorMessages}`);
           }
 
-          const product = productCreateData.data?.productCreate?.product;
+          const product = productSetData.data?.productSet?.product;
           if (!product) {
             throw new Error('Product creation failed: No product returned');
           }
 
-          const productId = product.id;
           const defaultVariant = product.variants?.edges?.[0]?.node;
           
           if (!defaultVariant) {
             throw new Error('Product creation failed: No default variant created');
           }
 
-          console.log('Product created successfully with ID:', productId);
+          console.log('Product created successfully with ID:', product.id);
           console.log('Default variant ID:', defaultVariant.id);
 
-          // Update the default variant with correct SKU and price using GraphQL
-          console.log('Updating default variant (step 2) with GraphQL:', {
-            variantId: defaultVariant.id,
-            sku: finalBundledSku,
-            price: bundlePrice.toFixed(2),
-            inventory_policy: "deny"
-          });
-
-          const updateVariantMutation = `
-            mutation productVariantUpdate($input: ProductVariantInput!) {
-              productVariantUpdate(input: $input) {
-                productVariant {
-                  id
-                  sku
-                  price
-                  inventoryPolicy
-                }
-                userErrors {
-                  field
-                  message
-                }
-              }
-            }
-          `;
-
-          const updateResponse = await admin.graphql(updateVariantMutation, {
-            variables: {
-              input: {
-                id: defaultVariant.id,
-                sku: finalBundledSku,
-                price: bundlePrice.toFixed(2),
-                inventoryPolicy: "DENY",
-                inventoryManagement: null, // Explicitly disable inventory tracking for bundle products
-                inventoryQuantity: null // No inventory quantity for virtual bundle products
-              }
-            }
-          });
-
-          const updateData = await updateResponse.json();
-          console.log('Variant update GraphQL response:', JSON.stringify(updateData, null, 2));
-
-          if (updateData.data?.productVariantUpdate?.userErrors?.length > 0) {
-            const errors = updateData.data.productVariantUpdate.userErrors;
-            console.error('Errors in variant update:', errors);
-            throw new Error(`Variant update failed: ${errors.map((err: any) => `${err.field}: ${err.message}`).join(', ')}`);
-          }
-
-          if (!updateData.data?.productVariantUpdate?.productVariant) {
-            console.error('Unexpected GraphQL response structure:', updateData);
-            throw new Error('Variant update failed: No variant returned from GraphQL mutation');
-          }
-
-          logInfo('Auto-created Shopify bundle product and updated variant', { 
+          logInfo('Auto-created Shopify bundle product', { 
             shop: session.shop, 
-            productId,
+            productId: product.id,
             variantId: defaultVariant.id,
             sku: finalBundledSku,
             title: `${name} Bundle`
@@ -725,12 +699,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             shop: session.shop,
             input: {
               title: `${name} Bundle`,
-              status: "DRAFT",
+              status: "ACTIVE",
               productType: "Bundle",
               tags: ["auto-generated", "bundle", `rule-${ruleId}`],
-              sku: finalBundledSku,
-              price: bundlePrice.toFixed(2),
-              inventoryPolicy: "DENY"
+              productOptions: [{
+                name: "Title",
+                values: [{ name: "Default Title" }]
+              }],
+              variants: [{
+                optionValues: [{
+                  name: "Default Title",
+                  optionName: "Title"
+                }],
+                sku: finalBundledSku,
+                price: bundlePrice.toFixed(2),
+                inventoryPolicy: "DENY"
+              }]
             }
           });
           return json({ 
@@ -1235,21 +1219,21 @@ export default function BundleRules() {
   const [selectedTotalPrice, setSelectedTotalPrice] = useState(0);
   const [tagInput, setTagInput] = useState('');
 
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('');
+  // Modal-specific search state
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
 
   // Products modal state
   const [showProductsModal, setShowProductsModal] = useState(false);
 
-  // Filter products based on search query
-  const filteredProducts = useMemo(() => {
-    console.log('Filtering products:', products.length, 'searchQuery:', searchQuery);
-    if (!searchQuery.trim()) {
-      console.log('No search query, returning all products');
+  // Filter products for modal
+  const modalFilteredProducts = useMemo(() => {
+    console.log('Modal filtering products:', products.length, 'modalSearchQuery:', modalSearchQuery);
+    if (!modalSearchQuery.trim()) {
+      console.log('No modal search query, returning all products');
       return products;
     }
     
-    const query = searchQuery.toLowerCase().trim();
+    const query = modalSearchQuery.toLowerCase().trim();
     const filtered = products.filter(product => 
       product.label.toLowerCase().includes(query) ||
       product.productTitle?.toLowerCase().includes(query) ||
@@ -1257,9 +1241,9 @@ export default function BundleRules() {
       product.sku?.toLowerCase().includes(query) ||
       product.price?.toString().includes(query)
     );
-    console.log('Filtered products:', filtered.length, 'from', products.length);
+    console.log('Modal filtered products:', filtered.length, 'from', products.length);
     return filtered;
-  }, [products, searchQuery]);
+  }, [products, modalSearchQuery]);
 
   // Bundle suggestions state
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -1624,6 +1608,7 @@ export default function BundleRules() {
     }
     setShowCustomCategoryInput(false);
     setCustomCategoryValue('');
+    setModalSearchQuery(''); // Reset modal search when opening
     setIsModalOpen(true);
   }, []);
   const handleCloseModal = useCallback(() => {
@@ -2792,24 +2777,24 @@ export default function BundleRules() {
               {/* Search Box */}
               <TextField
                 label=""
-                value={searchQuery}
+                value={modalSearchQuery}
                 onChange={(value) => {
-                  console.log('Search query changed to:', value);
-                  setSearchQuery(value);
+                  console.log('Modal search query changed to:', value);
+                  setModalSearchQuery(value);
                 }}
                 placeholder="Search products... (e.g., 'snowboard', 'electronics', 'under $50')"
                 autoComplete="off"
                 clearButton
                 onClearButtonClick={() => {
-                  console.log('Clear button clicked');
-                  setSearchQuery("");
+                  console.log('Modal clear button clicked');
+                  setModalSearchQuery("");
                 }}
               />
               
               <div style={{maxHeight: '200px', overflowY: 'auto', border: '1px solid #e1e3e5', borderRadius: '6px', padding: '12px'}}>
                 <BlockStack gap="100">
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.map((product) => (
+                  {modalFilteredProducts.length > 0 ? (
+                    modalFilteredProducts.map((product) => (
                       <label key={product.value} style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
                         <input
                           type="checkbox"
@@ -2862,9 +2847,9 @@ export default function BundleRules() {
                     </div>
                   )}
                 </BlockStack>
-                {filteredProducts.length === 0 && searchQuery && (
+                {modalFilteredProducts.length === 0 && modalSearchQuery && (
                   <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
-                    No products found matching "{searchQuery}"
+                    No products found matching "{modalSearchQuery}"
                   </div>
                 )}
               </div>
