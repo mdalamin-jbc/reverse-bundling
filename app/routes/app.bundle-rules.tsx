@@ -592,6 +592,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             tags: ["auto-generated", "bundle", `rule-${ruleId}`]
           });
 
+          const { admin } = await authenticate.admin(request);
+
           const productCreateResponse = await admin.graphql(`
             mutation productCreate($input: ProductInput!) {
               productCreate(input: $input) {
@@ -656,50 +658,56 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           console.log('Product created successfully with ID:', productId);
           console.log('Default variant ID:', defaultVariant.id);
 
-          // Update the default variant with correct SKU and price using REST API
-          console.log('Updating default variant (step 2) with REST API:', {
+          // Update the default variant with correct SKU and price using GraphQL
+          console.log('Updating default variant (step 2) with GraphQL:', {
             variantId: defaultVariant.id,
             sku: finalBundledSku,
             price: bundlePrice.toFixed(2),
             inventory_policy: "deny"
           });
 
-          if (!session.accessToken) {
-            throw new Error('No access token available for REST API call');
-          }
+          const updateVariantMutation = `
+            mutation productVariantUpdate($input: ProductVariantInput!) {
+              productVariantUpdate(input: $input) {
+                productVariant {
+                  id
+                  sku
+                  price
+                  inventoryPolicy
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `;
 
-          const variantId = defaultVariant.id.split('/').pop(); // Extract numeric ID from GID
-          const updateVariantUrl = `https://${session.shop}/admin/api/2024-10/variants/${variantId}.json`;
-
-          const updateResponse = await fetch(updateVariantUrl, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': session.accessToken,
-            },
-            body: JSON.stringify({
-              variant: {
+          const updateResponse = await admin.graphql(updateVariantMutation, {
+            variables: {
+              input: {
+                id: defaultVariant.id,
                 sku: finalBundledSku,
                 price: bundlePrice.toFixed(2),
-                inventory_policy: "deny",
-                inventory_management: null, // Explicitly disable inventory tracking for bundle products
-                inventory_quantity: null // No inventory quantity for virtual bundle products
+                inventoryPolicy: "DENY",
+                inventoryManagement: null, // Explicitly disable inventory tracking for bundle products
+                inventoryQuantity: null // No inventory quantity for virtual bundle products
               }
-            })
+            }
           });
 
-          if (!updateResponse.ok) {
-            const errorText = await updateResponse.text();
-            console.error('REST API error in variant update:', updateResponse.status, errorText);
-            throw new Error(`Variant update failed: ${updateResponse.status} ${errorText}`);
+          const updateData = await updateResponse.json();
+          console.log('Variant update GraphQL response:', JSON.stringify(updateData, null, 2));
+
+          if (updateData.data?.productVariantUpdate?.userErrors?.length > 0) {
+            const errors = updateData.data.productVariantUpdate.userErrors;
+            console.error('Errors in variant update:', errors);
+            throw new Error(`Variant update failed: ${errors.map((err: any) => `${err.field}: ${err.message}`).join(', ')}`);
           }
 
-          const updateData = await updateResponse.json();
-          console.log('Variant update REST response:', JSON.stringify(updateData, null, 2));
-
-          if (updateData.errors) {
-            console.error('Errors in variant update:', updateData.errors);
-            throw new Error(`Variant update failed: ${JSON.stringify(updateData.errors)}`);
+          if (!updateData.data?.productVariantUpdate?.productVariant) {
+            console.error('Unexpected GraphQL response structure:', updateData);
+            throw new Error('Variant update failed: No variant returned from GraphQL mutation');
           }
 
           logInfo('Auto-created Shopify bundle product and updated variant', { 
