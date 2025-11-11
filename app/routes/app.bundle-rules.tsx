@@ -1,7 +1,7 @@
 import { useLoaderData, useFetcher, useNavigate } from "@remix-run/react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Page,
   Text,
@@ -1046,7 +1046,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ? `Deleted ${deletedCount.count} rule(s) and ${deletedProductsCount} associated Shopify product(s)`
       : `Deleted ${deletedCount.count} rule(s)`;
     
-    return json({ success: true, message });
+    return json({ success: true, message, reload: true });
   }
 
   if (action === "updateCategory") {
@@ -1282,7 +1282,21 @@ export default function BundleRules() {
 
   const { selectedResources, handleSelectionChange } = useIndexResourceState(bundleRules);
 
+  // Force reset of selected resources when rules are deleted
+  const prevRulesLengthRef = useRef(bundleRules.length);
+  useEffect(() => {
+    const currentLength = bundleRules.length;
+    const prevLength = prevRulesLengthRef.current;
+    if (currentLength < prevLength && selectedResources.length > currentLength) {
+      // Rules were deleted and we have more selections than available rules
+      // This will force the useIndexResourceState to reset
+      window.location.reload();
+    }
+    prevRulesLengthRef.current = currentLength;
+  }, [bundleRules.length, selectedResources.length]);
+
   const isLoading = fetcher.state === "submitting";
+  const isAnalyzing = fetcher.state === "submitting" && fetcher.formData?.get('action') === "analyzeOrders";
 
   // Bulk actions
   const bulkActions = [
@@ -1340,7 +1354,6 @@ export default function BundleRules() {
             action: "deleteRule",
             ruleIds: selectedResources.join(",")
           }, { method: "POST" });
-          shopify.toast.show(`Deleted ${selectedResources.length} rule(s)`);
         }
       },
     },
@@ -1940,6 +1953,7 @@ export default function BundleRules() {
                 {/* Enterprise IndexTable */}
                 {bundleRules.length > 0 ? (
                   <IndexTable
+                    key={`bundle-rules-${bundleRules.length}`}
                     resourceName={resourceName}
                     itemCount={bundleRules.length}
                     selectedItemsCount={selectedResources.length}
@@ -2128,7 +2142,7 @@ export default function BundleRules() {
                   onClick={() => {
                     fetcher.submit({ action: "analyzeOrders" }, { method: "POST" });
                   }}
-                  loading={isLoading}
+                  loading={isAnalyzing}
                   variant="primary" 
                   tone="success"
                   size="large"
@@ -2292,7 +2306,7 @@ export default function BundleRules() {
                       onClick={() => {
                         fetcher.submit({ action: "analyzeOrders" }, { method: "POST" });
                       }}
-                      loading={isLoading}
+                      loading={isAnalyzing}
                     >
                       🚀 Start Analysis
                     </Button>
