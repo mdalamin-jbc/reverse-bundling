@@ -902,154 +902,223 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (action === "deleteRule") {
-    const ruleId = formData.get("ruleId") as string;
-    const ruleIds = formData.get("ruleIds") as string; // For bulk operations
+    console.log('deleteRule action called with ruleIds:', formData.get("ruleIds") || formData.get("ruleId"));
 
-    let ruleIdsArray: string[] = [];
+    try {
+      const ruleId = formData.get("ruleId") as string;
+      const ruleIds = formData.get("ruleIds") as string; // For bulk operations
 
-    if (ruleIds) {
-      // Bulk operation
-      ruleIdsArray = ruleIds.split(",");
-    } else if (ruleId) {
-      // Single operation
-      ruleIdsArray = [ruleId];
-    }
+      let ruleIdsArray: string[] = [];
 
-    if (ruleIdsArray.length === 0) {
-      return json({ success: false, message: "No rule IDs provided" });
-    }
-
-    // First, get the rules to be deleted to check for auto-created products
-    const rulesToDelete = await db.bundleRule.findMany({
-      where: {
-        id: { in: ruleIdsArray },
-        shop: session.shop
+      if (ruleIds) {
+        // Bulk operation
+        ruleIdsArray = ruleIds.split(",");
+      } else if (ruleId) {
+        // Single operation
+        ruleIdsArray = [ruleId];
       }
-    });
 
-    // Delete associated Shopify products for auto-created rules
-    const { admin } = await authenticate.admin(request);
-    let deletedProductsCount = 0;
+      if (ruleIdsArray.length === 0) {
+        return json({ success: false, message: "No rule IDs provided" });
+      }
 
-    for (const rule of rulesToDelete) {
-      try {
-        // Find products with the rule tag (auto-generated products)
-        // Use Shopify's correct GraphQL query syntax for tag filtering
-        const productsQuery = `
-          query GetProductsByTag($query: String!) {
-            products(first: 50, query: $query) {
-              edges {
-                node {
-                  id
-                  title
-                  tags
-                  status
-                }
-              }
-            }
-          }
-        `;
+      console.log(`Processing deletion of ${ruleIdsArray.length} rules:`, ruleIdsArray);
 
-        const productsResponse = await admin.graphql(productsQuery, {
-          variables: {
-            query: `tag:"rule-${rule.id}"`
-          }
-        });
+      // First, get the rules to be deleted to check for auto-created products
+      const rulesToDelete = await db.bundleRule.findMany({
+        where: {
+          id: { in: ruleIdsArray },
+          shop: session.shop
+        }
+      });
 
-        const productsData = await productsResponse.json();
-        console.log('Products query response for rule', rule.id, ':', JSON.stringify(productsData, null, 2));
+      console.log(`Found ${rulesToDelete.length} rules to delete`);
 
-        const products = productsData.data?.products?.edges || [];
+      // Delete associated Shopify products for auto-created rules (non-blocking)
+      const { admin } = await authenticate.admin(request);
+      let deletedProductsCount = 0;
 
-        console.log(`Found ${products.length} products with tag "rule-${rule.id}" for rule ${rule.id}`);
-
-        // Delete each auto-created product
-        for (const productEdge of products) {
-          const product = productEdge.node;
-          console.log('Checking product:', product.title, 'Tags:', product.tags);
-
-          // Verify it's an auto-generated bundle product
-          if (product.tags.includes("auto-generated") && product.tags.includes("bundle") && product.tags.includes(`rule-${rule.id}`)) {
-            console.log('Deleting auto-created bundle product:', product.title, 'ID:', product.id);
-
-            const deleteMutation = `
-              mutation DeleteProduct($input: ProductDeleteInput!) {
-                productDelete(input: $input) {
-                  deletedProductId
-                  userErrors {
-                    field
-                    message
+      // Process product deletions asynchronously with individual timeouts
+      const productDeletionPromises = rulesToDelete.map(async (rule) => {
+        try {
+          // Find products with the rule tag (auto-generated products)
+          const productsQuery = `
+            query GetProductsByTag($query: String!) {
+              products(first: 50, query: $query) {
+                edges {
+                  node {
+                    id
+                    title
+                    tags
+                    status
                   }
                 }
               }
-            `;
-
-            const deleteResponse = await admin.graphql(deleteMutation, {
-              variables: {
-                input: {
-                  id: product.id
-                }
-              }
-            });
-
-            const deleteData = await deleteResponse.json();
-            console.log('Delete response:', JSON.stringify(deleteData, null, 2));
-
-            if (deleteData.data?.productDelete?.deletedProductId) {
-              deletedProductsCount++;
-              logInfo('Auto-created bundle product deleted', { 
-                shop: session.shop, 
-                ruleId: rule.id,
-                productId: product.id,
-                productTitle: product.title
-              });
-            } else if (deleteData.data?.productDelete?.userErrors?.length > 0) {
-              const error = deleteData.data.productDelete.userErrors[0];
-              logError(new Error(`Failed to delete Shopify product: ${error.message}`), { 
-                shop: session.shop, 
-                ruleId: rule.id,
-                productId: product.id,
-                error: error.message
-              });
-            } else {
-              console.error('Unexpected delete response structure:', deleteData);
             }
-          } else {
-            console.log('Skipping product - not an auto-generated bundle product:', product.tags);
+          `;
+
+          // Add timeout to individual product queries
+          const productsResponse = await Promise.race([
+            admin.graphql(productsQuery, {
+              variables: {
+                query: `tag:"rule-${rule.id}"`
+              }
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Product query timeout')), 5000) // 5 second timeout per query
+            )
+          ]);
+
+          const productsData = await productsResponse.json();
+          const products = productsData.data?.products?.edges || [];
+
+          console.log(`Found ${products.length} products with tag "rule-${rule.id}" for rule ${rule.id}`);
+
+          // Delete each auto-created product with individual timeouts
+          const deletePromises = products.map(async (productEdge: any) => {
+            const product = productEdge.node;
+
+            // Verify it's an auto-generated bundle product
+            if (product.tags.includes("auto-generated") && product.tags.includes("bundle") && product.tags.includes(`rule-${rule.id}`)) {
+              try {
+                const deleteMutation = `
+                  mutation DeleteProduct($input: ProductDeleteInput!) {
+                    productDelete(input: $input) {
+                      deletedProductId
+                      userErrors {
+                        field
+                        message
+                      }
+                    }
+                  }
+                `;
+
+                // Add timeout to individual product deletions
+                const deleteResponse = await Promise.race([
+                  admin.graphql(deleteMutation, {
+                    variables: {
+                      input: {
+                        id: product.id
+                      }
+                    }
+                  }),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Product deletion timeout')), 3000) // 3 second timeout per deletion
+                  )
+                ]);
+
+                const deleteData = await deleteResponse.json();
+
+                if (deleteData.data?.productDelete?.deletedProductId) {
+                  console.log(`Successfully deleted product: ${product.title}`);
+                  return 1; // Successfully deleted
+                } else if (deleteData.data?.productDelete?.userErrors?.length > 0) {
+                  const error = deleteData.data.productDelete.userErrors[0];
+                  console.error(`Failed to delete product ${product.title}: ${error.message}`);
+                  return 0; // Failed to delete
+                }
+              } catch (deleteError) {
+                console.error(`Exception deleting product ${product.id}:`, deleteError);
+                return 0; // Failed to delete
+              }
+            }
+            return 0; // Not an auto-generated product
+          });
+
+          const results = await Promise.allSettled(deletePromises);
+          const successfulDeletes = results.reduce((count, result) => {
+            return count + (result.status === 'fulfilled' ? result.value : 0);
+          }, 0);
+
+          if (successfulDeletes > 0) {
+            logInfo('Auto-created bundle products deleted', {
+              shop: session.shop,
+              ruleId: rule.id,
+              deletedCount: successfulDeletes
+            });
           }
+
+          return successfulDeletes;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`Error processing product deletion for rule ${rule.id}:`, errorMessage);
+          logError(error instanceof Error ? error : new Error(errorMessage), {
+            context: 'delete_auto_created_products',
+            shop: session.shop,
+            ruleId: rule.id
+          });
+          return 0; // Failed to process this rule
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('Error deleting products for rule', rule.id, ':', errorMessage);
-        logError(error instanceof Error ? error : new Error(errorMessage), { 
-          context: 'delete_auto_created_products', 
+      });
+
+      // Wait for all product deletions to complete (with reduced overall timeout)
+      try {
+        const deletionResults = await Promise.race([
+          Promise.allSettled(productDeletionPromises),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Product deletion timeout')), 15000) // Reduced to 15 seconds total
+          )
+        ]);
+        deletedProductsCount = deletionResults.reduce((total, result) => {
+          return total + (result.status === 'fulfilled' ? result.value : 0);
+        }, 0);
+        console.log(`Successfully deleted ${deletedProductsCount} Shopify products`);
+      } catch (timeoutError) {
+        // If timeout occurs, log the error but continue with rule deletion
+        console.warn('Product deletion timed out, continuing with rule deletion');
+        logWarning('Product deletion timed out, continuing with rule deletion', {
+          context: 'product_deletion_timeout',
           shop: session.shop,
-          ruleId: rule.id
+          ruleIds: ruleIdsArray,
+          timeout: '15 seconds'
         });
-        // Continue with rule deletion even if product deletion fails
+        deletedProductsCount = 0;
       }
+
+      // Now delete the rules from database
+      console.log('Deleting rules from database...');
+      const deletedCount = await db.bundleRule.deleteMany({
+        where: {
+          id: { in: ruleIdsArray },
+          shop: session.shop
+        }
+      });
+
+      console.log(`Successfully deleted ${deletedCount.count} rules from database`);
+
+      // Invalidate cache for this shop's bundle rules
+      const rulesKey = cacheKeys.bundleRules(session.shop);
+      cache.delete(rulesKey);
+
+      const message = deletedProductsCount > 0
+        ? `Deleted ${deletedCount.count} rule(s) and ${deletedProductsCount} associated Shopify product(s)`
+        : `Deleted ${deletedCount.count} rule(s)`;
+
+      console.log('Delete operation completed successfully:', message);
+
+      return json({
+        success: true,
+        message,
+        reload: true
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Critical error in deleteRule action:', errorMessage);
+
+      logError(error instanceof Error ? error : new Error(errorMessage), {
+        context: 'delete_rule_critical_error',
+        shop: session.shop,
+        ruleIds: formData.get("ruleIds") || formData.get("ruleId")
+      });
+
+      return json({
+        success: false,
+        message: `Failed to delete rules: ${errorMessage}. Please try again or contact support if the issue persists.`,
+        reload: false
+      });
     }
-
-    // Now delete the rules from database
-    const deletedCount = await db.bundleRule.deleteMany({
-      where: {
-        id: { in: ruleIdsArray },
-        shop: session.shop
-      }
-    });
-
-    // Invalidate cache for this shop's bundle rules
-    const rulesKey = cacheKeys.bundleRules(session.shop);
-    cache.delete(rulesKey);
-    
-    const message = deletedProductsCount > 0 
-      ? `Deleted ${deletedCount.count} rule(s) and ${deletedProductsCount} associated Shopify product(s)`
-      : `Deleted ${deletedCount.count} rule(s)`;
-    
-    return json({ success: true, message, reload: true });
-  }
-
-  if (action === "updateCategory") {
+  }  if (action === "updateCategory") {
     const ruleId = formData.get("ruleId") as string;
     const ruleIds = formData.get("ruleIds") as string; // For bulk operations
     const category = formData.get("category") as string;
@@ -1604,26 +1673,34 @@ export default function BundleRules() {
   const handleOpenModal = useCallback((rule?: any) => {
     if (rule) {
       // Edit mode
+      const existingItems = JSON.parse(rule.items || '[]').filter((item: string) => item.trim());
       setEditingRule(rule);
       setFormData({
         name: rule.name,
-        items: JSON.parse(rule.items || '[]').filter((item: string) => item.trim()),
+        items: existingItems,
         bundledSku: rule.bundledSku,
         savings: rule.savings ? parseFloat(rule.savings).toFixed(2) : '',
         autoCreateProduct: false, // For existing rules, assume they use manual SKUs
         category: rule.category || '',
         tags: JSON.parse(rule.tags || '[]'),
       });
+      
+      // Calculate total price for existing items
+      const priceMap: Record<string, number> = {};
+      products.forEach((p: any) => { priceMap[p.value] = p.price || 0; });
+      const total = existingItems.reduce((sum, val) => sum + (priceMap[val] || 0), 0);
+      setSelectedTotalPrice(total);
     } else {
       // Create mode
       setEditingRule(null);
         setFormData({ name: "", items: [], bundledSku: "", savings: "", autoCreateProduct: true, category: "", tags: [] });
+        setSelectedTotalPrice(0);
     }
     setShowCustomCategoryInput(false);
     setCustomCategoryValue('');
     setModalSearchQuery(''); // Reset modal search when opening
     setIsModalOpen(true);
-  }, []);
+  }, [products]);
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingRule(null);
