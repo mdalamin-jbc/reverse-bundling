@@ -27,7 +27,7 @@ export default function App() {
         <Link to="/app/orders">Order Conversions</Link>
         <Link to="/app/fulfillment">Fulfillment Provider</Link>
         <Link to="/app/billing">Billing</Link>
-        <Link to="/app/guidelines">Setup Guidelines</Link>
+        <Link to="/app/guidelines">Easy Tutorial Guide</Link>
         <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />

@@ -28,7 +28,92 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useNavigate } from "@remix-run/react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+
+/*──────────────────────────────────────────────────
+  SECTION NAV DATA
+──────────────────────────────────────────────────*/
+const SECTIONS = [
+  { id: "how-it-works", label: "How It Works", emoji: "⚙️" },
+  { id: "quick-start", label: "Quick Start", emoji: "⚡" },
+  { id: "providers", label: "Providers", emoji: "📦" },
+  { id: "modes", label: "Tag vs Edit", emoji: "🔀" },
+  { id: "notifications", label: "Notifications", emoji: "🔔" },
+  { id: "analysis", label: "AI Analysis", emoji: "🧠" },
+  { id: "faq", label: "FAQ", emoji: "❓" },
+  { id: "help", label: "Need Help", emoji: "🆘" },
+];
+
+/*──────────────────────────────────────────────────
+  STICKY SCROLL NAVIGATION
+──────────────────────────────────────────────────*/
+function SectionNav({ activeId }: { activeId: string }) {
+  const scrollTo = useCallback((id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 30,
+        background: "linear-gradient(135deg, #f8f9fc 0%, #f0f2f8 100%)",
+        borderRadius: "14px",
+        padding: "12px 16px",
+        border: "1px solid #e1e3e5",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+        marginBottom: "4px",
+      }}
+    >
+      <div style={{ marginBottom: "8px" }}>
+        <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
+          📑 Jump to Section
+        </Text>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: "6px",
+          flexWrap: "wrap",
+        }}
+      >
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => scrollTo(s.id)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "6px 12px",
+              borderRadius: "20px",
+              border: activeId === s.id ? "2px solid #6366f1" : "1px solid #d4d9e6",
+              background: activeId === s.id
+                ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                : "#fff",
+              color: activeId === s.id ? "#fff" : "#374151",
+              fontSize: "12px",
+              fontWeight: activeId === s.id ? 700 : 500,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              whiteSpace: "nowrap",
+              boxShadow: activeId === s.id
+                ? "0 2px 6px rgba(99,102,241,0.3)"
+                : "0 1px 2px rgba(0,0,0,0.04)",
+            }}
+          >
+            <span style={{ fontSize: "13px" }}>{s.emoji}</span>
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /*──────────────────────────────────────────────────
   VISUAL FLOW DIAGRAM (CSS-based, no images needed)
@@ -203,17 +288,40 @@ function ProviderGuide({
 export default function Guidelines() {
   const navigate = useNavigate();
   const [quickStartOpen, setQuickStartOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState("how-it-works");
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const offset = 120;
+      let current = "how-it-works";
+      for (const s of SECTIONS) {
+        const el = document.getElementById(s.id);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= offset) {
+            current = s.id;
+          }
+        }
+      }
+      setActiveSection(current);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <Page
-      title="Setup Guidelines"
-      subtitle="Step-by-step guides to get the most out of Reverse Bundle Pro"
+      title="Easy Tutorial Guide"
+      subtitle="Jump to any section — step-by-step guides to set up and master Reverse Bundle Pro"
     >
-      <TitleBar title="Setup Guidelines" />
+      <TitleBar title="Easy Tutorial Guide" />
 
       <BlockStack gap="500">
 
+        <SectionNav activeId={activeSection} />
+
         {/* ─── HOW IT WORKS ────────────────────────── */}
+        <div id="how-it-works" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -256,6 +364,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── QUICK START (3 STEPS) ──────────────── */}
+        <div id="quick-start" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <div onClick={() => setQuickStartOpen(!quickStartOpen)} style={{ cursor: "pointer" }}>
@@ -391,6 +500,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── FULFILLMENT PROVIDER GUIDES ─────────── */}
+        <div id="providers" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -529,6 +639,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── FULFILLMENT MODE EXPLAINED ──────────── */}
+        <div id="modes" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -617,6 +728,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── NOTIFICATIONS SETUP ─────────────────── */}
+        <div id="notifications" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -672,6 +784,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── BUNDLE ANALYSIS (AI) ───────────────── */}
+        <div id="analysis" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -714,6 +827,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── FAQ ────────────────────────────────── */}
+        <div id="faq" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <BlockStack gap="400">
             <BlockStack gap="100">
@@ -759,6 +873,7 @@ export default function Guidelines() {
         </Card>
 
         {/* ─── NEED HELP CTA ──────────────────────── */}
+        <div id="help" style={{ scrollMarginTop: "100px" }} />
         <Card>
           <Box padding="400">
             <InlineStack align="space-between" blockAlign="center" wrap>
