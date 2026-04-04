@@ -490,11 +490,9 @@ export default function Billing() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="300" blockAlign="center">
-                <Box background={currentSubscription ? "bg-fill-success-secondary" : "bg-fill-info-secondary"} padding="200" borderRadius="200">
-                  <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
-                </Box>
+                <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingLg" fontWeight="bold">{planName} Plan</Text>
+                  <Text as="h2" variant="headingMd" fontWeight="bold">{planName} Plan</Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     {planAmount > 0 ? `$${planAmount} / ${planInterval === 'ANNUAL' ? 'year' : 'month'}` : 'No charge'}
                   </Text>
@@ -514,7 +512,7 @@ export default function Billing() {
                     <Icon source={OrderIcon} tone="subdued" />
                     <Text as="p" variant="bodySm" tone="subdued">Orders Used</Text>
                   </InlineStack>
-                  <Text as="p" variant="headingMd" fontWeight="bold">
+                  <Text as="p" variant="headingSm" fontWeight="bold">
                     {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
                   </Text>
                 </BlockStack>
@@ -525,13 +523,13 @@ export default function Billing() {
                     <Icon source={CashDollarIcon} tone="subdued" />
                     <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
                   </InlineStack>
-                  <Text as="p" variant="headingMd" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
+                  <Text as="p" variant="headingSm" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
                 </BlockStack>
               </Layout.Section>
               <Layout.Section variant="oneThird">
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" tone="subdued">Usage</Text>
-                  <Text as="p" variant="headingMd" fontWeight="bold">
+                  <Text as="p" variant="headingSm" fontWeight="bold">
                     {planLimit === 999999 ? 'Unlimited' : `${Math.round(usagePercentage)}%`}
                   </Text>
                 </BlockStack>
@@ -569,16 +567,14 @@ export default function Billing() {
 
             <Divider />
 
-            {/* Plan Cards */}
+            {/* Plan Cards - Row 1 */}
             <Layout>
               {/* Free */}
-              <Layout.Section>
+              <Layout.Section variant="oneHalf">
                 <Box padding="400" background="bg-surface-secondary" borderRadius="300">
                   <BlockStack gap="300">
                     <Text as="h3" variant="headingMd" fontWeight="bold">Free</Text>
-                    <BlockStack gap="100">
-                      <Text as="p" variant="headingXl" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued"> /month</Text></Text>
-                    </BlockStack>
+                    <Text as="p" variant="headingLg" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued"> /month</Text></Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
@@ -594,7 +590,7 @@ export default function Billing() {
               </Layout.Section>
 
               {/* Starter */}
-              <Layout.Section>
+              <Layout.Section variant="oneHalf">
                 <Box padding="400" background="bg-surface-secondary" borderRadius="300">
                   <BlockStack gap="300">
                     <Text as="h3" variant="headingMd" fontWeight="bold">Starter</Text>
@@ -602,7 +598,7 @@ export default function Billing() {
                       const p = getPlanPricing(4.99);
                       return (
                         <BlockStack gap="100">
-                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
                           {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
@@ -612,7 +608,6 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited rules</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Real-time analytics</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Email notifications</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Starter', 4.99);
@@ -621,9 +616,12 @@ export default function Billing() {
                   </BlockStack>
                 </Box>
               </Layout.Section>
+            </Layout>
 
+            {/* Plan Cards - Row 2 */}
+            <Layout>
               {/* Professional — Highlighted */}
-              <Layout.Section>
+              <Layout.Section variant="oneHalf">
                 <Box padding="400" background="bg-surface-info" borderRadius="300" borderWidth="025" borderColor="border-info">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
@@ -634,18 +632,16 @@ export default function Billing() {
                       const p = getPlanPricing(9.99);
                       return (
                         <BlockStack gap="100">
-                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
                           {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
                     })()}
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm" fontWeight="semibold">525 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Advanced analytics</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Priority support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Order edit mode</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Professional', 9.99);
@@ -656,7 +652,7 @@ export default function Billing() {
               </Layout.Section>
 
               {/* Enterprise */}
-              <Layout.Section>
+              <Layout.Section variant="oneHalf">
                 <Box padding="400" background="bg-surface-secondary" borderRadius="300">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
@@ -667,18 +663,16 @@ export default function Billing() {
                       const p = getPlanPricing(14.99);
                       return (
                         <BlockStack gap="100">
-                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
                           {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
                     })()}
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm" fontWeight="semibold">Unlimited orders</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Dedicated support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">All integrations</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">White-glove onboarding</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Enterprise', 14.99);

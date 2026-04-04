@@ -122,12 +122,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Orders Processed</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={OrderIcon} tone="info" />
-                  </Box>
+                  <Icon source={OrderIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{summary.totalRecords} analytics records</Text>
               </BlockStack>
             </Card>
@@ -137,12 +134,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={CashDollarIcon} tone="success" />
-                  </Box>
+                  <Icon source={CashDollarIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">${summary.totalSavings.toFixed(2)}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">${summary.totalSavings.toFixed(2)}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Across all bundle rules</Text>
               </BlockStack>
             </Card>
@@ -152,12 +146,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Avg Savings / Order</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={ChartVerticalFilledIcon} tone="success" />
-                  </Box>
+                  <Icon source={ChartVerticalFilledIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Per bundled order</Text>
               </BlockStack>
             </Card>

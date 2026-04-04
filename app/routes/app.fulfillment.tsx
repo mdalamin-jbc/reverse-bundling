@@ -670,12 +670,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
-                  <Box background={connectedCount > 0 ? "bg-fill-success-secondary" : "bg-fill-caution-secondary"} padding="100" borderRadius="full">
-                    <Icon source={DeliveryIcon} tone={connectedCount > 0 ? "success" : "caution"} />
-                  </Box>
+                  <Icon source={DeliveryIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">{connectedCount}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">{connectedCount}</Text>
                 <InlineStack gap="200">
                   <Badge tone="success">{connectedCount} connected</Badge>
                   {errorCount > 0 && <Badge tone="critical">{errorCount} issues</Badge>}
@@ -688,12 +685,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Bundle Orders</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={OrderIcon} tone="info" />
-                  </Box>
+                  <Icon source={OrderIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">{stats.monthlyOrders}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.monthlyOrders}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{stats.totalOrders} total processed</Text>
               </BlockStack>
             </Card>
@@ -703,12 +697,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={InventoryIcon} tone="info" />
-                  </Box>
+                  <Icon source={InventoryIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">{stats.activeBundleRules}</Text>
-                <Divider />
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.activeBundleRules}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Monitoring incoming orders</Text>
               </BlockStack>
             </Card>
@@ -730,9 +721,7 @@ export default function FulfillmentIntegration() {
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="start" wrap={false}>
                       <InlineStack gap="300" blockAlign="center">
-                        <Box background={provider.connectionVerified ? "bg-fill-success-secondary" : "bg-fill-critical-secondary"} padding="200" borderRadius="200">
-                          <Icon source={provider.connectionVerified ? CheckCircleIcon : AlertCircleIcon} tone={provider.connectionVerified ? "success" : "critical"} />
-                        </Box>
+                        <Icon source={provider.connectionVerified ? CheckCircleIcon : AlertCircleIcon} tone={provider.connectionVerified ? "success" : "critical"} />
                         <BlockStack gap="100">
                           <Text as="h3" variant="headingSm" fontWeight="semibold">{provider.name}</Text>
                           <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>

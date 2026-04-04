@@ -260,9 +260,7 @@ export default function BundleAnalysis() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Orders Analyzed</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={ChartVerticalFilledIcon} tone="info" />
-                  </Box>
+                  <Icon source={ChartVerticalFilledIcon} tone="base" />
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalOrders.toLocaleString()}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{stats.cooccurrences} item pairs found</Text>
@@ -274,9 +272,7 @@ export default function BundleAnalysis() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Suggestions</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={ProductIcon} tone="success" />
-                  </Box>
+                  <Icon source={ProductIcon} tone="base" />
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{pendingSuggestions.length} pending</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{appliedSuggestions.length} applied as rules</Text>

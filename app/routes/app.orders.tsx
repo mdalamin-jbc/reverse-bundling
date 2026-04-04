@@ -168,11 +168,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={OrderIcon} tone="info" />
-                  </Box>
+                  <Icon source={OrderIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">{stats.totalConversions.toLocaleString()}</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalConversions.toLocaleString()}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -181,11 +179,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={CashDollarIcon} tone="success" />
-                  </Box>
+                  <Icon source={CashDollarIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">${stats.totalSavings.toFixed(2)}</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${stats.totalSavings.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -194,11 +190,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Average Savings</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={ChartVerticalFilledIcon} tone="success" />
-                  </Box>
+                  <Icon source={ChartVerticalFilledIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">${stats.avgSavings.toFixed(2)}</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${stats.avgSavings.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>

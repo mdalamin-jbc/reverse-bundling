@@ -405,178 +405,182 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               const bundleVariant = skuLookupData.data?.productVariants?.edges?.[0]?.node;
 
               if (!bundleVariant) {
-                throw new Error(`Bundle product with SKU "${rule.bundledSku}" not found in Shopify — cannot edit order. Create the product or switch to Tag Only mode.`);
-              }
-
-              // Step 2: Begin order edit — fetch calculated line items with their proper IDs
-              const editBeginResponse = await admin.graphql(`
-                mutation orderEditBegin($id: ID!) {
-                  orderEditBegin(id: $id) {
-                    calculatedOrder {
-                      id
-                      lineItems(first: 50) {
-                        edges {
-                          node {
-                            id
-                            quantity
-                            variant {
+                logWarning(`Bundle product with SKU "${rule.bundledSku}" not found — falling back to tag_only mode`, {
+                  shop, orderId: String(order.id), bundledSku: rule.bundledSku,
+                });
+                // Fall through to tag_only mode below
+              } else {
+                // Step 2: Begin order edit — fetch calculated line items with their proper IDs
+                const editBeginResponse = await admin.graphql(`
+                  mutation orderEditBegin($id: ID!) {
+                    orderEditBegin(id: $id) {
+                      calculatedOrder {
+                        id
+                        lineItems(first: 50) {
+                          edges {
+                            node {
                               id
-                              sku
+                              quantity
+                              variant {
+                                id
+                                sku
+                              }
                             }
                           }
                         }
                       }
+                      userErrors { field message }
                     }
-                    userErrors { field message }
                   }
+                `, { variables: { id: orderId } });
+
+                const editBeginData = await editBeginResponse.json();
+                const calculatedOrder = editBeginData.data?.orderEditBegin?.calculatedOrder;
+                const beginErrors = editBeginData.data?.orderEditBegin?.userErrors || [];
+
+                if (beginErrors.length > 0 || !calculatedOrder) {
+                  throw new Error(`orderEditBegin failed: ${beginErrors.map((e: any) => e.message).join(', ') || 'No calculated order returned'}`);
                 }
-              `, { variables: { id: orderId } });
 
-              const editBeginData = await editBeginResponse.json();
-              const calculatedOrder = editBeginData.data?.orderEditBegin?.calculatedOrder;
-              const beginErrors = editBeginData.data?.orderEditBegin?.userErrors || [];
+                const calculatedOrderId = calculatedOrder.id;
+                const calculatedLineItems = calculatedOrder.lineItems?.edges?.map((e: any) => e.node) || [];
 
-              if (beginErrors.length > 0 || !calculatedOrder) {
-                throw new Error(`orderEditBegin failed: ${beginErrors.map((e: any) => e.message).join(', ') || 'No calculated order returned'}`);
-              }
-
-              const calculatedOrderId = calculatedOrder.id;
-              const calculatedLineItems = calculatedOrder.lineItems?.edges?.map((e: any) => e.node) || [];
-
-              logInfo('Order edit started — calculated line items:', {
-                shop,
-                orderId: String(order.id),
-                calculatedOrderId,
-                lineItemCount: calculatedLineItems.length,
-                lineItems: calculatedLineItems.map((cli: any) => ({
-                  id: cli.id,
-                  sku: cli.variant?.sku,
-                  variantId: cli.variant?.id,
-                  quantity: cli.quantity,
-                })),
-              });
-
-              // Step 3: Remove the individual items using CalculatedLineItem IDs from the calculated order
-              let removedCount = 0;
-              for (const ruleItem of ruleItems) {
-                // Match against the CALCULATED order's line items (not webhook payload)
-                const matchingCalcItem = calculatedLineItems.find((cli: any) => {
-                  const matchesSku = cli.variant?.sku === ruleItem;
-                  const matchesVariant = cli.variant?.id === ruleItem;
-                  return (matchesSku || matchesVariant) && cli.quantity > 0;
+                logInfo('Order edit started — calculated line items:', {
+                  shop,
+                  orderId: String(order.id),
+                  calculatedOrderId,
+                  lineItemCount: calculatedLineItems.length,
+                  lineItems: calculatedLineItems.map((cli: any) => ({
+                    id: cli.id,
+                    sku: cli.variant?.sku,
+                    variantId: cli.variant?.id,
+                    quantity: cli.quantity,
+                  })),
                 });
 
-                if (matchingCalcItem) {
-                  const setQtyResponse = await admin.graphql(`
-                    mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
-                      orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
-                        calculatedOrder { id }
-                        userErrors { field message }
+                // Step 3: Remove the individual items using CalculatedLineItem IDs from the calculated order
+                let removedCount = 0;
+                for (const ruleItem of ruleItems) {
+                  // Match against the CALCULATED order's line items (not webhook payload)
+                  const matchingCalcItem = calculatedLineItems.find((cli: any) => {
+                    const matchesSku = cli.variant?.sku === ruleItem;
+                    const matchesVariant = cli.variant?.id === ruleItem;
+                    return (matchesSku || matchesVariant) && cli.quantity > 0;
+                  });
+
+                  if (matchingCalcItem) {
+                    const setQtyResponse = await admin.graphql(`
+                      mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
+                        orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
+                          calculatedOrder { id }
+                          userErrors { field message }
+                        }
                       }
+                    `, {
+                      variables: { id: calculatedOrderId, lineItemId: matchingCalcItem.id, quantity: 0 }
+                    });
+
+                    const setQtyData = await setQtyResponse.json();
+                    const setQtyErrors = setQtyData.data?.orderEditSetQuantity?.userErrors || [];
+
+                    if (setQtyErrors.length > 0) {
+                      logWarning(`orderEditSetQuantity failed for ${ruleItem}: ${setQtyErrors.map((e: any) => e.message).join(', ')}`, {
+                        shop, orderId: String(order.id), ruleItem, lineItemId: matchingCalcItem.id,
+                      });
+                    } else {
+                      removedCount++;
+                      logInfo(`Removed line item for rule item: ${ruleItem}`, {
+                        shop, orderId: String(order.id), lineItemId: matchingCalcItem.id,
+                      });
                     }
-                  `, {
-                    variables: { id: calculatedOrderId, lineItemId: matchingCalcItem.id, quantity: 0 }
-                  });
-
-                  const setQtyData = await setQtyResponse.json();
-                  const setQtyErrors = setQtyData.data?.orderEditSetQuantity?.userErrors || [];
-
-                  if (setQtyErrors.length > 0) {
-                    logWarning(`orderEditSetQuantity failed for ${ruleItem}: ${setQtyErrors.map((e: any) => e.message).join(', ')}`, {
-                      shop, orderId: String(order.id), ruleItem, lineItemId: matchingCalcItem.id,
-                    });
                   } else {
-                    removedCount++;
-                    logInfo(`Removed line item for rule item: ${ruleItem}`, {
-                      shop, orderId: String(order.id), lineItemId: matchingCalcItem.id,
+                    logWarning(`No matching calculated line item found for rule item: ${ruleItem}`, {
+                      shop, orderId: String(order.id), ruleItem,
+                      availableItems: calculatedLineItems.map((cli: any) => ({
+                        id: cli.id, sku: cli.variant?.sku, variantId: cli.variant?.id,
+                      })),
                     });
                   }
-                } else {
-                  logWarning(`No matching calculated line item found for rule item: ${ruleItem}`, {
-                    shop, orderId: String(order.id), ruleItem,
-                    availableItems: calculatedLineItems.map((cli: any) => ({
-                      id: cli.id, sku: cli.variant?.sku, variantId: cli.variant?.id,
-                    })),
-                  });
                 }
-              }
 
-              // Step 4: Add the bundle variant
-              const addVariantResponse = await admin.graphql(`
-                mutation orderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
-                  orderEditAddVariant(id: $id, variantId: $variantId, quantity: 1) {
-                    calculatedOrder { id }
-                    userErrors { field message }
+                // Step 4: Add the bundle variant
+                const addVariantResponse = await admin.graphql(`
+                  mutation orderEditAddVariant($id: ID!, $variantId: ID!) {
+                    orderEditAddVariant(id: $id, variantId: $variantId, quantity: 1) {
+                      calculatedOrder { id }
+                      userErrors { field message }
+                    }
                   }
+                `, {
+                  variables: { id: calculatedOrderId, variantId: bundleVariant.id }
+                });
+
+                const addVariantData = await addVariantResponse.json();
+                const addVariantErrors = addVariantData.data?.orderEditAddVariant?.userErrors || [];
+
+                if (addVariantErrors.length > 0) {
+                  throw new Error(`orderEditAddVariant failed: ${addVariantErrors.map((e: any) => e.message).join(', ')}`);
                 }
-              `, {
-                variables: { id: calculatedOrderId, variantId: bundleVariant.id, quantity: 1 }
-              });
 
-              const addVariantData = await addVariantResponse.json();
-              const addVariantErrors = addVariantData.data?.orderEditAddVariant?.userErrors || [];
+                logInfo(`Added bundle variant to order`, {
+                  shop, orderId: String(order.id), bundleVariantId: bundleVariant.id, removedItems: removedCount,
+                });
 
-              if (addVariantErrors.length > 0) {
-                throw new Error(`orderEditAddVariant failed: ${addVariantErrors.map((e: any) => e.message).join(', ')}`);
-              }
-
-              logInfo(`Added bundle variant to order`, {
-                shop, orderId: String(order.id), bundleVariantId: bundleVariant.id, removedItems: removedCount,
-              });
-
-              // Step 5: Commit the edit
-              const commitResponse = await admin.graphql(`
-                mutation orderEditCommit($id: ID!) {
-                  orderEditCommit(id: $id) {
-                    order { id }
-                    userErrors { field message }
+                // Step 5: Commit the edit
+                const commitResponse = await admin.graphql(`
+                  mutation orderEditCommit($id: ID!) {
+                    orderEditCommit(id: $id) {
+                      order { id }
+                      userErrors { field message }
+                    }
                   }
+                `, { variables: { id: calculatedOrderId } });
+
+                const commitData = await commitResponse.json();
+                const commitErrors = commitData.data?.orderEditCommit?.userErrors || [];
+
+                if (commitErrors.length > 0) {
+                  throw new Error(`orderEditCommit failed: ${commitErrors.map((e: any) => e.message).join(', ')}`);
                 }
-              `, { variables: { id: calculatedOrderId } });
 
-              const commitData = await commitResponse.json();
-              const commitErrors = commitData.data?.orderEditCommit?.userErrors || [];
+                // Also add tags for tracking
+                const tagsToAdd = [
+                  'reverse-bundled',
+                  'order-edited',
+                  `bundle:${rule.bundledSku}`,
+                  `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+                ];
 
-              if (commitErrors.length > 0) {
-                throw new Error(`orderEditCommit failed: ${commitErrors.map((e: any) => e.message).join(', ')}`);
-              }
-
-              // Also add tags for tracking
-              const tagsToAdd = [
-                'reverse-bundled',
-                'order-edited',
-                `bundle:${rule.bundledSku}`,
-                `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
-              ];
-
-              await admin.graphql(`
-                mutation tagsAdd($id: ID!, $tags: [String!]!) {
-                  tagsAdd(id: $id, tags: $tags) {
-                    userErrors { field message }
+                await admin.graphql(`
+                  mutation tagsAdd($id: ID!, $tags: [String!]!) {
+                    tagsAdd(id: $id, tags: $tags) {
+                      userErrors { field message }
+                    }
                   }
-                }
-              `, { variables: { id: orderId, tags: tagsToAdd } });
+                `, { variables: { id: orderId, tags: tagsToAdd } });
 
-              logInfo('✅ Order edited for bundle fulfillment (line items replaced)', {
-                shop,
-                orderId: String(order.id),
-                bundledSku: rule.bundledSku,
-                bundleVariantId: bundleVariant.id,
-                mode: 'order_edit'
-              });
+                logInfo('✅ Order edited for bundle fulfillment (line items replaced)', {
+                  shop,
+                  orderId: String(order.id),
+                  bundledSku: rule.bundledSku,
+                  bundleVariantId: bundleVariant.id,
+                  mode: 'order_edit'
+                });
+              } // end bundleVariant found
+            }
 
-            } else {
-              // === TAG ONLY MODE (default) ===
+            // === TAG ONLY MODE (default, or fallback when bundle product not found) ===
+            if (fulfillmentMode !== 'order_edit') {
               // Safe approach — doesn't modify customer-facing line items
               // Warehouse reads tags/notes/metafields to know which pre-packed bundle to ship
-            
+
               // Build fulfillment note with clear instructions
               const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
-            
+
               // Existing note (if any) — append rather than overwrite
               const existingNote = (payload as any).note || '';
-              const fullNote = existingNote 
-                ? `${existingNote}\n\n${bundleNote}` 
+              const fullNote = existingNote
+                ? `${existingNote}\n\n${bundleNote}`
                 : bundleNote;
 
               // Step 1: Add tags to the order for easy filtering in Shopify admin

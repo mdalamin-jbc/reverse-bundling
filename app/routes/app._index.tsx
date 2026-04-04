@@ -23,7 +23,6 @@ import {
   CashDollarIcon,
   InventoryIcon,
   ChartVerticalFilledIcon,
-  AlertTriangleIcon,
   CheckCircleIcon,
   ArrowRightIcon,
 } from "@shopify/polaris-icons";
@@ -195,9 +194,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box background="bg-fill-info" padding="100" borderRadius="200">
-                        <Icon source={InventoryIcon} tone="info" />
-                      </Box>
+                      <Icon source={InventoryIcon} tone="info" />
                       <Text as="h3" variant="headingSm" fontWeight="semibold">1. Create rules</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -209,9 +206,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box background="bg-fill-info" padding="100" borderRadius="200">
-                        <Icon source={ChartVerticalFilledIcon} tone="info" />
-                      </Box>
+                      <Icon source={ChartVerticalFilledIcon} tone="info" />
                       <Text as="h3" variant="headingSm" fontWeight="semibold">2. Analyze orders</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -223,9 +218,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box background="bg-fill-info" padding="100" borderRadius="200">
-                        <Icon source={CashDollarIcon} tone="info" />
-                      </Box>
+                      <Icon source={CashDollarIcon} tone="info" />
                       <Text as="h3" variant="headingSm" fontWeight="semibold">3. Save on shipping</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -246,17 +239,14 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={OrderIcon} tone="success" />
-                  </Box>
+                  <Icon source={OrderIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
+                <Text as="p" variant="headingLg" fontWeight="bold">
                   {analytics.totalConversions.toLocaleString()}
                 </Text>
-                <Divider />
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Last 30 days</Text>
-                  <Badge tone="info">{analytics.recentConversionsCount}</Badge>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">{analytics.recentConversionsCount}</Text>
                 </InlineStack>
               </BlockStack>
             </Card>
@@ -266,14 +256,11 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
-                    <Icon source={CashDollarIcon} tone="success" />
-                  </Box>
+                  <Icon source={CashDollarIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">
+                <Text as="p" variant="headingLg" fontWeight="bold">
                   ${analytics.totalSavings.toLocaleString()}
                 </Text>
-                <Divider />
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Avg per order</Text>
                   <Text as="p" variant="bodySm" fontWeight="semibold">${analytics.avgSavingsPerOrder.toFixed(2)}</Text>
@@ -286,17 +273,14 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
-                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
-                    <Icon source={InventoryIcon} tone="info" />
-                  </Box>
+                  <Icon source={InventoryIcon} tone="base" />
                 </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
+                <Text as="p" variant="headingLg" fontWeight="bold">
                   {analytics.activeBundleRules}
                 </Text>
-                <Divider />
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">This month savings</Text>
-                  <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">${analytics.monthlySavings.toLocaleString()}</Text>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">${analytics.monthlySavings.toLocaleString()}</Text>
                 </InlineStack>
               </BlockStack>
             </Card>
