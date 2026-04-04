@@ -194,7 +194,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                      <Box padding="200" borderRadius="300" background="bg-surface-secondary">
                         <Icon source={InventoryIcon} tone="info" />
                       </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">1. Create rules</Text>
@@ -208,7 +208,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                      <Box padding="200" borderRadius="300" background="bg-surface-secondary">
                         <Icon source={ChartVerticalFilledIcon} tone="info" />
                       </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">2. Analyze orders</Text>
@@ -222,7 +222,7 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                      <Box padding="200" borderRadius="300" background="bg-surface-secondary">
                         <Icon source={CashDollarIcon} tone="info" />
                       </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">3. Save on shipping</Text>
@@ -305,7 +305,9 @@ export default function Dashboard() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={CheckCircleIcon} tone="success" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={CheckCircleIcon} tone="success" />
+                  </Box>
                   <Text as="p" variant="bodyMd" fontWeight="semibold">Conversion Success Rate</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" fontWeight="bold">{successRate}%</Text>
