@@ -8,9 +8,9 @@ import {
   Card,
   Button,
   BlockStack,
+  InlineStack,
   DataTable,
   EmptyState,
-  Box,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -98,85 +98,55 @@ export default function Analytics() {
   const { analytics, summary, pagination } = useLoaderData<typeof loader>();
 
   return (
-    <Page>
+    <Page title="Bundle Analytics">
       <TitleBar title="Bundle Analytics" />
 
-      <BlockStack gap="500">
-        {/* Summary Cards */}
+      <BlockStack gap="400">
+        {/* Stats row */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Total Orders Processed
-                </Text>
-                <Text as="h2" variant="headingLg">
-                  {summary.totalOrders.toLocaleString()}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Orders Processed</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
-
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Total Savings Generated
-                </Text>
-                <Text as="h2" variant="headingLg" tone="success">
-                  ${summary.totalSavings.toFixed(2)}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${summary.totalSavings.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
-
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Average Order Value
-                </Text>
-                <Text as="h2" variant="headingLg">
-                  ${summary.avgOrderValue.toFixed(2)}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Avg Order Value</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Analytics Table */}
+        {/* Table */}
         <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              📊 Analytics Records ({summary.totalRecords})
-            </Text>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">Records ({summary.totalRecords})</Text>
 
             {analytics.length === 0 ? (
               <EmptyState
                 heading="No analytics data yet"
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd">
-                    Analytics data will appear here as bundle rules process orders over time.
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    Make sure you have active bundle rules and orders are being processed.
-                  </Text>
-                </BlockStack>
+                <p>Analytics appear here as bundle rules process orders over time.</p>
               </EmptyState>
             ) : (
               <>
                 <DataTable
                   columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                  headings={[
-                    "Bundle Rule",
-                    "Period",
-                    "Orders",
-                    "Savings",
-                    "Avg Savings",
-                    "Date Range"
-                  ]}
+                  headings={["Bundle Rule", "Period", "Orders", "Savings", "Avg Savings", "Date Range"]}
                   rows={analytics.map((record: any) => [
                     record.bundleRule?.name || 'Unknown Rule',
                     record.period,
@@ -188,60 +158,36 @@ export default function Analytics() {
                   hoverable
                 />
 
-                {/* Pagination Controls */}
                 {pagination.totalPages > 1 && (
-                  <Box padding="400">
-                    <BlockStack gap="300">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} records
-                        </Text>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <Button
-                            variant="secondary"
-                            disabled={pagination.page <= 1}
-                            onClick={() => {
-                              const newUrl = new URL(window.location.href);
-                              newUrl.searchParams.set('page', (pagination.page - 1).toString());
-                              window.location.href = newUrl.toString();
-                            }}
-                          >
-                            ← Previous
-                          </Button>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                              const pageNum = i + 1;
-                              return (
-                                <Button
-                                  key={pageNum}
-                                  variant={pageNum === pagination.page ? "primary" : "secondary"}
-                                  size="slim"
-                                  onClick={() => {
-                                    const newUrl = new URL(window.location.href);
-                                    newUrl.searchParams.set('page', pageNum.toString());
-                                    window.location.href = newUrl.toString();
-                                  }}
-                                >
-                                  {pageNum.toString()}
-                                </Button>
-                              );
-                            })}
-                          </div>
-                          <Button
-                            variant="secondary"
-                            disabled={pagination.page >= pagination.totalPages}
-                            onClick={() => {
-                              const newUrl = new URL(window.location.href);
-                              newUrl.searchParams.set('page', (pagination.page + 1).toString());
-                              window.location.href = newUrl.toString();
-                            }}
-                          >
-                            Next →
-                          </Button>
-                        </div>
-                      </div>
-                    </BlockStack>
-                  </Box>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                    </Text>
+                    <InlineStack gap="200">
+                      <Button
+                        size="slim"
+                        disabled={pagination.page <= 1}
+                        onClick={() => {
+                          const u = new URL(window.location.href);
+                          u.searchParams.set('page', (pagination.page - 1).toString());
+                          window.location.href = u.toString();
+                        }}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="slim"
+                        disabled={pagination.page >= pagination.totalPages}
+                        onClick={() => {
+                          const u = new URL(window.location.href);
+                          u.searchParams.set('page', (pagination.page + 1).toString());
+                          window.location.href = u.toString();
+                        }}
+                      >
+                        Next
+                      </Button>
+                    </InlineStack>
+                  </InlineStack>
                 )}
               </>
             )}

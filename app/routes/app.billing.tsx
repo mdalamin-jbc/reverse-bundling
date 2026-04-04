@@ -11,6 +11,8 @@ import {
   Badge,
   ProgressBar,
   Banner,
+  Layout,
+  Box,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -465,530 +467,205 @@ export default function Billing() {
   };
 
   return (
-    <Page title="Subscription & Billing">
+    <Page title="Billing">
       <TitleBar title="Billing" />
 
-      <BlockStack gap="500">
-        {/* Success/Error Banners */}
-        {fetcher.data?.message && (
-          <Banner tone="info">
-            <p>{fetcher.data.message}</p>
-          </Banner>
-        )}
+      <BlockStack gap="400">
+        {fetcher.data?.message && <Banner tone="info"><p>{fetcher.data.message}</p></Banner>}
+        {chargeId && chargeSubscription && <Banner tone="success"><p>Subscription activated. You now have the {planName} plan.</p></Banner>}
+        {loadingPlan !== null && <Banner tone="info"><p>Processing subscription change...</p></Banner>}
 
-        {chargeId && chargeSubscription && (
-          <Banner tone="success">
-            <p>🎉 Subscription successfully activated! You now have access to the {planName} plan.</p>
-          </Banner>
-        )}
-
-        {/* Loading state banner */}
-        {loadingPlan !== null && (
-          <Banner tone="info">
-            <p>Processing subscription change... Please wait.</p>
-          </Banner>
-        )}
-
-        {/* Current Plan Status */}
+        {/* Current Plan */}
         <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              Current Plan: {planName} {planAmount > 0 && `($${planAmount}${planInterval === 'ANNUAL' ? '/year' : '/month'})`}
-            </Text>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                {planName} Plan {planAmount > 0 && `($${planAmount}${planInterval === 'ANNUAL' ? '/yr' : '/mo'})`}
+              </Text>
+              <Badge tone={currentSubscription ? "success" : "info"}>
+                {currentSubscription ? "Active" : "Free"}
+              </Badge>
+            </InlineStack>
 
-            {currentSubscription && (
-              <Banner tone="success">
-                <p>✅ Subscription Active - {currentSubscription.name || planName}</p>
-              </Banner>
-            )}
+            <Layout>
+              <Layout.Section variant="oneThird">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Orders</Text>
+                  <Text as="p" variant="headingSm" fontWeight="bold">
+                    {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
+                  </Text>
+                </BlockStack>
+              </Layout.Section>
+              <Layout.Section variant="oneThird">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Savings</Text>
+                  <Text as="p" variant="headingSm" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
+                </BlockStack>
+              </Layout.Section>
+              <Layout.Section variant="oneThird">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Usage</Text>
+                  <Text as="p" variant="headingSm" fontWeight="bold">{Math.round(usagePercentage)}%</Text>
+                </BlockStack>
+              </Layout.Section>
+            </Layout>
 
-            {!hasSubscription && (
-              <Banner tone="info">
-                <p>🆓 You're currently on the Free plan with basic features.</p>
-              </Banner>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-              <div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Monthly Orders
-                </Text>
-                <Text as="p" variant="headingMd" fontWeight="bold">
-                  {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
-                </Text>
-              </div>
-
-              <div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Total Savings
-                </Text>
-                <Text as="p" variant="headingMd" fontWeight="bold" tone="success">
-                  ${totalSavings.toLocaleString()}
-                </Text>
-              </div>
-
-              <div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Status
-                </Text>
-                <Badge tone={currentSubscription ? "success" : "info"}>
-                  {currentSubscription ? "Active Subscription" : "Free Plan"}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Usage Progress - only show for limited plans */}
             {planLimit > 0 && planLimit < 999999 && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <Text as="p" variant="bodySm">
-                    Monthly usage: {Math.round(usagePercentage)}%
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    {orderCount} / {planLimit} orders
-                  </Text>
-                </div>
-                <ProgressBar progress={usagePercentage} />
-
-                {usagePercentage > 90 && (
-                  <Banner tone="warning" title="Usage Alert">
-                    <p>
-                      You're approaching your monthly limit. Consider upgrading to ensure uninterrupted service.
-                    </p>
-                  </Banner>
-                )}
-              </div>
+              <ProgressBar progress={usagePercentage} />
             )}
 
-            {/* Over-limit warning for Free plan */}
-            {!hasSubscription && orderCount >= 20 && (
-              <Banner tone="warning" title="Free Plan Limit Warning">
-                <p>
-                  You've processed {orderCount} orders this month. The Free plan limit is 25 orders.
-                  Consider upgrading to avoid service interruption.
-                </p>
-              </Banner>
+            {usagePercentage > 90 && (
+              <Banner tone="warning"><p>Approaching limit. Consider upgrading.</p></Banner>
             )}
           </BlockStack>
         </Card>
 
-        {/* Pricing Plans */}
+        {/* Plans */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              Choose Your Plan
-            </Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">Choose Plan</Text>
+              <InlineStack gap="200">
+                <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
+                <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('yearly')}>Yearly</Button>
+              </InlineStack>
+            </InlineStack>
 
-            {/* Billing Interval Toggle */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-              <div style={{ 
-                display: 'inline-flex', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '6px',
-                overflow: 'hidden'
-              }}>
-                <Button
-                  variant={billingInterval === 'monthly' ? 'primary' : 'tertiary'}
-                  onClick={() => setBillingInterval('monthly')}
-                  size="slim"
-                >
-                  Pay monthly
-                </Button>
-                <Button
-                  variant={billingInterval === 'yearly' ? 'primary' : 'tertiary'}
-                  onClick={() => setBillingInterval('yearly')}
-                  size="slim"
-                >
-                  Pay yearly
-                </Button>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-              {/* Free Plan */}
-              <Card>
-                <BlockStack gap="300">
-                  <div>
-                    <Text as="h3" variant="headingMd" fontWeight="bold">
-                      Free
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Get started with basic features
-                    </Text>
-                  </div>
-
-                  <div>
-                    <Text as="span" variant="heading2xl" fontWeight="bold">
-                      $0
-                    </Text>
-                    <Text as="span" variant="bodyMd" tone="subdued">
-                      /month
-                    </Text>
-                  </div>
-
+            <Layout>
+              {/* Free */}
+              <Layout.Section>
+                <Card>
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 25 orders per month</Text>
-                    <Text as="p" variant="bodySm">• Basic bundling rules</Text>
-                    <Text as="p" variant="bodySm">• Email support</Text>
+                    <Text as="h3" variant="headingSm" fontWeight="bold">Free</Text>
+                    <Text as="p" variant="headingLg" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued">/mo</Text></Text>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm">25 orders/month</Text>
+                      <Text as="p" variant="bodySm">Basic bundling rules</Text>
+                    </BlockStack>
+                    {(() => {
+                      const b = getPlanButton('Free');
+                      return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'free'} fullWidth>{b.text}</Button>;
+                    })()}
                   </BlockStack>
+                </Card>
+              </Layout.Section>
 
-                  {(() => {
-                    const buttonConfig = getPlanButton('Free');
-                    return (
-                      <Button
-                        variant={buttonConfig.variant}
-                        onClick={buttonConfig.onClick}
-                        loading={loadingPlan === 'free'}
-                        disabled={buttonConfig.disabled || loadingPlan !== null}
-                        fullWidth
-                      >
-                        {buttonConfig.text}
-                      </Button>
-                    );
-                  })()}
-                </BlockStack>
-              </Card>
-
-              {/* Starter Plan */}
-              <Card>
-                <BlockStack gap="300">
-                  <div>
-                    <Text as="h3" variant="headingMd" fontWeight="bold">
-                      Starter
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Perfect for growing stores
-                    </Text>
-                  </div>
-
-                  {(() => {
-                    const pricing = getPlanPricing(4.99);
-                    return (
-                      <div>
-                        <div style={{ marginBottom: '4px' }}>
-                          <Text as="span" variant="heading2xl" fontWeight="bold">
-                            ${pricing.primaryPrice.toLocaleString()}
-                          </Text>
-                          <Text as="span" variant="bodyMd" tone="subdued">
-                            {pricing.primaryPeriod}
-                          </Text>
-                          {pricing.savings && (
-                            <span style={{ marginLeft: '8px', color: '#007f5f', fontSize: '14px' }}>
-                              ({pricing.savings})
-                            </span>
-                          )}
-                        </div>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
-                        </Text>
-                      </div>
-                    );
-                  })()}
-
+              {/* Starter */}
+              <Layout.Section>
+                <Card>
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 125 orders per month</Text>
-                    <Text as="p" variant="bodySm">• Unlimited bundle rules</Text>
-                    <Text as="p" variant="bodySm">• Real-time analytics</Text>
-                    <Text as="p" variant="bodySm">• Email support</Text>
+                    <Text as="h3" variant="headingSm" fontWeight="bold">Starter</Text>
+                    {(() => {
+                      const p = getPlanPricing(4.99);
+                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                    })()}
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm">125 orders/month</Text>
+                      <Text as="p" variant="bodySm">Unlimited rules</Text>
+                      <Text as="p" variant="bodySm">Real-time analytics</Text>
+                    </BlockStack>
+                    {(() => {
+                      const b = getPlanButton('Starter', 4.99);
+                      return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'starter'} fullWidth>{b.text}</Button>;
+                    })()}
                   </BlockStack>
+                </Card>
+              </Layout.Section>
 
-                  {(() => {
-                    const buttonConfig = getPlanButton('Starter', 4.99);
-                    return (
-                      <Button
-                        variant={buttonConfig.variant}
-                        onClick={buttonConfig.onClick}
-                        loading={loadingPlan === 'starter'}
-                        disabled={buttonConfig.disabled || loadingPlan !== null}
-                        fullWidth
-                      >
-                        {buttonConfig.text}
-                      </Button>
-                    );
-                  })()}
-                </BlockStack>
-              </Card>
-
-              {/* Professional Plan */}
-              <Card>
-                <BlockStack gap="300">
-                  <div>
-                    <Text as="h3" variant="headingMd" fontWeight="bold">
-                      Professional
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      For established businesses
-                    </Text>
-                  </div>
-
-                  {(() => {
-                    const pricing = getPlanPricing(9.99);
-                    return (
-                      <div>
-                        <div style={{ marginBottom: '4px' }}>
-                          <Text as="span" variant="heading2xl" fontWeight="bold">
-                            ${pricing.primaryPrice.toLocaleString()}
-                          </Text>
-                          <Text as="span" variant="bodyMd" tone="subdued">
-                            {pricing.primaryPeriod}
-                          </Text>
-                          {pricing.savings && (
-                            <span style={{ marginLeft: '8px', color: '#007f5f', fontSize: '14px' }}>
-                              ({pricing.savings})
-                            </span>
-                          )}
-                        </div>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
-                        </Text>
-                      </div>
-                    );
-                  })()}
-
+              {/* Professional */}
+              <Layout.Section>
+                <Card>
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• 525 orders per month</Text>
-                    <Text as="p" variant="bodySm">• Advanced analytics</Text>
-                    <Text as="p" variant="bodySm">• Priority support</Text>
-                    <Text as="p" variant="bodySm">• API access</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="h3" variant="headingSm" fontWeight="bold">Professional</Text>
+                      <Badge tone="info">Popular</Badge>
+                    </InlineStack>
+                    {(() => {
+                      const p = getPlanPricing(9.99);
+                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                    })()}
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm">525 orders/month</Text>
+                      <Text as="p" variant="bodySm">Advanced analytics</Text>
+                      <Text as="p" variant="bodySm">Priority support</Text>
+                    </BlockStack>
+                    {(() => {
+                      const b = getPlanButton('Professional', 9.99);
+                      return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'professional'} fullWidth>{b.text}</Button>;
+                    })()}
                   </BlockStack>
+                </Card>
+              </Layout.Section>
 
-                  {(() => {
-                    const buttonConfig = getPlanButton('Professional', 9.99);
-                    return (
-                      <Button
-                        variant={buttonConfig.variant}
-                        onClick={buttonConfig.onClick}
-                        loading={loadingPlan === 'professional'}
-                        disabled={buttonConfig.disabled || loadingPlan !== null}
-                        fullWidth
-                      >
-                        {buttonConfig.text}
-                      </Button>
-                    );
-                  })()}
-                </BlockStack>
-              </Card>
-
-              {/* Enterprise Plan */}
-              <Card>
-                <BlockStack gap="300">
-                  <div>
-                    <Text as="h3" variant="headingMd" fontWeight="bold">
-                      Enterprise
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      For high-volume stores
-                    </Text>
-                  </div>
-
-                  {(() => {
-                    const pricing = getPlanPricing(14.99);
-                    return (
-                      <div>
-                        <div style={{ marginBottom: '4px' }}>
-                          <Text as="span" variant="heading2xl" fontWeight="bold">
-                            ${pricing.primaryPrice.toLocaleString()}
-                          </Text>
-                          <Text as="span" variant="bodyMd" tone="subdued">
-                            {pricing.primaryPeriod}
-                          </Text>
-                          {pricing.savings && (
-                            <span style={{ marginLeft: '8px', color: '#007f5f', fontSize: '14px' }}>
-                              ({pricing.savings})
-                            </span>
-                          )}
-                        </div>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          or ${pricing.secondaryPrice}{pricing.secondaryPeriod} {pricing.savings}
-                        </Text>
-                      </div>
-                    );
-                  })()}
-
+              {/* Enterprise */}
+              <Layout.Section>
+                <Card>
                   <BlockStack gap="200">
-                    <Text as="p" variant="bodySm">• Unlimited orders</Text>
-                    <Text as="p" variant="bodySm">• Dedicated account manager</Text>
-                    <Text as="p" variant="bodySm">• Custom development</Text>
-                    <Text as="p" variant="bodySm">• 24/7 phone support</Text>
+                    <Text as="h3" variant="headingSm" fontWeight="bold">Enterprise</Text>
+                    {(() => {
+                      const p = getPlanPricing(14.99);
+                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                    })()}
+                    <BlockStack gap="100">
+                      <Text as="p" variant="bodySm">Unlimited orders</Text>
+                      <Text as="p" variant="bodySm">Dedicated support</Text>
+                      <Text as="p" variant="bodySm">Custom development</Text>
+                    </BlockStack>
+                    {(() => {
+                      const b = getPlanButton('Enterprise', 14.99);
+                      return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'enterprise'} fullWidth>{b.text}</Button>;
+                    })()}
                   </BlockStack>
+                </Card>
+              </Layout.Section>
+            </Layout>
 
-                  {(() => {
-                    const buttonConfig = getPlanButton('Enterprise', 14.99);
-                    return (
-                      <Button
-                        variant={buttonConfig.variant}
-                        onClick={buttonConfig.onClick}
-                        loading={loadingPlan === 'enterprise'}
-                        disabled={buttonConfig.disabled || loadingPlan !== null}
-                        fullWidth
-                      >
-                        {buttonConfig.text}
-                      </Button>
-                    );
-                  })()}
-                </BlockStack>
-              </Card>
-            </div>
-
-            <Text as="p" variant="bodySm" tone="subdued">
-              All plans include a 14-day free trial. No credit card required to start.
-            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial.</Text>
           </BlockStack>
         </Card>
 
         {/* FAQ */}
         <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              Frequently Asked Questions
-            </Text>
-
-            <BlockStack gap="300">
-              <div>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  How does the free trial work?
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Install the app from the Shopify App Store to start your 14-day free trial. You'll get full access to all features with no credit card required.
-                </Text>
-              </div>
-
-              <div>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  Can I change plans anytime?
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Yes! You can upgrade or downgrade your plan anytime through the Shopify App Store. Changes take effect immediately.
-                </Text>
-              </div>
-
-              <div>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  What happens if I exceed my order limit?
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  For the Free plan (25 orders/month): Bundle processing will stop until you upgrade or the next billing cycle begins.
-                  Paid plans have higher limits - Starter (125), Professional (525), Enterprise (unlimited).
-                  You'll receive notifications at 80% usage to upgrade before hitting the limit.
-                </Text>
-              </div>
-
-              <div>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  How do I get a refund?
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  For refund requests, contact Shopify support directly at support@shopify.com or through
-                  your Shopify admin help section. They handle all billing disputes and refunds for apps.
-                </Text>
-              </div>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">FAQ</Text>
+            <BlockStack gap="200">
+              <Box>
+                <Text as="p" variant="bodySm" fontWeight="semibold">How does the free trial work?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Full access for 14 days. No credit card required.</Text>
+              </Box>
+              <Box>
+                <Text as="p" variant="bodySm" fontWeight="semibold">Can I change plans?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Yes, upgrade or downgrade anytime through the Shopify App Store.</Text>
+              </Box>
+              <Box>
+                <Text as="p" variant="bodySm" fontWeight="semibold">What if I exceed my limit?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Processing pauses until you upgrade or the next billing cycle. You'll be notified at 80%.</Text>
+              </Box>
             </BlockStack>
           </BlockStack>
         </Card>
 
-        {/* Cancel Subscription */}
+        {/* Cancel */}
         {hasSubscription && (
           <Card>
-            <BlockStack gap="400">
-              <Text as="h3" variant="headingMd">
-                Subscription Management
-              </Text>
-
-              <Banner tone="info">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Need to cancel or get a refund?
-                  </Text>
-                  <Text as="p" variant="bodySm">
-                    For managed pricing apps, cancellation and refunds are handled directly through Shopify.
-                    Here are your options:
-                  </Text>
-                </BlockStack>
-              </Banner>
-
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Manage Subscription</Text>
               {!showCancelConfirm ? (
-                <BlockStack gap="300">
-                  <div>
-                    <Text as="p" variant="bodyMd" fontWeight="semibold" tone="critical">
-                      Option 1: Cancel Subscription (Free)
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Uninstall the app from your Shopify admin to cancel your subscription immediately.
-                      No further charges will be made.
-                    </Text>
-                  </div>
-
-                  <div>
-                    <Text as="p" variant="bodyMd" fontWeight="semibold" tone="critical">
-                      Option 2: Request Refund
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Contact Shopify support for refund requests. They handle all billing disputes and refunds.
-                    </Text>
-                  </div>
-
-                  <InlineStack gap="300">
-                    <Button
-                      variant="primary"
-                      tone="critical"
-                      onClick={() => setShowCancelConfirm(true)}
-                    >
-                      Cancel via App Uninstall
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => window.open('https://help.shopify.com/en/manual/apps/app-billing/managed-pricing#cancel-a-subscription', '_blank')}
-                    >
-                      Learn More About Cancellation
-                    </Button>
-                  </InlineStack>
-                </BlockStack>
-              ) : showCancelConfirm ? (
-                <BlockStack gap="400">
+                <InlineStack gap="200">
+                  <Button tone="critical" onClick={() => setShowCancelConfirm(true)}>Cancel Subscription</Button>
+                  <Button variant="plain" url="https://help.shopify.com/en/manual/apps/app-billing/managed-pricing#cancel-a-subscription" target="_blank">Learn more</Button>
+                </InlineStack>
+              ) : (
+                <BlockStack gap="200">
                   <Banner tone="warning">
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" fontWeight="semibold">
-                        Cancel by Uninstalling the App
-                      </Text>
-                      <Text as="p" variant="bodySm">
-                        To cancel your subscription:
-                      </Text>
-                      <ol style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                        <li>Go to your Shopify admin Apps page</li>
-                        <li>Find "Reverse Bundling" in your installed apps</li>
-                        <li>Click "Uninstall" next to the app</li>
-                        <li>Confirm the uninstallation</li>
-                      </ol>
-                      <Text as="p" variant="bodySm">
-                        Your subscription will be cancelled immediately with no further charges.
-                      </Text>
-                    </BlockStack>
+                    <p>To cancel, uninstall the app from Shopify Admin &rarr; Apps. No further charges will be made.</p>
                   </Banner>
-
-                  <InlineStack gap="300">
-                    <Button
-                      variant="primary"
-                      tone="critical"
-                      onClick={() => {
-                        // Open Shopify Apps page in new tab
-                        window.open('https://admin.shopify.com/store/quickstart-9525e261.myshopify.com/apps', '_blank');
-                        setShowCancelConfirm(false);
-                      }}
-                    >
-                      Go to Apps Page
-                    </Button>
+                  <InlineStack gap="200">
+                    <Button tone="critical" onClick={() => { window.open('https://admin.shopify.com/store/quickstart-9525e261.myshopify.com/apps', '_blank'); setShowCancelConfirm(false); }}>Go to Apps</Button>
                     <Button onClick={() => setShowCancelConfirm(false)}>Keep Subscription</Button>
                   </InlineStack>
-
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    <strong>For refunds:</strong> Contact Shopify support at{' '}
-                    <a href="mailto:support@shopify.com" style={{ color: '#006fbb' }}>
-                      support@shopify.com
-                    </a>{' '}
-                    or through your Shopify admin help section.
-                  </Text>
                 </BlockStack>
-              ) : null}
+              )}
             </BlockStack>
           </Card>
         )}

@@ -168,47 +168,33 @@ export default function OrderConversions() {
   });
 
   return (
-    <Page>
+    <Page title="Order Conversions">
       <TitleBar title="Order Conversions" />
-      
-      <BlockStack gap="500">
-        {/* Summary Cards */}
+
+      <BlockStack gap="400">
+        {/* Stats row */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Total Conversions
-                </Text>
-                <Text as="h2" variant="headingLg">
-                  {stats.totalConversions}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalConversions.toLocaleString()}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
-          
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Total Savings
-                </Text>
-                <Text as="h2" variant="headingLg" tone="success">
-                  ${stats.totalSavings.toFixed(2)}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${stats.totalSavings.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
-          
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Average Savings
-                </Text>
-                <Text as="h2" variant="headingLg">
-                  ${stats.avgSavings.toFixed(2)}
-                </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Average Savings</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">${stats.avgSavings.toFixed(2)}</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -216,192 +202,72 @@ export default function OrderConversions() {
 
         {/* Filters */}
         <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              🔍 Filter & Search
-            </Text>
-            
-            <InlineStack gap="400" wrap>
-              <Box minWidth="300px">
+          <BlockStack gap="300">
+            <InlineStack gap="300" wrap blockAlign="end">
+              <Box minWidth="250px">
                 <TextField
-                  label="Search orders"
+                  label="Search"
                   value={searchQuery}
                   onChange={setSearchQuery}
-                  placeholder="Order ID, SKU, or bundle name..."
+                  placeholder="Order ID, SKU, or rule name..."
                   autoComplete="off"
                   clearButton
                   onClearButtonClick={() => setSearchQuery("")}
                 />
               </Box>
-              
-              <Box minWidth="200px">
-                <Select
-                  label="Filter by value"
-                  options={[
-                    { label: "All conversions", value: "all" },
-                    { label: "High value ($10+)", value: "high_value" },
-                    { label: "Medium value ($5-$10)", value: "medium_value" },
-                    { label: "Low value (<$5)", value: "low_value" },
-                  ]}
-                  value={filterStatus}
-                  onChange={setFilterStatus}
-                />
-              </Box>
-              
-              <Box minWidth="200px">
-                <Select
-                  label="Sort by"
-                  options={[
-                    { label: "Date (newest first)", value: "date_desc" },
-                    { label: "Date (oldest first)", value: "date_asc" },
-                    { label: "Savings (highest first)", value: "savings_desc" },
-                    { label: "Savings (lowest first)", value: "savings_asc" },
-                  ]}
-                  value={sortBy}
-                  onChange={setSortBy}
-                />
-              </Box>
-              
+              <Select
+                label="Value"
+                options={[
+                  { label: "All", value: "all" },
+                  { label: "$10+", value: "high_value" },
+                  { label: "$5-$10", value: "medium_value" },
+                  { label: "<$5", value: "low_value" },
+                ]}
+                value={filterStatus}
+                onChange={setFilterStatus}
+              />
+              <Select
+                label="Sort"
+                options={[
+                  { label: "Newest", value: "date_desc" },
+                  { label: "Oldest", value: "date_asc" },
+                  { label: "Highest savings", value: "savings_desc" },
+                  { label: "Lowest savings", value: "savings_asc" },
+                ]}
+                value={sortBy}
+                onChange={setSortBy}
+              />
               {(searchQuery || filterStatus !== "all") && (
-                <Button 
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilterStatus("all");
-                  }}
-                >
-                  Clear Filters
-                </Button>
+                <Button onClick={() => { setSearchQuery(""); setFilterStatus("all"); }}>Clear</Button>
               )}
             </InlineStack>
-            
             <Text as="p" variant="bodySm" tone="subdued">
-              Showing {filteredConversions.length} of {conversions.length} conversions
+              {filteredConversions.length} of {conversions.length} conversions
             </Text>
           </BlockStack>
         </Card>
 
-        {/* Conversions Table */}
+        {/* Table */}
         <Card>
           {filteredConversions.length === 0 ? (
             <EmptyState
-              heading={searchQuery || filterStatus !== "all" ? "No conversions match your filters" : "No order conversions yet"}
+              heading={searchQuery || filterStatus !== "all" ? "No matching conversions" : "No conversions yet"}
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
             >
-              <BlockStack gap="200">
-                {searchQuery || filterStatus !== "all" ? (
-                  <Text as="p" variant="bodyMd">
-                    Try adjusting your search or filters to find what you're looking for.
-                  </Text>
-                ) : (
-                  <>
-                    <Text as="p" variant="bodyMd">
-                      Order conversions will appear here when customers place orders that match your bundle rules.
-                    </Text>
-                    <Text as="p" variant="bodyMd">
-                      Make sure you have active bundle rules set up and orders are being processed.
-                    </Text>
-                  </>
-                )}
-              </BlockStack>
+              <p>{searchQuery || filterStatus !== "all"
+                ? "Try adjusting your search or filters."
+                : "Conversions appear here when orders match your bundle rules."
+              }</p>
             </EmptyState>
           ) : (
             <DataTable
               columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-              headings={[
-                "Order ID",
-                "Bundle Rule",
-                "Items",
-                "Bundle SKU",
-                "Savings",
-                "Converted At"
-              ]}
+              headings={["Order ID", "Bundle Rule", "Items", "Bundle SKU", "Savings", "Converted At"]}
               rows={tableRows}
               hoverable
             />
           )}
         </Card>
-
-        {/* Export Section */}
-        {conversions.length > 0 && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                📊 Export Data
-              </Text>
-              
-              <InlineStack gap="300">
-                <Button variant="secondary">
-                  Export to CSV
-                </Button>
-                <Button variant="secondary">
-                  Generate Report
-                </Button>
-              </InlineStack>
-              
-              <Text as="p" variant="bodySm" tone="subdued">
-                Export conversion data for accounting, analysis, or record-keeping purposes.
-              </Text>
-            </BlockStack>
-          </Card>
-        )}
-
-        {/* Insights */}
-        {conversions.length > 0 && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                💡 Quick Insights
-              </Text>
-              
-              <InlineStack gap="400" wrap>
-                <Box padding="300" background="bg-surface-success" borderRadius="200" minWidth="200px">
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                      Best Performing Rule
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                      {validConversions.length > 0 
-                        ? validConversions.reduce((prev, current) => 
-                            prev.savingsAmount > current.savingsAmount ? prev : current
-                          ).bundleRule.name
-                        : "N/A"
-                      }
-                    </Text>
-                  </BlockStack>
-                </Box>
-                
-                <Box padding="300" background="bg-surface-warning" borderRadius="200" minWidth="200px">
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                      Today's Conversions
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                      {validConversions.filter(c => {
-                        const today = new Date();
-                        const convertDate = new Date(c.convertedAt);
-                        return convertDate.toDateString() === today.toDateString();
-                      }).length} orders
-                    </Text>
-                  </BlockStack>
-                </Box>
-                
-                <Box padding="300" background="bg-surface" borderRadius="200" minWidth="200px">
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                      Highest Single Savings
-                    </Text>
-                    <Text as="p" variant="bodySm">
-                      ${validConversions.length > 0 
-                        ? Math.max(...validConversions.map(c => c.savingsAmount)).toFixed(2)
-                        : "0.00"
-                      }
-                    </Text>
-                  </BlockStack>
-                </Box>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        )}
       </BlockStack>
     </Page>
   );

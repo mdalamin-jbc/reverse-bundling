@@ -11,6 +11,7 @@ import {
   InlineStack,
   Badge,
   Banner,
+  Box,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -633,324 +634,117 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function FulfillmentIntegration() {
   const { providers, stats, detectionErrors, hasErrors } = useLoaderData<typeof loader>();
-  
+
+  const connectedCount = providers.filter((p: any) => p.connectionVerified).length;
+
   return (
     <Page title="Fulfillment Status">
       <TitleBar title="Fulfillment Status" />
-      
-      <BlockStack gap="600">
-        {/* Hero Section */}
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            padding: '48px 40px',
-            borderRadius: '20px',
-            color: 'white',
-            boxShadow: '0 20px 25px -5px rgba(102, 126, 234, 0.3)',
-          }}
-        >
-          <BlockStack gap="400">
-            <div style={{ textAlign: 'center' }}>
-              <Text as="h1" variant="heading2xl" fontWeight="bold">
-                <span style={{ color: 'white' }}>🏭 Fulfillment Status</span>
-              </Text>
-            </div>
-            <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto' }}>
-              <Text as="p" variant="bodyLg">
-                <span style={{ color: 'rgba(255, 255, 255, 0.95)', fontSize: '18px', lineHeight: '1.6' }}>
-                  Check which fulfillment providers are connected to your Shopify store
-                </span>
-              </Text>
-            </div>
-          </BlockStack>
-        </div>
 
-        {/* Error Banner */}
+      <BlockStack gap="400">
+        {/* Detection warnings */}
         {hasErrors && detectionErrors.length > 0 && (
-          <Banner tone="info" title="Partial Detection">
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd">
-                Some detection features are limited (this is normal and doesn't affect functionality):
-              </Text>
-              <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                {detectionErrors.map((error, index) => (
-                  <li key={index}>
-                    <Text as="p" variant="bodySm">{error}</Text>
-                  </li>
-                ))}
-              </ul>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Your fulfillment providers are still being detected through other methods.
-              </Text>
-            </BlockStack>
+          <Banner tone="info">
+            <p>Some detection features are limited. Your providers are still detected through other methods.</p>
           </Banner>
         )}
 
-        {/* Connected Providers Section */}
-        {providers.length > 0 && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="500">
-                  <div
-                    style={{
-                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                      padding: '28px',
-                      borderRadius: '16px',
-                      border: '2px solid #10b981',
-                    }}
-                  >
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="200">
-                        <Text as="h2" variant="heading2xl" fontWeight="bold">
-                          ✅ Connected Fulfillment Providers
-                        </Text>
-                        <Text variant="bodyLg" as="p">
-                          <span style={{ color: '#065f46' }}>
-                            Found <strong>{providers.length}</strong> fulfillment
-                            {providers.length === 1 ? ' provider' : ' providers'} connected to your store
-                          </span>
-                        </Text>
-                      </BlockStack>
-                      <div style={{ fontSize: '64px' }}>🎉</div>
-                    </InlineStack>
-                  </div>
+        {/* Stats row */}
+        <Layout>
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{connectedCount} connected</Text>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Bundle Orders</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.monthlyOrders} this month</Text>
+                <Text as="p" variant="bodySm" tone="subdued">{stats.totalOrders} total</Text>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section variant="oneThird">
+            <Card>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.activeBundleRules}</Text>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        </Layout>
 
-                  {/* Success Message */}
-                  <div
-                    style={{
-                      background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                      padding: '24px',
-                      borderRadius: '12px',
-                      border: '2px solid #3b82f6',
-                    }}
-                  >
-                    <InlineStack gap="300" blockAlign="start">
-                      <div style={{ fontSize: '40px' }}>💡</div>
-                      <BlockStack gap="200">
-                        <Text as="p" variant="headingMd" fontWeight="bold">
-                          Your app is ready to work!
-                        </Text>
-                        <Text as="p" variant="bodyMd">
-                          Bundle orders will automatically sync to your connected fulfillment providers via Shopify's existing integrations.
-                        </Text>
-                        {stats.hasData && (
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            This month: <strong>{stats.monthlyOrders}</strong> bundle orders processed
-                            ({stats.totalOrders} total) • <strong>${stats.monthlySavings}</strong> in savings
-                          </Text>
-                        )}
-                      </BlockStack>
-                    </InlineStack>
-                  </div>
+        {/* Providers list */}
+        {providers.length > 0 ? (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Connected Providers</Text>
 
-                  {/* List Detected Providers */}
-                  <BlockStack gap="400">
-                    {providers.map((provider: any) => (
-                      <div
-                        key={provider.id}
-                        style={{
-                          border: provider.connectionVerified ? '2px solid #10b981' : '2px solid #ef4444',
-                          borderRadius: '16px',
-                          padding: '28px',
-                          background: provider.connectionVerified
-                            ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)'
-                            : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-                          boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.1)',
-                        }}
-                      >
-                        <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                          <InlineStack gap="400" blockAlign="center">
-                            <div style={{ fontSize: '56px' }}>{provider.icon}</div>
-                            <BlockStack gap="200">
-                        <InlineStack gap="200" blockAlign="center" wrap>
-                                <Text as="h3" variant="headingXl" fontWeight="bold">
-                                  {provider.name}
-                                </Text>
-                                <Badge
-                                  tone={provider.connectionVerified ? "success" : "critical"}
-                                  size="large"
-                                >
-                                  {provider.connectionVerified ? "✅ Connected" : "❌ Connection Issue"}
-                                </Badge>
-                                <Badge tone="info">{provider.type.toUpperCase()}</Badge>
-                                {provider.source !== 'shopify' && (
-                                  <Badge tone="new">{provider.source.replace('-', ' ').toUpperCase()}</Badge>
-                                )}
-                              </InlineStack>
-                              
-                              <Text as="p" variant="bodyMd" tone="subdued">
-                                Handle: <code style={{ 
-                                  background: 'rgba(0,0,0,0.05)', 
-                                  padding: '2px 8px', 
-                                  borderRadius: '4px',
-                                  fontFamily: 'monospace'
-                                }}>{provider.handle}</code>
-                                {provider.location && (
-                                  <span> • Location: {provider.location}</span>
-                                )}
-                              </Text>
-                              
-                              <Text as="p" variant="bodyMd">
-                                {provider.description}
-                              </Text>
-                              
-                              {/* Capabilities */}
-                              <div style={{ marginTop: '8px' }}>
-                                <Text as="p" variant="bodySm" fontWeight="bold" tone="subdued">
-                                  Capabilities:
-                                </Text>
-                                <InlineStack gap="200" wrap>
-                                  {provider.capabilities.map((capability: string, index: number) => (
-                                    <Badge key={index} tone="info" size="small">
-                                      {capability}
-                                    </Badge>
-                                  ))}
-                                </InlineStack>
-                              </div>
-                              
-                              {/* Connection Status */}
-                              {provider.connectionVerified ? (
-                                <div
-                                  style={{
-                                    background: 'rgba(16, 185, 129, 0.15)',
-                                    padding: '12px 16px',
-                                    borderRadius: '8px',
-                                    marginTop: '8px',
-                                  }}
-                                >
-                                  <Text as="p" variant="bodyMd" fontWeight="medium">
-                                    ✨ Bundle orders will automatically sync to this provider
-                                  </Text>
-                                  {provider.lastVerified && (
-                                    <Text as="p" variant="bodySm" tone="subdued">
-                                      Last verified: {new Date(provider.lastVerified).toLocaleString()}
-                                    </Text>
-                                  )}
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    background: 'rgba(239, 68, 68, 0.15)',
-                                    padding: '12px 16px',
-                                    borderRadius: '8px',
-                                    marginTop: '8px',
-                                  }}
-                                >
-                                  <Text as="p" variant="bodyMd" fontWeight="medium" tone="critical">
-                                    ⚠️ Connection issue detected
-                                  </Text>
-                                  {provider.errorMessage && (
-                                    <Text as="p" variant="bodySm" tone="critical">
-                                      {provider.errorMessage}
-                                    </Text>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Action Buttons */}
-                              <InlineStack gap="300" wrap>
-                                {provider.setupUrl && (
-                                  <Button
-                                    variant="primary"
-                                    size="slim"
-                                    onClick={() => window.open(provider.setupUrl, '_blank')}
-                                  >
-                                    🔧 Configure
-                                  </Button>
-                                )}
-                                {provider.docsUrl && (
-                                  <Button
-                                    variant="secondary"
-                                    size="slim"
-                                    onClick={() => window.open(provider.docsUrl, '_blank')}
-                                  >
-                                    📚 Documentation
-                                  </Button>
-                                )}
-                              </InlineStack>
-                            </BlockStack>
-                          </InlineStack>
-                        </InlineStack>
-                      </div>
-                    ))}
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
-
-        {/* No Providers Detected */}
-        {providers.length === 0 && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <div
-                  style={{
-                    background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-                    padding: '40px',
-                    borderRadius: '16px',
-                    border: '2px solid #ef4444',
-                  }}
-                >
-                  <InlineStack align="space-between" blockAlign="start" wrap={false}>
-                    <BlockStack gap="400">
+              {providers.map((provider: any) => (
+                <Box key={provider.id} padding="300" background="bg-surface-secondary" borderRadius="200">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center" wrap={false}>
                       <InlineStack gap="200" blockAlign="center">
-                        <div style={{ fontSize: '56px' }}>⚠️</div>
-                        <Text as="h3" variant="heading2xl" fontWeight="bold">
-                          No Fulfillment Provider Detected
-                        </Text>
+                        <Text as="h3" variant="headingSm">{provider.name}</Text>
+                        <Badge tone={provider.connectionVerified ? "success" : "critical"}>
+                          {provider.connectionVerified ? "Connected" : "Issue"}
+                        </Badge>
+                        <Badge tone="info">{provider.type}</Badge>
                       </InlineStack>
-                      
-                      <Text as="p" variant="bodyLg">
-                        We couldn't find any fulfillment services connected to your Shopify store.
-                      </Text>
-                      
-                      <BlockStack gap="300">
-                        <Text as="p" variant="bodyMd" fontWeight="bold">
-                          To connect a fulfillment provider:
-                        </Text>
-                        <div
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.7)',
-                            padding: '16px',
-                            borderRadius: '8px',
-                          }}
-                        >
-                          <BlockStack gap="200">
-                            <Text as="p" variant="bodyMd">
-                              1. Go to your Shopify Admin → Settings → Apps and sales channels
-                            </Text>
-                            <Text as="p" variant="bodyMd">
-                              2. Browse the Shopify App Store for fulfillment apps (ShipStation, ShipBob, etc.)
-                            </Text>
-                            <Text as="p" variant="bodyMd">
-                              3. Install and connect your preferred fulfillment provider
-                            </Text>
-                            <Text as="p" variant="bodyMd">
-                              4. Return here and click "Refresh" to detect the connection
-                            </Text>
-                          </BlockStack>
-                        </div>
-                      </BlockStack>
-                      
-                      <InlineStack gap="300">
-                        <Button 
-                          variant="primary" 
-                          size="large"
-                          onClick={() => window.location.reload()}
-                        >
-                          🔄 Refresh & Check Again
-                        </Button>
+                      <InlineStack gap="200">
+                        {provider.setupUrl && (
+                          <Button size="slim" url={provider.setupUrl} target="_blank">Configure</Button>
+                        )}
+                        {provider.docsUrl && (
+                          <Button size="slim" variant="plain" url={provider.docsUrl} target="_blank">Docs</Button>
+                        )}
                       </InlineStack>
-                    </BlockStack>
-                    <div style={{ fontSize: '120px', opacity: 0.3 }}>🏭</div>
-                  </InlineStack>
-                </div>
-              </Card>
-            </Layout.Section>
-          </Layout>
+                    </InlineStack>
+
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {provider.description}
+                      {provider.location && ` — ${provider.location}`}
+                    </Text>
+
+                    {provider.capabilities.length > 0 && (
+                      <InlineStack gap="100" wrap>
+                        {provider.capabilities.map((cap: string, i: number) => (
+                          <Badge key={i} size="small">{cap}</Badge>
+                        ))}
+                      </InlineStack>
+                    )}
+
+                    {!provider.connectionVerified && provider.errorMessage && (
+                      <Banner tone="critical"><p>{provider.errorMessage}</p></Banner>
+                    )}
+                  </BlockStack>
+                </Box>
+              ))}
+
+              <Text as="p" variant="bodySm" tone="subdued">
+                Bundle orders automatically sync to connected providers via Shopify's integrations.
+              </Text>
+            </BlockStack>
+          </Card>
+        ) : (
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">No Providers Detected</Text>
+              <Text as="p" variant="bodyMd">
+                Connect a fulfillment provider through Shopify Admin to enable automatic order syncing.
+              </Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm">1. Go to Shopify Admin &rarr; Settings &rarr; Apps and sales channels</Text>
+                <Text as="p" variant="bodySm">2. Install a fulfillment app (ShipStation, ShipBob, etc.)</Text>
+                <Text as="p" variant="bodySm">3. Return here and refresh to detect the connection</Text>
+              </BlockStack>
+              <Button onClick={() => window.location.reload()}>Refresh</Button>
+            </BlockStack>
+          </Card>
         )}
       </BlockStack>
     </Page>

@@ -1,5 +1,5 @@
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useNavigate } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -10,10 +10,8 @@ import {
   InlineStack,
   Banner,
   Badge,
-  ProgressBar,
   EmptyState,
   Select,
-  Divider,
   Box,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
@@ -167,197 +165,139 @@ export default function BundleAnalysis() {
   const { suggestions, stats, existingRuleItems, error } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
 
   const [daysBack, setDaysBack] = useState("90");
 
   const isAnalyzing = fetcher.state === "submitting" && fetcher.formData?.get("action") === "analyze-orders";
-  const isCreating = fetcher.state === "submitting" && fetcher.formData?.get("action") === "create-rule-from-suggestion";
+  const isCreating = fetcher.state === "submitting";
 
   useEffect(() => {
     if (fetcher.data?.success && fetcher.data?.message) {
       shopify.toast.show(fetcher.data.message);
+      // Redirect to Bundle Rules after creating a rule from suggestion
+      if ((fetcher.data as any)?.ruleId) {
+        setTimeout(() => navigate('/app/bundle-rules'), 500);
+      }
     } else if (fetcher.data && !fetcher.data.success && fetcher.data.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, navigate]);
 
   const handleAnalyze = () => {
-    const formData = new FormData();
-    formData.append("action", "analyze-orders");
-    formData.append("daysBack", daysBack);
-    fetcher.submit(formData, { method: "POST" });
+    fetcher.submit({ action: "analyze-orders", daysBack }, { method: "POST" });
   };
 
   const handleCreateRule = (suggestionId: string) => {
-    const formData = new FormData();
-    formData.append("action", "create-rule-from-suggestion");
-    formData.append("suggestionId", suggestionId);
-    fetcher.submit(formData, { method: "POST" });
+    fetcher.submit({ action: "create-rule-from-suggestion", suggestionId }, { method: "POST" });
   };
 
   const handleDismiss = (suggestionId: string) => {
-    const formData = new FormData();
-    formData.append("action", "dismiss-suggestion");
-    formData.append("suggestionId", suggestionId);
-    fetcher.submit(formData, { method: "POST" });
+    fetcher.submit({ action: "dismiss-suggestion", suggestionId }, { method: "POST" });
   };
 
   const pendingSuggestions = suggestions.filter((s: any) => s.status === "pending");
   const appliedSuggestions = suggestions.filter((s: any) => s.status === "applied");
-
-  // Check if a suggestion's items already exist as a rule
-  const isAlreadyRule = (items: string) => {
-    return existingRuleItems.includes(items);
-  };
+  const isAlreadyRule = (items: string) => existingRuleItems.includes(items);
 
   return (
-    <Page title="Bundle Analysis">
+    <Page
+      title="Bundle Analysis"
+      primaryAction={{
+        content: isAnalyzing ? "Analyzing..." : "Run Analysis",
+        onAction: handleAnalyze,
+        loading: isAnalyzing,
+      }}
+    >
       <TitleBar title="Bundle Analysis" />
 
-      <BlockStack gap="500">
+      <BlockStack gap="400">
         {error && (
-          <Banner tone="critical" title="Error">
-            <Text as="p" variant="bodyMd">{error}</Text>
+          <Banner tone="critical"><p>{error}</p></Banner>
+        )}
+
+        {isAnalyzing && (
+          <Banner tone="info">
+            <p>Scanning order history for bundling opportunities. This may take a moment for large catalogs.</p>
           </Banner>
         )}
 
-        {/* Analysis Controls */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">
-              Analyze Your Order History
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Our AI scans your past orders to find products customers frequently buy together.
-              These become bundle suggestions you can activate with one click.
-            </Text>
-
-            <InlineStack gap="300" blockAlign="end">
-              <Select
-                label="Analyze orders from the last"
-                options={[
-                  { label: "30 days", value: "30" },
-                  { label: "60 days", value: "60" },
-                  { label: "90 days", value: "90" },
-                  { label: "180 days", value: "180" },
-                ]}
-                value={daysBack}
-                onChange={setDaysBack}
-              />
-              <Button
-                variant="primary"
-                onClick={handleAnalyze}
-                loading={isAnalyzing}
-              >
-                {isAnalyzing ? "Analyzing Orders..." : "Run Analysis"}
-              </Button>
-            </InlineStack>
-
-            {isAnalyzing && (
-              <Banner tone="info">
-                <Text as="p" variant="bodyMd">
-                  Analyzing your order history... This may take a few minutes for large catalogs.
-                </Text>
-                <div style={{ marginTop: "8px" }}>
-                  <ProgressBar progress={50} size="small" />
-                </div>
-              </Banner>
-            )}
-          </BlockStack>
-        </Card>
-
-        {/* Stats */}
+        {/* Controls + Stats in one row */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="200">
-                <Text as="h3" variant="headingSm" tone="subdued">Orders Analyzed</Text>
-                <Text as="p" variant="heading2xl">{stats.totalOrders}</Text>
+                <Select
+                  label="Time range"
+                  options={[
+                    { label: "30 days", value: "30" },
+                    { label: "60 days", value: "60" },
+                    { label: "90 days", value: "90" },
+                    { label: "180 days", value: "180" },
+                  ]}
+                  value={daysBack}
+                  onChange={setDaysBack}
+                />
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm" tone="subdued">Item Pairs Found</Text>
-                <Text as="p" variant="heading2xl">{stats.cooccurrences}</Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Orders Analyzed</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalOrders.toLocaleString()}</Text>
+                <Text as="p" variant="bodySm" tone="subdued">{stats.cooccurrences} item pairs found</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm" tone="subdued">Bundle Suggestions</Text>
-                <Text as="p" variant="heading2xl">{pendingSuggestions.length}</Text>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Suggestions</Text>
+                <Text as="p" variant="headingLg" fontWeight="bold">{pendingSuggestions.length} pending</Text>
+                <Text as="p" variant="bodySm" tone="subdued">{appliedSuggestions.length} applied</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Pending Suggestions */}
+        {/* Suggestions */}
         {pendingSuggestions.length > 0 ? (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Bundle Suggestions ({pendingSuggestions.length})
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                These product combinations are frequently ordered together. Create a bundle rule to save on fulfillment.
-              </Text>
+              <Text as="h2" variant="headingMd">Suggestions</Text>
 
               {pendingSuggestions.map((suggestion: any) => {
                 const items = JSON.parse(suggestion.items);
                 const alreadyExists = isAlreadyRule(suggestion.items);
+                const confidence = Math.round(suggestion.confidence * 100);
 
                 return (
-                  <Card key={suggestion.id}>
-                    <BlockStack gap="300">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Text as="h3" variant="headingSm">{suggestion.name}</Text>
-                            <Badge tone={suggestion.confidence >= 0.7 ? "success" : suggestion.confidence >= 0.4 ? "warning" : "info"}>
-                              {Math.round(suggestion.confidence * 100)}% confidence
-                            </Badge>
-                            {alreadyExists && <Badge>Rule exists</Badge>}
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {items.length} items • Ordered together {suggestion.orderFrequency} times • Est. savings ${suggestion.potentialSavings.toFixed(2)}/order
-                          </Text>
-                        </BlockStack>
-
+                  <Box key={suggestion.id} padding="300" background="bg-surface-secondary" borderRadius="200">
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="h3" variant="headingSm">{suggestion.name}</Text>
+                          <Badge tone={confidence >= 70 ? "success" : confidence >= 40 ? "warning" : "info"}>
+                            {confidence}%
+                          </Badge>
+                          {alreadyExists && <Badge tone="info">Rule exists</Badge>}
+                        </InlineStack>
                         <InlineStack gap="200">
                           {!alreadyExists && (
-                            <Button
-                              variant="primary"
-                              onClick={() => handleCreateRule(suggestion.id)}
-                              loading={isCreating}
-                            >
-                              Create Bundle Rule
+                            <Button size="slim" variant="primary" onClick={() => handleCreateRule(suggestion.id)} loading={isCreating}>
+                              Create rule
                             </Button>
                           )}
-                          <Button
-                            variant="plain"
-                            onClick={() => handleDismiss(suggestion.id)}
-                          >
-                            Dismiss
-                          </Button>
+                          <Button size="slim" variant="plain" onClick={() => handleDismiss(suggestion.id)}>Dismiss</Button>
                         </InlineStack>
                       </InlineStack>
-
-                      <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                        <Text as="p" variant="bodySm" fontWeight="medium">
-                          Items: {items.join(" + ")}
-                        </Text>
-                      </Box>
-
-                      <ProgressBar
-                        progress={Math.min(suggestion.confidence * 100, 100)}
-                        size="small"
-                        tone={suggestion.confidence >= 0.7 ? "success" : suggestion.confidence >= 0.4 ? "warning" : "highlight"}
-                      />
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {items.length} items &middot; {suggestion.orderFrequency} co-occurrences &middot; ~${suggestion.potentialSavings.toFixed(2)} savings/order
+                      </Text>
+                      <Text as="p" variant="bodySm">{items.join(" + ")}</Text>
                     </BlockStack>
-                  </Card>
+                  </Box>
                 );
               })}
             </BlockStack>
@@ -365,15 +305,11 @@ export default function BundleAnalysis() {
         ) : (
           <Card>
             <EmptyState
-              heading="No bundle suggestions yet"
+              heading="No suggestions yet"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              action={{
-                content: "Run Analysis",
-                onAction: handleAnalyze,
-                loading: isAnalyzing,
-              }}
+              action={{ content: "Run Analysis", onAction: handleAnalyze, loading: isAnalyzing }}
             >
-              <p>Run an analysis on your order history to discover which products your customers frequently buy together.</p>
+              <p>Analyze your order history to discover products customers frequently buy together.</p>
             </EmptyState>
           </Card>
         )}
@@ -382,18 +318,14 @@ export default function BundleAnalysis() {
         {appliedSuggestions.length > 0 && (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">
-                Applied Suggestions ({appliedSuggestions.length})
-              </Text>
-              {appliedSuggestions.map((suggestion: any) => (
-                <InlineStack key={suggestion.id} align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">Applied ({appliedSuggestions.length})</Text>
+              {appliedSuggestions.map((s: any) => (
+                <InlineStack key={s.id} align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <Badge tone="success">Applied</Badge>
-                    <Text as="span" variant="bodyMd">{suggestion.name}</Text>
+                    <Badge tone="success">Active</Badge>
+                    <Text as="span" variant="bodyMd">{s.name}</Text>
                   </InlineStack>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    {Math.round(suggestion.confidence * 100)}% confidence
-                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued">{Math.round(s.confidence * 100)}%</Text>
                 </InlineStack>
               ))}
             </BlockStack>
