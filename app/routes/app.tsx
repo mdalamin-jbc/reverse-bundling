@@ -23,6 +23,7 @@ export default function App() {
       <TitleBar title="Reverse Bundle Pro" />
       <NavMenu>
         <Link to="/app/bundle-rules">Bundle Rules</Link>
+        <Link to="/app/bundle-analysis">Bundle Analysis</Link>
         <Link to="/app/orders">Order Conversions</Link>
         <Link to="/app/fulfillment">Fulfillment Provider</Link>
         <Link to="/app/billing">Billing</Link>

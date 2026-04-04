@@ -33,6 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       topPerformingRules,
       recentConversionsCount,
       monthlySavingsResult,
+      failedConversionsCount,
     ] = await Promise.all([
       // Count of active bundle rules
       db.bundleRule.count({
@@ -85,6 +86,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         },
         _sum: { savingsAmount: true },
       }),
+
+      // Failed conversions count
+      db.orderConversion.count({
+        where: { shop: session.shop, status: "failed" },
+      }),
     ]);
 
     // Calculate real analytics from database
@@ -109,6 +115,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         monthlySavings: Math.round(monthlySavings * 100) / 100,
         activeBundleRules: activeBundleRulesCount,
         recentConversionsCount: recentConversionsCount,
+        failedConversions: failedConversionsCount,
       },
       recentConversions: recentConversions,
       topRules: topPerformingRules,
@@ -126,6 +133,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         monthlySavings: 0,
         activeBundleRules: 0,
         recentConversionsCount: 0,
+        failedConversions: 0,
       },
       recentConversions: [],
       topRules: [],
@@ -180,7 +188,18 @@ export default function Dashboard() {
             tone="info"
             action={{ content: 'Create Your First Bundle Rule', url: '/app/bundle-rules' }}
           >
-            <p>Start saving on fulfillment costs by creating bundle rules. When customers order items together, they'll automatically be converted to bundled SKUs.</p>
+            <p>Start saving on fulfillment costs by creating bundle rules. When customers order items together, they'll automatically be tagged for bundle fulfillment.</p>
+          </Banner>
+        )}
+
+        {/* Failed Conversions Warning */}
+        {analytics.failedConversions > 0 && (
+          <Banner
+            title={`${analytics.failedConversions} order(s) failed to tag`}
+            tone="warning"
+            action={{ content: 'View Orders', url: '/app/orders' }}
+          >
+            <p>Some orders matched bundle rules but couldn't be tagged in Shopify. Check the Orders page for details.</p>
           </Banner>
         )}
 

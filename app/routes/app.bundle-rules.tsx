@@ -412,7 +412,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    // If not auto-creating, require SKU
+    // If not auto-creating, require SKU and validate it exists
     if (!autoCreateProduct && !bundledSku?.trim()) {
       return json({ 
         success: false, 
@@ -421,6 +421,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           bundledSku: true
         }
       });
+    }
+
+    // Validate that the bundled SKU exists in Shopify (unless auto-creating)
+    let skuWarning: string | null = null;
+    if (!autoCreateProduct && bundledSku?.trim()) {
+      try {
+        const { admin } = await authenticate.admin(request);
+        const skuCheckResponse = await admin.graphql(`
+          query CheckSku($query: String!) {
+            productVariants(first: 1, query: $query) {
+              edges { node { id sku } }
+            }
+          }
+        `, { variables: { query: `sku:${bundledSku.trim()}` } });
+        const skuCheckData = await skuCheckResponse.json();
+        const foundVariant = skuCheckData.data?.productVariants?.edges?.[0]?.node;
+        if (!foundVariant) {
+          skuWarning = `Warning: No product with SKU "${bundledSku.trim()}" found in your Shopify store. The bundle rule will be created, but orders won't be tagged until you create a product with this SKU.`;
+        }
+      } catch (skuCheckError) {
+        // Don't block creation if SKU check fails
+        logWarning('SKU validation check failed', { shop: session.shop, bundledSku });
+      }
     }
 
     // Generate rule ID once at the beginning - this will be used for both database and product tagging
@@ -773,9 +796,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     
     return json({ 
       success: true, 
-      message: autoCreateProduct 
-        ? `Bundle rule created and Shopify product auto-generated with combined price (savings: $${savings.toFixed(2)})!`
-        : `Bundle rule "${name}" created successfully!`,
+      message: skuWarning 
+        ? (autoCreateProduct 
+            ? `Bundle rule created and Shopify product auto-generated with combined price (savings: $${savings.toFixed(2)})!`
+            : `Bundle rule "${name}" created! ${skuWarning}`)
+        : (autoCreateProduct 
+            ? `Bundle rule created and Shopify product auto-generated with combined price (savings: $${savings.toFixed(2)})!`
+            : `Bundle rule "${name}" created successfully!`),
+      skuWarning,
       reload: true
     });
   }
@@ -1244,6 +1272,80 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: `Analysis failed: ${errorMessage}`,
         suggestions: []
       });
+    }
+  }
+
+  // Preview/dry-run: check how many past orders would match this rule
+  if (action === "previewRule") {
+    const items = formData.get("items") as string;
+    if (!items?.trim()) {
+      return json({ success: false, message: "No items provided for preview" });
+    }
+
+    try {
+      const ruleItems = items.split(",").filter(item => item.trim());
+      
+      // Find orders from OrderHistory that contain ALL of these items
+      const allOrders = await db.orderHistory.findMany({
+        where: {
+          shop: session.shop,
+          processed: false,
+        },
+        select: { lineItems: true, orderId: true, orderDate: true, totalValue: true },
+        take: 5000,
+      });
+
+      let matchCount = 0;
+      let totalSavings = 0;
+      const recentMatches: Array<{ orderId: string; orderDate: string; totalValue: number }> = [];
+
+      // Get fulfillment cost settings
+      const settings = await db.appSettings.findUnique({
+        where: { shop: session.shop },
+      });
+      const individualCost = (settings as any)?.individualShipCost ?? 7.0;
+      const bundleCost = (settings as any)?.bundleShipCost ?? 9.0;
+
+      for (const order of allOrders) {
+        try {
+          const lineItemsData = JSON.parse(order.lineItems) as Array<{ sku?: string; variantId?: string }>;
+          const orderItemIds = lineItemsData.map(li => li.sku || li.variantId || '').filter(Boolean);
+          
+          const hasAllItems = ruleItems.every(ruleItem => orderItemIds.includes(ruleItem));
+          
+          if (hasAllItems) {
+            matchCount++;
+            const savingsPerOrder = (ruleItems.length * individualCost) - bundleCost;
+            totalSavings += savingsPerOrder;
+            if (recentMatches.length < 5) {
+              recentMatches.push({
+                orderId: order.orderId,
+                orderDate: order.orderDate.toISOString(),
+                totalValue: order.totalValue,
+              });
+            }
+          }
+        } catch {
+          // Skip malformed lineItems
+        }
+      }
+
+      return json({
+        success: true,
+        preview: {
+          matchCount,
+          totalOrdersChecked: allOrders.length,
+          estimatedTotalSavings: Math.round(totalSavings * 100) / 100,
+          savingsPerOrder: ruleItems.length > 0 ? Math.round(((ruleItems.length * individualCost) - bundleCost) * 100) / 100 : 0,
+          recentMatches,
+        },
+        message: matchCount > 0
+          ? `This rule would have matched ${matchCount} of ${allOrders.length} past orders, saving an estimated $${totalSavings.toFixed(2)}`
+          : `No matching orders found in ${allOrders.length} past orders. This combination may not be common yet.`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return json({ success: false, message: `Preview failed: ${errorMessage}` });
     }
   }
 };

@@ -168,7 +168,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       emailNotifications: formData.get("emailNotifications") === "true",
       slackWebhook: formData.get("slackWebhook") as string || null,
       autoConvertOrders: formData.get("autoConvertOrders") === "true",
-      minimumSavings: parseFloat(formData.get("minimumSavings") as string) || 0
+      minimumSavings: parseFloat(formData.get("minimumSavings") as string) || 0,
+      individualShipCost: parseFloat(formData.get("individualShipCost") as string) || 7.0,
+      bundleShipCost: parseFloat(formData.get("bundleShipCost") as string) || 9.0,
     };
 
     const settings = await db.appSettings.upsert({
@@ -249,6 +251,8 @@ export default function Settings() {
   const [slackWebhook, setSlackWebhook] = useState(settings.slackWebhook || "");
   const [autoConvertOrders, setAutoConvertOrders] = useState(settings.autoConvertOrders);
   const [minimumSavings, setMinimumSavings] = useState(String(settings.minimumSavings));
+  const [individualShipCost, setIndividualShipCost] = useState(String((settings as any).individualShipCost ?? 7.0));
+  const [bundleShipCost, setBundleShipCost] = useState(String((settings as any).bundleShipCost ?? 9.0));
   const [hasChanges, setHasChanges] = useState(false);
 
   // Track changes
@@ -258,9 +262,11 @@ export default function Settings() {
       emailNotifications !== settings.emailNotifications ||
       slackWebhook !== (settings.slackWebhook || "") ||
       autoConvertOrders !== settings.autoConvertOrders ||
-      minimumSavings !== String(settings.minimumSavings);
+      minimumSavings !== String(settings.minimumSavings) ||
+      individualShipCost !== String((settings as any).individualShipCost ?? 7.0) ||
+      bundleShipCost !== String((settings as any).bundleShipCost ?? 9.0);
     setHasChanges(changed);
-  }, [notificationsEnabled, emailNotifications, slackWebhook, autoConvertOrders, minimumSavings, settings]);
+  }, [notificationsEnabled, emailNotifications, slackWebhook, autoConvertOrders, minimumSavings, individualShipCost, bundleShipCost, settings]);
 
   useEffect(() => {
     if (fetcher.data?.success) {
@@ -278,6 +284,8 @@ export default function Settings() {
     formData.append("slackWebhook", slackWebhook);
     formData.append("autoConvertOrders", String(autoConvertOrders));
     formData.append("minimumSavings", minimumSavings);
+    formData.append("individualShipCost", individualShipCost);
+    formData.append("bundleShipCost", bundleShipCost);
     
     fetcher.submit(formData, { method: "POST" });
   };
@@ -479,6 +487,57 @@ export default function Settings() {
                       autoComplete="off"
                       helpText="Only convert orders with savings above this amount"
                     />
+                  </FormLayout>
+                </BlockStack>
+              </Card>
+
+              {/* Fulfillment Cost Settings */}
+              <Card>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingLg" fontWeight="semibold">
+                      Fulfillment Costs
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Your actual shipping costs — used to calculate real savings per bundled order
+                    </Text>
+                  </BlockStack>
+
+                  <Divider />
+
+                  <FormLayout>
+                    <TextField
+                      label="Cost to ship each item individually"
+                      value={individualShipCost}
+                      onChange={setIndividualShipCost}
+                      type="number"
+                      prefix="$"
+                      min="0"
+                      step={0.01}
+                      autoComplete="off"
+                      helpText="Average pick, pack & ship cost per individual item"
+                    />
+
+                    <TextField
+                      label="Cost to ship as pre-packed bundle"
+                      value={bundleShipCost}
+                      onChange={setBundleShipCost}
+                      type="number"
+                      prefix="$"
+                      min="0"
+                      step={0.01}
+                      autoComplete="off"
+                      helpText="Cost to ship one pre-packed bundle (regardless of items inside)"
+                    />
+
+                    {parseFloat(individualShipCost) > 0 && parseFloat(bundleShipCost) > 0 && (
+                      <Banner tone="info">
+                        <Text as="p" variant="bodyMd">
+                          Example: A 3-item bundle saves <strong>${((parseFloat(individualShipCost) * 3) - parseFloat(bundleShipCost)).toFixed(2)}</strong> per order
+                          ({' '}3 × ${parseFloat(individualShipCost).toFixed(2)} - ${parseFloat(bundleShipCost).toFixed(2)}{' '})
+                        </Text>
+                      </Banner>
+                    )}
                   </FormLayout>
                 </BlockStack>
               </Card>

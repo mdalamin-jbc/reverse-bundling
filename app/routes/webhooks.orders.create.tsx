@@ -161,6 +161,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("No active rules", { status: 200 });
     }
 
+    // Get merchant fulfillment cost settings for accurate savings calculation
+    let individualShipCost = 7.0;
+    let bundleShipCost = 9.0;
+    try {
+      const settings = await db.appSettings.findUnique({ where: { shop } });
+      if (settings) {
+        individualShipCost = (settings as any).individualShipCost ?? 7.0;
+        bundleShipCost = (settings as any).bundleShipCost ?? 9.0;
+      }
+    } catch { /* use defaults */ }
+
     // Extract order line items
     const lineItems = order.line_items || [];
     const orderSkus = lineItems
@@ -227,8 +238,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             return new Response("Conversion already exists", { status: 200 });
           }
 
-          // Create order conversion record
+          // Create order conversion record with status tracking
           const originalIdentifiers = [...new Set([...orderSkus, ...orderVariantIds])];
+          const ruleItems = JSON.parse(rule.items) as string[];
+          // Calculate real savings from merchant's fulfillment costs
+          const calculatedSavings = (ruleItems.length * individualShipCost) - bundleShipCost;
+          const actualSavings = calculatedSavings > 0 ? calculatedSavings : rule.savings;
+          
           await db.orderConversion.create({
             data: {
               shop,
@@ -236,7 +252,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               originalItems: JSON.stringify(originalIdentifiers),
               bundledSku: rule.bundledSku,
               bundleRuleId: rule.id,
-              savingsAmount: rule.savings,
+              savingsAmount: actualSavings,
+              status: "pending",
             },
           });
 
@@ -329,7 +346,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               orderNumber: order.name || `#${String(order.id)}`,
               bundleName: rule.name,
               bundledSku: rule.bundledSku,
-              savings: rule.savings,
+              savings: actualSavings,
               items: ruleItems,
               appUrl: `https://${shop}/admin/apps/reverse-bundling/app`,
             });
@@ -344,120 +361,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             logError(slackError as Error, { context: 'send_slack_notification', shop, orderId: String(order.id) });
           }
           
-          // 🔥 MODIFY THE ORDER IN SHOPIFY - Make it real!
+          // TAG THE ORDER FOR FULFILLMENT — safe approach that doesn't modify customer-facing line items
+          // The warehouse reads tags/notes/metafields to know which pre-packed bundle to ship
           try {
-            // Check if admin API is available from webhook
             if (!admin) {
-              throw new Error('Admin API not available in webhook context - order modification skipped');
+              throw new Error('Admin API not available in webhook context - order tagging skipped');
             }
 
-            // Get session for reference
-            const session = await db.session.findFirst({
-              where: { shop },
-              orderBy: { id: 'desc' },
-            });
-
-            if (!session) {
-              logInfo('No session found but continuing with admin from webhook', { shop });
-            }
-
-            // Step 1: Find the bundle product by SKU in Shopify
-            logInfo('Looking up bundle product in Shopify', { 
-              shop, 
-              bundledSku: rule.bundledSku 
-            });
-
-            const productQuery = await admin.graphql(`
-              query FindBundleProduct($query: String!) {
-                products(first: 1, query: $query) {
-                  edges {
-                    node {
-                      id
-                      title
-                      variants(first: 1) {
-                        edges {
-                          node {
-                            id
-                            sku
-                            price
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            `, {
-              variables: {
-                query: `sku:${rule.bundledSku}`
-              }
-            });
-
-            const productData = await productQuery.json();
-            const bundleProduct = productData.data?.products?.edges?.[0]?.node;
-
-            if (!bundleProduct) {
-              const errorMsg = `Bundle product not found for SKU: ${rule.bundledSku}. Please create this product in Shopify first with the exact SKU "${rule.bundledSku}". The bundle rule "${rule.name}" requires this product to exist.`;
-              logError(new Error(errorMsg), { 
-                shop, 
-                bundledSku: rule.bundledSku, 
-                ruleName: rule.name,
-                orderId: String(order.id)
-              });
-              throw new Error(errorMsg);
-            }
-
-            const bundleVariantId = bundleProduct.variants.edges[0]?.node?.id;
-
-            logInfo('Bundle product found', { 
-              shop, 
-              bundleProductId: bundleProduct.id,
-              bundleVariantId,
-              bundleTitle: bundleProduct.title
-            });
-
-            // Step 2: Modify the order - remove original items, add bundle
             const orderId = `gid://shopify/Order/${order.id}`;
             
-            // Calculate total quantity (sum of all matched items)
-            const matchedLineItems = lineItems.filter(item => {
-              const itemSku = item.sku || '';
-              const itemVariantId = item.variant_id ? `gid://shopify/ProductVariant/${item.variant_id}` : '';
-              return ruleItems.includes(itemSku) || ruleItems.includes(itemVariantId);
-            });
+            // Build fulfillment note with clear instructions
+            const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
             
-            const totalQuantity = matchedLineItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            // Existing note (if any) — append rather than overwrite
+            const existingNote = (payload as any).note || '';
+            const fullNote = existingNote 
+              ? `${existingNote}\n\n${bundleNote}` 
+              : bundleNote;
 
-            // Get line item IDs to remove
-            const lineItemIdsToRemove = matchedLineItems.map(item => 
-              `gid://shopify/LineItem/${item.id}`
-            );
+            // Step 1: Add tags to the order for easy filtering in Shopify admin
+            const tagsToAdd = [
+              'reverse-bundled',
+              `bundle:${rule.bundledSku}`,
+              `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+            ];
 
-            logInfo('Modifying order in Shopify', {
-              shop,
-              orderId,
-              removing: lineItemIdsToRemove.length,
-              adding: bundleVariantId,
-              quantity: totalQuantity
-            });
-
-            // Use orderEditBegin to modify the order
-            const editBeginResponse = await admin.graphql(`
-              mutation orderEditBegin($id: ID!) {
-                orderEditBegin(id: $id) {
-                  calculatedOrder {
-                    id
-                    lineItems(first: 50) {
-                      edges {
-                        node {
-                          id
-                          variant {
-                            id
-                          }
-                        }
-                      }
-                    }
-                  }
+            await admin.graphql(`
+              mutation tagsAdd($id: ID!, $tags: [String!]!) {
+                tagsAdd(id: $id, tags: $tags) {
                   userErrors {
                     field
                     message
@@ -465,149 +396,79 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
               }
             `, {
-              variables: {
-                id: orderId
-              }
+              variables: { id: orderId, tags: tagsToAdd }
             });
 
-            const editBeginData = await editBeginResponse.json();
-            
-            if (editBeginData.data?.orderEditBegin?.userErrors?.length > 0) {
-              throw new Error(`Failed to begin order edit: ${JSON.stringify(editBeginData.data.orderEditBegin.userErrors)}`);
-            }
-
-            const calculatedOrderId = editBeginData.data?.orderEditBegin?.calculatedOrder?.id;
-            const calculatedLineItems = editBeginData.data?.orderEditBegin?.calculatedOrder?.lineItems?.edges || [];
-            
-            // Map variant IDs to calculated line item IDs
-            const variantToCalculatedLineItem = new Map();
-            calculatedLineItems.forEach((edge: any) => {
-              const variantId = edge.node.variant?.id;
-              const calculatedLineItemId = edge.node.id;
-              if (variantId && calculatedLineItemId) {
-                variantToCalculatedLineItem.set(variantId, calculatedLineItemId);
-              }
-            });
-
-            // Add the bundle item with custom price matching the original items
-            const addItemResponse = await admin.graphql(`
-              mutation orderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!, $allowDuplicates: Boolean) {
-                orderEditAddVariant(
-                  id: $id
-                  variantId: $variantId
-                  quantity: $quantity
-                  allowDuplicates: $allowDuplicates
-                ) {
-                  calculatedLineItem {
-                    id
-                  }
-                  userErrors {
-                    field
-                    message
-                  }
+            // Step 2: Update order note with fulfillment instructions
+            await admin.graphql(`
+              mutation orderUpdate($input: OrderInput!) {
+                orderUpdate(input: $input) {
+                  order { id }
+                  userErrors { field message }
                 }
               }
             `, {
               variables: {
-                id: calculatedOrderId,
-                variantId: bundleVariantId,
-                quantity: 1,
-                allowDuplicates: false
-              }
-            });
-
-            const addItemData = await addItemResponse.json();
-            
-            if (addItemData.data?.orderEditAddVariant?.userErrors?.length > 0) {
-              throw new Error(`Failed to add bundle item: ${JSON.stringify(addItemData.data.orderEditAddVariant.userErrors)}`);
-            }
-
-            // Remove original line items using CALCULATED line item IDs
-            for (const item of matchedLineItems) {
-              const variantId = `gid://shopify/ProductVariant/${item.variant_id}`;
-              const calculatedLineItemId = variantToCalculatedLineItem.get(variantId);
-              
-              if (calculatedLineItemId) {
-                await admin.graphql(`
-                  mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
-                    orderEditSetQuantity(
-                      id: $id
-                      lineItemId: $lineItemId
-                      quantity: $quantity
-                    ) {
-                      calculatedLineItem {
-                        id
-                      }
-                      userErrors {
-                        field
-                        message
-                      }
-                    }
-                  }
-                `, {
-                  variables: {
-                    id: calculatedOrderId,
-                    lineItemId: calculatedLineItemId,
-                    quantity: 0 // Set to 0 to remove
-                  }
-                });
-              }
-            }
-
-            // Commit the changes
-            const commitResponse = await admin.graphql(`
-              mutation orderEditCommit($id: ID!) {
-                orderEditCommit(
-                  id: $id
-                  notifyCustomer: false
-                ) {
-                  order {
-                    id
-                  }
-                  userErrors {
-                    field
-                    message
-                  }
+                input: {
+                  id: orderId,
+                  note: fullNote,
+                  metafields: [{
+                    namespace: "reverse_bundle",
+                    key: "fulfillment_instruction",
+                    type: "json",
+                    value: JSON.stringify({
+                      bundledSku: rule.bundledSku,
+                      bundleRuleName: rule.name,
+                      originalItems: ruleItems,
+                      savings: actualSavings,
+                      convertedAt: new Date().toISOString(),
+                      instruction: `Ship pre-packed bundle SKU ${rule.bundledSku} instead of ${ruleItems.length} individual items`
+                    })
+                  }]
                 }
               }
-            `, {
-              variables: {
-                id: calculatedOrderId
-              }
             });
 
-            const commitData = await commitResponse.json();
-            
-            if (commitData.data?.orderEditCommit?.userErrors?.length > 0) {
-              throw new Error(`Failed to commit order edit: ${JSON.stringify(commitData.data.orderEditCommit.userErrors)}`);
-            }
+            // Mark conversion as successful
+            await db.orderConversion.updateMany({
+              where: { shop, orderId: String(order.id) },
+              data: { status: "success" }
+            });
 
-            logInfo('✅ Order successfully modified in Shopify!', {
+            logInfo('✅ Order tagged for bundle fulfillment', {
               shop,
               orderId: String(order.id),
               bundledSku: rule.bundledSku,
-              removedItems: lineItemIdsToRemove.length,
-              addedBundle: bundleProduct.title
+              tags: tagsToAdd,
+              note: bundleNote
             });
 
-          } catch (modificationError) {
-            logError(modificationError as Error, {
-              context: 'order_modification',
+          } catch (taggingError) {
+            logError(taggingError as Error, {
+              context: 'order_tagging',
               shop,
               orderId: String(order.id),
               bundledSku: rule.bundledSku
             });
             
-            // Don't fail the webhook - conversion still recorded in DB
-            logInfo('Order conversion recorded but Shopify modification failed', {
+            // Mark conversion as failed with error details
+            await db.orderConversion.updateMany({
+              where: { shop, orderId: String(order.id) },
+              data: { 
+                status: "failed",
+                errorMessage: (taggingError as Error).message?.substring(0, 500)
+              }
+            });
+            
+            logInfo('Order conversion recorded but Shopify tagging failed — merchant can tag manually', {
               shop,
               orderId: String(order.id),
-              error: (modificationError as Error).message
+              error: (taggingError as Error).message
             });
           }
           
           perfMonitor.end({ shop, orderId: String(order.id), success: true });
-          break; // Only apply first matching rule
+          // Continue to check other rules — don't break (multiple bundles per order)
         }
       } catch (error) {
         logError(error as Error, { 

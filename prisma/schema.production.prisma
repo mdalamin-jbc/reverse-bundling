@@ -79,6 +79,8 @@ model OrderConversion {
   bundledSku      String
   bundleRuleId    String
   savingsAmount   Float
+  status          String   @default("success") // success, failed, pending
+  errorMessage    String?
   convertedAt     DateTime @default(now())
 
   bundleRule BundleRule @relation(fields: [bundleRuleId], references: [id], onDelete: Cascade)
@@ -87,6 +89,7 @@ model OrderConversion {
   @@index([shop])
   @@index([orderId])
   @@index([bundleRuleId])
+  @@index([shop, status])
   @@map("order_conversions")
 }
 
@@ -118,6 +121,8 @@ model AppSettings {
   slackWebhook          String?
   autoConvertOrders     Boolean  @default(true)
   minimumSavings        Float    @default(0.0)
+  individualShipCost    Float    @default(7.0)  // Cost to ship each item individually
+  bundleShipCost        Float    @default(9.0)  // Cost to ship as pre-packed bundle
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
