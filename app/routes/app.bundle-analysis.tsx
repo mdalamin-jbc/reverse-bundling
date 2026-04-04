@@ -13,7 +13,17 @@ import {
   EmptyState,
   Select,
   Box,
+  Divider,
+  ProgressBar,
+  Icon,
 } from "@shopify/polaris";
+import {
+  SearchIcon,
+  ProductIcon,
+  ChartVerticalFilledIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
@@ -203,37 +213,41 @@ export default function BundleAnalysis() {
   return (
     <Page
       title="Bundle Analysis"
+      subtitle="Discover products frequently bought together to create profitable bundle rules"
       primaryAction={{
         content: isAnalyzing ? "Analyzing..." : "Run Analysis",
         onAction: handleAnalyze,
         loading: isAnalyzing,
+        icon: SearchIcon,
       }}
     >
       <TitleBar title="Bundle Analysis" />
 
-      <BlockStack gap="400">
+      <BlockStack gap="500">
         {error && (
           <Banner tone="critical"><p>{error}</p></Banner>
         )}
 
         {isAnalyzing && (
           <Banner tone="info">
-            <p>Scanning order history for bundling opportunities. This may take a moment for large catalogs.</p>
+            <p>Scanning your order history for bundling opportunities. This may take a moment for stores with many orders.</p>
           </Banner>
         )}
 
-        {/* Controls + Stats in one row */}
+        {/* Stats + Controls */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="200">
+              <BlockStack gap="300">
+                <Text as="p" variant="bodySm" tone="subdued">Time Range</Text>
                 <Select
-                  label="Time range"
+                  label=""
+                  labelHidden
                   options={[
-                    { label: "30 days", value: "30" },
-                    { label: "60 days", value: "60" },
-                    { label: "90 days", value: "90" },
-                    { label: "180 days", value: "180" },
+                    { label: "Last 30 days", value: "30" },
+                    { label: "Last 60 days", value: "60" },
+                    { label: "Last 90 days", value: "90" },
+                    { label: "Last 180 days", value: "180" },
                   ]}
                   value={daysBack}
                   onChange={setDaysBack}
@@ -243,8 +257,13 @@ export default function BundleAnalysis() {
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Orders Analyzed</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Orders Analyzed</Text>
+                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
+                    <Icon source={ChartVerticalFilledIcon} tone="info" />
+                  </Box>
+                </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalOrders.toLocaleString()}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{stats.cooccurrences} item pairs found</Text>
               </BlockStack>
@@ -252,20 +271,29 @@ export default function BundleAnalysis() {
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Suggestions</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Suggestions</Text>
+                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
+                    <Icon source={ProductIcon} tone="success" />
+                  </Box>
+                </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{pendingSuggestions.length} pending</Text>
-                <Text as="p" variant="bodySm" tone="subdued">{appliedSuggestions.length} applied</Text>
+                <Text as="p" variant="bodySm" tone="subdued">{appliedSuggestions.length} applied as rules</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Suggestions */}
+        {/* Pending Suggestions */}
         {pendingSuggestions.length > 0 ? (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Suggestions</Text>
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Bundle Suggestions</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Products frequently purchased together. Create rules to start saving on fulfillment.</Text>
+              </BlockStack>
+              <Divider />
 
               {pendingSuggestions.map((suggestion: any) => {
                 const items = JSON.parse(suggestion.items);
@@ -273,29 +301,42 @@ export default function BundleAnalysis() {
                 const confidence = Math.round(suggestion.confidence * 100);
 
                 return (
-                  <Box key={suggestion.id} padding="300" background="bg-surface-secondary" borderRadius="200">
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text as="h3" variant="headingSm">{suggestion.name}</Text>
-                          <Badge tone={confidence >= 70 ? "success" : confidence >= 40 ? "warning" : "info"}>
-                            {confidence}%
-                          </Badge>
-                          {alreadyExists && <Badge tone="info">Rule exists</Badge>}
-                        </InlineStack>
+                  <Box key={suggestion.id} padding="400" background="bg-surface-secondary" borderRadius="300">
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="start" wrap={false}>
+                        <BlockStack gap="200">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text as="h3" variant="headingSm" fontWeight="semibold">{suggestion.name}</Text>
+                            {alreadyExists && <Badge tone="info">Rule exists</Badge>}
+                          </InlineStack>
+                          <InlineStack gap="300" wrap>
+                            <Text as="p" variant="bodySm" tone="subdued">{items.length} items</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">{suggestion.orderFrequency} co-occurrences</Text>
+                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">~${suggestion.potentialSavings.toFixed(2)}/order</Text>
+                          </InlineStack>
+                        </BlockStack>
                         <InlineStack gap="200">
                           {!alreadyExists && (
                             <Button size="slim" variant="primary" onClick={() => handleCreateRule(suggestion.id)} loading={isCreating}>
                               Create rule
                             </Button>
                           )}
-                          <Button size="slim" variant="plain" onClick={() => handleDismiss(suggestion.id)}>Dismiss</Button>
+                          <Button size="slim" variant="plain" tone="critical" onClick={() => handleDismiss(suggestion.id)}>Dismiss</Button>
                         </InlineStack>
                       </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {items.length} items &middot; {suggestion.orderFrequency} co-occurrences &middot; ~${suggestion.potentialSavings.toFixed(2)} savings/order
-                      </Text>
-                      <Text as="p" variant="bodySm">{items.join(" + ")}</Text>
+
+                      {/* Confidence bar */}
+                      <BlockStack gap="100">
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">Confidence</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{confidence}%</Text>
+                        </InlineStack>
+                        <ProgressBar progress={confidence} tone={confidence >= 70 ? "success" : confidence >= 40 ? "highlight" : "critical"} size="small" />
+                      </BlockStack>
+
+                      <Box padding="200" background="bg-surface" borderRadius="200">
+                        <Text as="p" variant="bodySm">{items.join("  +  ")}</Text>
+                      </Box>
                     </BlockStack>
                   </Box>
                 );
@@ -305,11 +346,11 @@ export default function BundleAnalysis() {
         ) : (
           <Card>
             <EmptyState
-              heading="No suggestions yet"
+              heading="No bundle suggestions yet"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               action={{ content: "Run Analysis", onAction: handleAnalyze, loading: isAnalyzing }}
             >
-              <p>Analyze your order history to discover products customers frequently buy together.</p>
+              <p>Analyze your order history to discover products that customers frequently buy together. Our algorithm identifies the best bundling opportunities.</p>
             </EmptyState>
           </Card>
         )}
@@ -317,15 +358,22 @@ export default function BundleAnalysis() {
         {/* Applied Suggestions */}
         {appliedSuggestions.length > 0 && (
           <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Applied ({appliedSuggestions.length})</Text>
+            <BlockStack gap="400">
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Applied Suggestions</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Suggestions that have been converted to bundle rules</Text>
+              </BlockStack>
+              <Divider />
               {appliedSuggestions.map((s: any) => (
                 <InlineStack key={s.id} align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <Badge tone="success">Active</Badge>
+                    <Icon source={CheckCircleIcon} tone="success" />
                     <Text as="span" variant="bodyMd">{s.name}</Text>
                   </InlineStack>
-                  <Text as="span" variant="bodySm" tone="subdued">{Math.round(s.confidence * 100)}%</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge tone="success">Active</Badge>
+                    <Text as="span" variant="bodySm" tone="subdued">{Math.round(s.confidence * 100)}% confidence</Text>
+                  </InlineStack>
                 </InlineStack>
               ))}
             </BlockStack>

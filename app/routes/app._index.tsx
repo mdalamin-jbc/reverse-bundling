@@ -13,7 +13,20 @@ import {
   DataTable,
   EmptyState,
   Banner,
+  Box,
+  Divider,
+  ProgressBar,
+  Icon,
 } from "@shopify/polaris";
+import {
+  OrderIcon,
+  CashDollarIcon,
+  InventoryIcon,
+  ChartVerticalFilledIcon,
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  ArrowRightIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -147,112 +160,217 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const hasData = analytics.totalConversions > 0 || analytics.activeBundleRules > 0;
+  const successRate = analytics.totalConversions > 0
+    ? Math.round(((analytics.totalConversions - analytics.failedConversions) / analytics.totalConversions) * 100)
+    : 100;
 
   return (
     <Page title="Dashboard">
-      <TitleBar title="Dashboard" />
+      <TitleBar title="Reverse Bundle Pro" />
       
-      <BlockStack gap="400">
-        {/* Failed conversions warning */}
+      <BlockStack gap="500">
+        {/* Failed conversions alert */}
         {analytics.failedConversions > 0 && (
           <Banner
-            title={`${analytics.failedConversions} failed conversion${analytics.failedConversions > 1 ? 's' : ''}`}
+            title={`${analytics.failedConversions} failed conversion${analytics.failedConversions > 1 ? 's' : ''} need attention`}
             tone="warning"
-            action={{ content: 'View details', url: '/app/orders' }}
+            action={{ content: 'Review orders', url: '/app/orders' }}
           >
-            <p>Some orders matched rules but couldn't be processed. Check Orders for details.</p>
+            <p>Some orders matched rules but couldn't be processed. Review failed conversions to take action.</p>
           </Banner>
         )}
 
-        {/* Welcome state */}
+        {/* Onboarding for new users */}
         {!hasData && (
-          <Banner
-            title="Welcome to Reverse Bundle Pro"
-            tone="info"
-            action={{ content: 'Create bundle rule', url: '/app/bundle-rules' }}
-            secondaryAction={{ content: 'Run analysis', url: '/app/bundle-analysis' }}
-          >
-            <p>Create bundle rules to automatically detect when customers order items that can ship as a pre-packed bundle, saving you fulfillment costs.</p>
-          </Banner>
+          <Card>
+            <BlockStack gap="400">
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingLg" fontWeight="bold">Get started with Reverse Bundle Pro</Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Automatically detect when customers order items that can ship as a pre-packed bundle, saving you fulfillment costs on every qualifying order.
+                </Text>
+              </BlockStack>
+              <Divider />
+              <Layout>
+                <Layout.Section variant="oneThird">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Box background="bg-fill-info" padding="100" borderRadius="200">
+                        <Icon source={InventoryIcon} tone="info" />
+                      </Box>
+                      <Text as="h3" variant="headingSm" fontWeight="semibold">1. Create rules</Text>
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Define which products ship together as a pre-packed bundle with a single SKU.
+                    </Text>
+                    <Button variant="primary" onClick={() => navigate('/app/bundle-rules')}>Create bundle rule</Button>
+                  </BlockStack>
+                </Layout.Section>
+                <Layout.Section variant="oneThird">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Box background="bg-fill-info" padding="100" borderRadius="200">
+                        <Icon source={ChartVerticalFilledIcon} tone="info" />
+                      </Box>
+                      <Text as="h3" variant="headingSm" fontWeight="semibold">2. Analyze orders</Text>
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Scan your order history to discover products frequently bought together.
+                    </Text>
+                    <Button onClick={() => navigate('/app/bundle-analysis')}>Run analysis</Button>
+                  </BlockStack>
+                </Layout.Section>
+                <Layout.Section variant="oneThird">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Box background="bg-fill-info" padding="100" borderRadius="200">
+                        <Icon source={CashDollarIcon} tone="info" />
+                      </Box>
+                      <Text as="h3" variant="headingSm" fontWeight="semibold">3. Save on shipping</Text>
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Orders matching your rules are automatically tagged or edited for bundled fulfillment.
+                    </Text>
+                    <Button onClick={() => navigate('/app/settings')}>Configure</Button>
+                  </BlockStack>
+                </Layout.Section>
+              </Layout>
+            </BlockStack>
+          </Card>
         )}
 
-        {/* Metrics */}
+        {/* Key Metrics */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
+                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
+                    <Icon source={OrderIcon} tone="success" />
+                  </Box>
+                </InlineStack>
                 <Text as="p" variant="headingXl" fontWeight="bold">
                   {analytics.totalConversions.toLocaleString()}
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {analytics.recentConversionsCount} in last 30 days
-                </Text>
+                <Divider />
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Last 30 days</Text>
+                  <Badge tone="info">{analytics.recentConversionsCount}</Badge>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
+                    <Icon source={CashDollarIcon} tone="success" />
+                  </Box>
+                </InlineStack>
                 <Text as="p" variant="headingXl" fontWeight="bold" tone="success">
                   ${analytics.totalSavings.toLocaleString()}
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  ${analytics.avgSavingsPerOrder.toFixed(2)} avg per order
-                </Text>
+                <Divider />
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Avg per order</Text>
+                  <Text as="p" variant="bodySm" fontWeight="semibold">${analytics.avgSavingsPerOrder.toFixed(2)}</Text>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
+                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
+                    <Icon source={InventoryIcon} tone="info" />
+                  </Box>
+                </InlineStack>
                 <Text as="p" variant="headingXl" fontWeight="bold">
                   {analytics.activeBundleRules}
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  ${analytics.monthlySavings.toLocaleString()} saved this month
-                </Text>
+                <Divider />
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">This month savings</Text>
+                  <Text as="p" variant="bodySm" fontWeight="semibold" tone="success">${analytics.monthlySavings.toLocaleString()}</Text>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Top Rules + Recent Conversions side by side */}
+        {/* Success rate bar */}
+        {hasData && (
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={CheckCircleIcon} tone="success" />
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">Conversion Success Rate</Text>
+                </InlineStack>
+                <Text as="p" variant="bodyMd" fontWeight="bold">{successRate}%</Text>
+              </InlineStack>
+              <ProgressBar progress={successRate} tone={successRate >= 90 ? "success" : successRate >= 70 ? "highlight" : "critical"} size="small" />
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* Content sections */}
         <Layout>
-          {topRules.length > 0 && (
-            <Layout.Section variant={recentConversions.length > 0 ? "oneHalf" : undefined}>
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Top Rules</Text>
-                    <Button variant="plain" onClick={() => navigate('/app/bundle-rules')}>Manage</Button>
-                  </InlineStack>
+          {/* Top Performing Rules */}
+          <Layout.Section variant={recentConversions.length > 0 ? "oneHalf" : undefined}>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Top Performing Rules</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Ranked by conversion frequency</Text>
+                  </BlockStack>
+                  <Button variant="plain" icon={ArrowRightIcon} onClick={() => navigate('/app/bundle-rules')}>Manage</Button>
+                </InlineStack>
+                <Divider />
+                {topRules.length > 0 ? (
                   <DataTable
                     columnContentTypes={['text', 'numeric', 'numeric', 'text']}
-                    headings={['Rule', 'Hits', 'Savings', 'Status']}
+                    headings={['Rule Name', 'Conversions', 'Savings', 'Status']}
                     rows={topRules.map((rule) => [
                       rule.name,
                       rule.frequency,
                       `$${rule.savings.toFixed(2)}`,
-                      <Badge key={rule.id} tone={rule.status === 'active' ? 'success' : 'info'}>{rule.status}</Badge>,
+                      <Badge key={rule.id} tone={rule.status === 'active' ? 'success' : 'attention'}>{rule.status}</Badge>,
                     ])}
+                    hoverable
                   />
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
+                ) : (
+                  <Box paddingBlock="600">
+                    <BlockStack gap="200" inlineAlign="center">
+                      <Text as="p" variant="bodyMd" tone="subdued">No rules created yet</Text>
+                      <Button onClick={() => navigate('/app/bundle-rules')}>Create your first rule</Button>
+                    </BlockStack>
+                  </Box>
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
 
+          {/* Recent Conversions */}
           <Layout.Section variant={topRules.length > 0 ? "oneHalf" : undefined}>
             <Card>
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h2" variant="headingMd">Recent Conversions</Text>
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Recent Conversions</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Latest bundle matches</Text>
+                  </BlockStack>
                   {recentConversions.length > 0 && (
-                    <Button variant="plain" onClick={() => navigate('/app/orders')}>View all</Button>
+                    <Button variant="plain" icon={ArrowRightIcon} onClick={() => navigate('/app/orders')}>View all</Button>
                   )}
                 </InlineStack>
+                <Divider />
                 {recentConversions.length > 0 ? (
                   <DataTable
                     columnContentTypes={['text', 'text', 'numeric', 'text']}
@@ -263,58 +381,20 @@ export default function Dashboard() {
                       `$${c.savingsAmount.toFixed(2)}`,
                       new Date(c.convertedAt).toLocaleDateString(),
                     ])}
+                    hoverable
                   />
                 ) : (
-                  <EmptyState
-                    heading="No conversions yet"
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Conversions appear here when orders match your bundle rules.</p>
-                  </EmptyState>
+                  <Box paddingBlock="600">
+                    <BlockStack gap="200" inlineAlign="center">
+                      <Text as="p" variant="bodyMd" tone="subdued">No conversions yet</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Conversions appear when orders match your bundle rules</Text>
+                    </BlockStack>
+                  </Box>
                 )}
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
-
-        {/* Quick actions for new users */}
-        {!hasData && (
-          <Layout>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">1. Create rules</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Define which products ship together as a bundle.
-                  </Text>
-                  <Button variant="primary" onClick={() => navigate('/app/bundle-rules')}>Create rule</Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">2. Run analysis</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Scan order history to find bundling opportunities.
-                  </Text>
-                  <Button onClick={() => navigate('/app/bundle-analysis')}>Analyze orders</Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-            <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">3. Configure</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Set fulfillment costs, notifications, and mode.
-                  </Text>
-                  <Button onClick={() => navigate('/app/settings')}>Settings</Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
       </BlockStack>
     </Page>
   );

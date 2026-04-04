@@ -13,7 +13,15 @@ import {
   Banner,
   Layout,
   Box,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
+import {
+  StarFilledIcon,
+  CheckCircleIcon,
+  OrderIcon,
+  CashDollarIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { hasActiveSubscription, redirectToBillingManagement, getSubscriptionByChargeId } from "../billing.server";
@@ -467,179 +475,246 @@ export default function Billing() {
   };
 
   return (
-    <Page title="Billing">
+    <Page
+      title="Billing & Plans"
+      subtitle="Manage your subscription and track usage"
+    >
       <TitleBar title="Billing" />
 
-      <BlockStack gap="400">
+      <BlockStack gap="500">
         {fetcher.data?.message && <Banner tone="info"><p>{fetcher.data.message}</p></Banner>}
-        {chargeId && chargeSubscription && <Banner tone="success"><p>Subscription activated. You now have the {planName} plan.</p></Banner>}
-        {loadingPlan !== null && <Banner tone="info"><p>Processing subscription change...</p></Banner>}
+        {chargeId && chargeSubscription && <Banner tone="success"><p>Subscription activated successfully. You are now on the {planName} plan.</p></Banner>}
 
-        {/* Current Plan */}
+        {/* Current Plan Summary */}
         <Card>
-          <BlockStack gap="300">
+          <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                {planName} Plan {planAmount > 0 && `($${planAmount}${planInterval === 'ANNUAL' ? '/yr' : '/mo'})`}
-              </Text>
-              <Badge tone={currentSubscription ? "success" : "info"}>
-                {currentSubscription ? "Active" : "Free"}
+              <InlineStack gap="300" blockAlign="center">
+                <Box background={currentSubscription ? "bg-fill-success-secondary" : "bg-fill-info-secondary"} padding="200" borderRadius="200">
+                  <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
+                </Box>
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg" fontWeight="bold">{planName} Plan</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {planAmount > 0 ? `$${planAmount} / ${planInterval === 'ANNUAL' ? 'year' : 'month'}` : 'No charge'}
+                  </Text>
+                </BlockStack>
+              </InlineStack>
+              <Badge tone={currentSubscription ? "success" : "info"} size="large">
+                {currentSubscription ? "Active" : "Free Tier"}
               </Badge>
             </InlineStack>
 
+            <Divider />
+
             <Layout>
               <Layout.Section variant="oneThird">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Orders</Text>
-                  <Text as="p" variant="headingSm" fontWeight="bold">
+                <BlockStack gap="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={OrderIcon} tone="subdued" />
+                    <Text as="p" variant="bodySm" tone="subdued">Orders Used</Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingMd" fontWeight="bold">
                     {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
                   </Text>
                 </BlockStack>
               </Layout.Section>
               <Layout.Section variant="oneThird">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Savings</Text>
-                  <Text as="p" variant="headingSm" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
+                <BlockStack gap="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={CashDollarIcon} tone="subdued" />
+                    <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingMd" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
                 </BlockStack>
               </Layout.Section>
               <Layout.Section variant="oneThird">
-                <BlockStack gap="100">
+                <BlockStack gap="200">
                   <Text as="p" variant="bodySm" tone="subdued">Usage</Text>
-                  <Text as="p" variant="headingSm" fontWeight="bold">{Math.round(usagePercentage)}%</Text>
+                  <Text as="p" variant="headingMd" fontWeight="bold">
+                    {planLimit === 999999 ? 'Unlimited' : `${Math.round(usagePercentage)}%`}
+                  </Text>
                 </BlockStack>
               </Layout.Section>
             </Layout>
 
             {planLimit > 0 && planLimit < 999999 && (
-              <ProgressBar progress={usagePercentage} />
+              <ProgressBar progress={usagePercentage} tone={usagePercentage >= 90 ? "critical" : usagePercentage >= 70 ? "highlight" : "success"} size="small" />
             )}
 
-            {usagePercentage > 90 && (
-              <Banner tone="warning"><p>Approaching limit. Consider upgrading.</p></Banner>
+            {usagePercentage > 90 && planLimit < 999999 && (
+              <Banner tone="warning"><p>You're approaching your plan limit. Upgrade to continue processing orders without interruption.</p></Banner>
             )}
           </BlockStack>
         </Card>
 
-        {/* Plans */}
+        {/* Billing Interval Toggle */}
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Choose Plan</Text>
-              <InlineStack gap="200">
-                <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
-                <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('yearly')}>Yearly</Button>
-              </InlineStack>
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
+                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial. No credit card required.</Text>
+              </BlockStack>
+              <Box background="bg-surface-secondary" padding="100" borderRadius="full">
+                <InlineStack gap="100">
+                  <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
+                  <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('yearly')}>
+                    Yearly
+                    <Badge tone="success" size="small">Save up to 17%</Badge>
+                  </Button>
+                </InlineStack>
+              </Box>
             </InlineStack>
 
+            <Divider />
+
+            {/* Plan Cards */}
             <Layout>
               {/* Free */}
               <Layout.Section>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm" fontWeight="bold">Free</Text>
-                    <Text as="p" variant="headingLg" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued">/mo</Text></Text>
+                <Box padding="400" background="bg-surface-secondary" borderRadius="300">
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">Free</Text>
                     <BlockStack gap="100">
-                      <Text as="p" variant="bodySm">25 orders/month</Text>
-                      <Text as="p" variant="bodySm">Basic bundling rules</Text>
+                      <Text as="p" variant="headingXl" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued"> /month</Text></Text>
+                    </BlockStack>
+                    <Divider />
+                    <BlockStack gap="200">
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Basic bundling rules</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Tag & note mode</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Free');
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'free'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
-                </Card>
+                </Box>
               </Layout.Section>
 
               {/* Starter */}
               <Layout.Section>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm" fontWeight="bold">Starter</Text>
+                <Box padding="400" background="bg-surface-secondary" borderRadius="300">
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd" fontWeight="bold">Starter</Text>
                     {(() => {
                       const p = getPlanPricing(4.99);
-                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                      return (
+                        <BlockStack gap="100">
+                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                        </BlockStack>
+                      );
                     })()}
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm">125 orders/month</Text>
-                      <Text as="p" variant="bodySm">Unlimited rules</Text>
-                      <Text as="p" variant="bodySm">Real-time analytics</Text>
+                    <Divider />
+                    <BlockStack gap="200">
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited rules</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Real-time analytics</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Email notifications</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Starter', 4.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'starter'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
-                </Card>
+                </Box>
               </Layout.Section>
 
-              {/* Professional */}
+              {/* Professional — Highlighted */}
               <Layout.Section>
-                <Card>
-                  <BlockStack gap="200">
+                <Box padding="400" background="bg-surface-info" borderRadius="300" borderWidth="025" borderColor="border-info">
+                  <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Text as="h3" variant="headingSm" fontWeight="bold">Professional</Text>
-                      <Badge tone="info">Popular</Badge>
+                      <Text as="h3" variant="headingMd" fontWeight="bold">Professional</Text>
+                      <Badge tone="info">Most Popular</Badge>
                     </InlineStack>
                     {(() => {
                       const p = getPlanPricing(9.99);
-                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                      return (
+                        <BlockStack gap="100">
+                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                        </BlockStack>
+                      );
                     })()}
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm">525 orders/month</Text>
-                      <Text as="p" variant="bodySm">Advanced analytics</Text>
-                      <Text as="p" variant="bodySm">Priority support</Text>
+                    <Divider />
+                    <BlockStack gap="200">
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm" fontWeight="semibold">525 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Advanced analytics</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Priority support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Order edit mode</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Professional', 9.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'professional'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
-                </Card>
+                </Box>
               </Layout.Section>
 
               {/* Enterprise */}
               <Layout.Section>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm" fontWeight="bold">Enterprise</Text>
+                <Box padding="400" background="bg-surface-secondary" borderRadius="300">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="h3" variant="headingMd" fontWeight="bold">Enterprise</Text>
+                      <Badge tone="attention">Best Value</Badge>
+                    </InlineStack>
                     {(() => {
                       const p = getPlanPricing(14.99);
-                      return <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued">{p.primaryPeriod}</Text></Text>;
+                      return (
+                        <BlockStack gap="100">
+                          <Text as="p" variant="headingXl" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
+                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                        </BlockStack>
+                      );
                     })()}
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm">Unlimited orders</Text>
-                      <Text as="p" variant="bodySm">Dedicated support</Text>
-                      <Text as="p" variant="bodySm">Custom development</Text>
+                    <Divider />
+                    <BlockStack gap="200">
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm" fontWeight="semibold">Unlimited orders</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Dedicated support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">All integrations</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">White-glove onboarding</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Enterprise', 14.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'enterprise'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
-                </Card>
+                </Box>
               </Layout.Section>
             </Layout>
-
-            <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial.</Text>
           </BlockStack>
         </Card>
 
         {/* FAQ */}
         <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">FAQ</Text>
-            <BlockStack gap="200">
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd" fontWeight="semibold">Frequently Asked Questions</Text>
+            <Divider />
+            <BlockStack gap="300">
               <Box>
-                <Text as="p" variant="bodySm" fontWeight="semibold">How does the free trial work?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Full access for 14 days. No credit card required.</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. No credit card required upfront. Cancel anytime during the trial at no cost.</Text>
               </Box>
+              <Divider />
               <Box>
-                <Text as="p" variant="bodySm" fontWeight="semibold">Can I change plans?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Yes, upgrade or downgrade anytime through the Shopify App Store.</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Can I change plans anytime?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Yes, upgrade or downgrade at any time through the Shopify App Store. Plan changes take effect immediately and are prorated.</Text>
               </Box>
+              <Divider />
               <Box>
-                <Text as="p" variant="bodySm" fontWeight="semibold">What if I exceed my limit?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Processing pauses until you upgrade or the next billing cycle. You'll be notified at 80%.</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">What happens if I exceed my order limit?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Order processing pauses until your next billing cycle or until you upgrade. You'll receive a notification at 80% and 90% usage. No orders are lost.</Text>
+              </Box>
+              <Divider />
+              <Box>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Is there a long-term contract?</Text>
+                <Text as="p" variant="bodySm" tone="subdued">No. All plans are pay-as-you-go with no lock-in. Cancel anytime from your Shopify admin.</Text>
               </Box>
             </BlockStack>
           </BlockStack>
@@ -649,19 +724,20 @@ export default function Billing() {
         {hasSubscription && (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Manage Subscription</Text>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">Manage Subscription</Text>
+              <Divider />
               {!showCancelConfirm ? (
                 <InlineStack gap="200">
                   <Button tone="critical" onClick={() => setShowCancelConfirm(true)}>Cancel Subscription</Button>
-                  <Button variant="plain" url="https://help.shopify.com/en/manual/apps/app-billing/managed-pricing#cancel-a-subscription" target="_blank">Learn more</Button>
+                  <Button variant="plain" url="https://help.shopify.com/en/manual/apps/app-billing/managed-pricing#cancel-a-subscription" target="_blank">Learn more about cancellation</Button>
                 </InlineStack>
               ) : (
-                <BlockStack gap="200">
+                <BlockStack gap="300">
                   <Banner tone="warning">
-                    <p>To cancel, uninstall the app from Shopify Admin &rarr; Apps. No further charges will be made.</p>
+                    <p>To cancel your subscription, uninstall the app from Shopify Admin &rarr; Apps. No further charges will be made after uninstalling.</p>
                   </Banner>
                   <InlineStack gap="200">
-                    <Button tone="critical" onClick={() => { window.open('https://admin.shopify.com/store/quickstart-9525e261.myshopify.com/apps', '_blank'); setShowCancelConfirm(false); }}>Go to Apps</Button>
+                    <Button tone="critical" onClick={() => { window.open('https://admin.shopify.com/store/quickstart-9525e261.myshopify.com/apps', '_blank'); setShowCancelConfirm(false); }}>Go to Shopify Apps</Button>
                     <Button onClick={() => setShowCancelConfirm(false)}>Keep Subscription</Button>
                   </InlineStack>
                 </BlockStack>

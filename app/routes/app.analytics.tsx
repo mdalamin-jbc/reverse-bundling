@@ -11,7 +11,17 @@ import {
   InlineStack,
   DataTable,
   EmptyState,
+  Box,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
+import {
+  OrderIcon,
+  CashDollarIcon,
+  ChartVerticalFilledIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -98,54 +108,82 @@ export default function Analytics() {
   const { analytics, summary, pagination } = useLoaderData<typeof loader>();
 
   return (
-    <Page title="Bundle Analytics">
+    <Page
+      title="Bundle Analytics"
+      subtitle="Performance metrics and trends for your bundle rules over time"
+    >
       <TitleBar title="Bundle Analytics" />
 
-      <BlockStack gap="400">
-        {/* Stats row */}
+      <BlockStack gap="500">
+        {/* Summary metrics */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Orders Processed</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Orders Processed</Text>
+                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
+                    <Icon source={OrderIcon} tone="info" />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">{summary.totalRecords} analytics records</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">${summary.totalSavings.toFixed(2)}</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
+                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
+                    <Icon source={CashDollarIcon} tone="success" />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold" tone="success">${summary.totalSavings.toFixed(2)}</Text>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">Across all bundle rules</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Avg Order Value</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Avg Savings / Order</Text>
+                  <Box background="bg-fill-success-secondary" padding="100" borderRadius="full">
+                    <Icon source={ChartVerticalFilledIcon} tone="success" />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">Per bundled order</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
         </Layout>
 
-        {/* Table */}
+        {/* Data table */}
         <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Records ({summary.totalRecords})</Text>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd" fontWeight="semibold">Analytics Records</Text>
+              <Text as="p" variant="bodySm" tone="subdued">{summary.totalRecords} records across all bundle rules and periods</Text>
+            </BlockStack>
+            <Divider />
 
             {analytics.length === 0 ? (
               <EmptyState
                 heading="No analytics data yet"
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
-                <p>Analytics appear here as bundle rules process orders over time.</p>
+                <p>Analytics data accumulates automatically as bundle rules process orders. Create and activate bundle rules to start tracking performance.</p>
               </EmptyState>
             ) : (
               <>
                 <DataTable
-                  columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                  columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text"]}
                   headings={["Bundle Rule", "Period", "Orders", "Savings", "Avg Savings", "Date Range"]}
                   rows={analytics.map((record: any) => [
                     record.bundleRule?.name || 'Unknown Rule',
@@ -153,41 +191,46 @@ export default function Analytics() {
                     record.orderCount.toString(),
                     `$${record.savingsAmount.toFixed(2)}`,
                     record.orderCount > 0 ? `$${(record.savingsAmount / record.orderCount).toFixed(2)}` : '$0.00',
-                    `${record.periodStart.toLocaleDateString()} - ${record.periodEnd.toLocaleDateString()}`
+                    `${new Date(record.periodStart).toLocaleDateString()} – ${new Date(record.periodEnd).toLocaleDateString()}`
                   ])}
                   hoverable
                 />
 
                 {pagination.totalPages > 1 && (
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-                    </Text>
-                    <InlineStack gap="200">
-                      <Button
-                        size="slim"
-                        disabled={pagination.page <= 1}
-                        onClick={() => {
-                          const u = new URL(window.location.href);
-                          u.searchParams.set('page', (pagination.page - 1).toString());
-                          window.location.href = u.toString();
-                        }}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        size="slim"
-                        disabled={pagination.page >= pagination.totalPages}
-                        onClick={() => {
-                          const u = new URL(window.location.href);
-                          u.searchParams.set('page', (pagination.page + 1).toString());
-                          window.location.href = u.toString();
-                        }}
-                      >
-                        Next
-                      </Button>
+                  <>
+                    <Divider />
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Showing {((pagination.page - 1) * pagination.limit) + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                      </Text>
+                      <InlineStack gap="200">
+                        <Button
+                          size="slim"
+                          icon={ArrowLeftIcon}
+                          disabled={pagination.page <= 1}
+                          onClick={() => {
+                            const u = new URL(window.location.href);
+                            u.searchParams.set('page', (pagination.page - 1).toString());
+                            window.location.href = u.toString();
+                          }}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          size="slim"
+                          icon={ArrowRightIcon}
+                          disabled={pagination.page >= pagination.totalPages}
+                          onClick={() => {
+                            const u = new URL(window.location.href);
+                            u.searchParams.set('page', (pagination.page + 1).toString());
+                            window.location.href = u.toString();
+                          }}
+                        >
+                          Next
+                        </Button>
+                      </InlineStack>
                     </InlineStack>
-                  </InlineStack>
+                  </>
                 )}
               </>
             )}

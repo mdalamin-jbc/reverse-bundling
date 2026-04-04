@@ -16,7 +16,18 @@ import {
   Badge,
   Box,
   RadioButton,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
+import {
+  NotificationIcon,
+  SettingsIcon,
+  DeliveryIcon,
+  AppsIcon,
+  CheckCircleIcon,
+  AlertCircleIcon,
+  ArrowRightIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { useEffect, useState } from "react";
@@ -313,10 +324,13 @@ export default function Settings() {
   const isTestingSlack = isLoading && fetcher.formData?.get("action") === "testSlackWebhook";
 
   return (
-    <Page title="Settings">
+    <Page
+      title="Settings"
+      subtitle="Configure your app preferences, notifications, and fulfillment mode"
+    >
       <TitleBar title="Settings" />
 
-      <BlockStack gap="400">
+      <BlockStack gap="500">
         {/* Status banners */}
         {!webhooksHealthy && (
           <Banner tone="warning" title="Webhook Configuration Required">
@@ -331,45 +345,66 @@ export default function Settings() {
         )}
 
         {webhooksHealthy && (
-          <Banner tone="success"><p>All systems operational. Webhooks active, order processing enabled.</p></Banner>
+          <Banner tone="success"><p>All systems operational. Webhooks are active and order processing is enabled.</p></Banner>
         )}
 
         {error && <Banner tone="critical"><p>{error}</p></Banner>}
 
         <Layout>
+          {/* Main settings column */}
           <Layout.Section>
-            <BlockStack gap="400">
-              {/* Webhooks */}
+            <BlockStack gap="500">
+
+              {/* Webhook Status */}
               <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Webhooks</Text>
-                    <Badge tone={webhooksHealthy ? "success" : "critical"}>
-                      {webhooksHealthy ? "Active" : "Inactive"}
-                    </Badge>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={AppsIcon} tone="base" />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Webhook Status</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Real-time order event listeners</Text>
+                    </BlockStack>
                   </InlineStack>
-                  <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Orders Create</Text>
-                    <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"}>
-                      {webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "Active" : "Missing"}
-                    </Badge>
-                  </InlineStack>
-                  <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm">Orders Updated</Text>
-                    <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"}>
-                      {webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "Active" : "Missing"}
-                    </Badge>
-                  </InlineStack>
+                  <Divider />
+                  <Box padding="200" background="bg-surface-secondary" borderRadius="200">
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"} />
+                          <Text as="p" variant="bodyMd">Orders Create</Text>
+                        </InlineStack>
+                        <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"}>
+                          {webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "Active" : "Missing"}
+                        </Badge>
+                      </InlineStack>
+                      <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"} />
+                          <Text as="p" variant="bodyMd">Orders Updated</Text>
+                        </InlineStack>
+                        <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"}>
+                          {webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "Active" : "Missing"}
+                        </Badge>
+                      </InlineStack>
+                    </BlockStack>
+                  </Box>
                 </BlockStack>
               </Card>
 
               {/* Notifications */}
               <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Notifications</Text>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={NotificationIcon} tone="base" />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Notifications</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Get notified when bundles are detected</Text>
+                    </BlockStack>
+                  </InlineStack>
+                  <Divider />
                   <FormLayout>
                     <Checkbox label="Enable notifications" checked={notificationsEnabled} onChange={setNotificationsEnabled} />
-                    <Checkbox label="Email notifications" checked={emailNotifications} onChange={setEmailNotifications} disabled={!notificationsEnabled} />
+                    <Checkbox label="Email notifications" checked={emailNotifications} onChange={setEmailNotifications} disabled={!notificationsEnabled} helpText="Receive an email for each bundle conversion" />
                     <TextField
                       label="Slack webhook URL"
                       value={slackWebhook}
@@ -377,9 +412,10 @@ export default function Settings() {
                       disabled={!notificationsEnabled}
                       autoComplete="off"
                       placeholder="https://hooks.slack.com/services/..."
+                      helpText="Optional: Get real-time notifications in Slack"
                     />
-                    {slackWebhook && (
-                      <Button size="slim" onClick={handleTestSlackWebhook} loading={isTestingSlack}>Test Slack</Button>
+                    {slackWebhook && notificationsEnabled && (
+                      <Button size="slim" onClick={handleTestSlackWebhook} loading={isTestingSlack}>Send test message</Button>
                     )}
                   </FormLayout>
                 </BlockStack>
@@ -387,55 +423,86 @@ export default function Settings() {
 
               {/* Order Processing */}
               <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Order Processing</Text>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={SettingsIcon} tone="base" />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Order Processing</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Control how orders are matched and converted</Text>
+                    </BlockStack>
+                  </InlineStack>
+                  <Divider />
                   <FormLayout>
-                    <Checkbox label="Automatic order conversion" checked={autoConvertOrders} onChange={setAutoConvertOrders} helpText="Automatically convert orders matching bundle rules" />
-                    <TextField label="Minimum savings threshold" value={minimumSavings} onChange={setMinimumSavings} type="number" prefix="$" min="0" step={0.01} autoComplete="off" />
+                    <Checkbox label="Automatic order conversion" checked={autoConvertOrders} onChange={setAutoConvertOrders} helpText="When enabled, orders matching bundle rules are automatically converted" />
+                    <TextField label="Minimum savings threshold" value={minimumSavings} onChange={setMinimumSavings} type="number" prefix="$" min="0" step={0.01} autoComplete="off" helpText="Only convert orders that save at least this amount" />
                   </FormLayout>
                 </BlockStack>
               </Card>
 
               {/* Fulfillment Costs */}
               <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Fulfillment Costs</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">Used to calculate savings per bundled order</Text>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={DeliveryIcon} tone="base" />
+                    <BlockStack gap="100">
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Fulfillment Costs</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Used to calculate savings per bundled order</Text>
+                    </BlockStack>
+                  </InlineStack>
+                  <Divider />
                   <FormLayout>
-                    <TextField label="Per-item ship cost" value={individualShipCost} onChange={setIndividualShipCost} type="number" prefix="$" min="0" step={0.01} autoComplete="off" />
-                    <TextField label="Bundle ship cost" value={bundleShipCost} onChange={setBundleShipCost} type="number" prefix="$" min="0" step={0.01} autoComplete="off" />
+                    <FormLayout.Group>
+                      <TextField label="Per-item shipping cost" value={individualShipCost} onChange={setIndividualShipCost} type="number" prefix="$" min="0" step={0.01} autoComplete="off" helpText="Cost to ship one item individually" />
+                      <TextField label="Bundle shipping cost" value={bundleShipCost} onChange={setBundleShipCost} type="number" prefix="$" min="0" step={0.01} autoComplete="off" helpText="Cost to ship one pre-packed bundle" />
+                    </FormLayout.Group>
                   </FormLayout>
                   {parseFloat(individualShipCost) > 0 && parseFloat(bundleShipCost) > 0 && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      3-item bundle saves ${((parseFloat(individualShipCost) * 3) - parseFloat(bundleShipCost)).toFixed(2)} per order
-                    </Text>
+                    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="p" variant="bodySm" tone="subdued">Estimated savings on a 3-item bundle</Text>
+                        <Text as="p" variant="bodyMd" fontWeight="bold" tone="success">
+                          ${((parseFloat(individualShipCost) * 3) - parseFloat(bundleShipCost)).toFixed(2)} per order
+                        </Text>
+                      </InlineStack>
+                    </Box>
                   )}
                 </BlockStack>
               </Card>
 
               {/* Fulfillment Mode */}
               <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Fulfillment Mode</Text>
-                  <RadioButton
-                    label="Tag & Note Only"
-                    helpText="Adds tags, notes, and metafields. Order stays unchanged. Best for manual fulfillment."
-                    checked={fulfillmentMode === 'tag_only'}
-                    id="tag_only"
-                    name="fulfillmentMode"
-                    onChange={() => setFulfillmentMode('tag_only')}
-                  />
-                  <RadioButton
-                    label="Full Order Edit"
-                    helpText="Replaces line items with the bundle SKU. 3PL software picks the bundle automatically."
-                    checked={fulfillmentMode === 'order_edit'}
-                    id="order_edit"
-                    name="fulfillmentMode"
-                    onChange={() => setFulfillmentMode('order_edit')}
-                  />
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Fulfillment Mode</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Choose how bundle rules are applied to matching orders</Text>
+                  </BlockStack>
+                  <Divider />
+
+                  <Box padding="300" background={fulfillmentMode === 'tag_only' ? "bg-surface-info" : "bg-surface-secondary"} borderRadius="200">
+                    <RadioButton
+                      label="Tag & Note Only (Safe)"
+                      helpText="Adds tags, notes, and metafields to the order. Line items stay unchanged. Best for manual fulfillment workflows."
+                      checked={fulfillmentMode === 'tag_only'}
+                      id="tag_only"
+                      name="fulfillmentMode"
+                      onChange={() => setFulfillmentMode('tag_only')}
+                    />
+                  </Box>
+
+                  <Box padding="300" background={fulfillmentMode === 'order_edit' ? "bg-surface-info" : "bg-surface-secondary"} borderRadius="200">
+                    <RadioButton
+                      label="Full Order Edit (Automated)"
+                      helpText="Replaces individual line items with the bundle product SKU. 3PL software (ShipStation, ShipBob) will pick the bundle automatically."
+                      checked={fulfillmentMode === 'order_edit'}
+                      id="order_edit"
+                      name="fulfillmentMode"
+                      onChange={() => setFulfillmentMode('order_edit')}
+                    />
+                  </Box>
+
                   {fulfillmentMode === 'order_edit' && (
                     <Banner tone="warning">
-                      <p>Order Edit mode modifies the customer-facing order. The bundle product must exist in your store with a matching SKU.</p>
+                      <p>Order Edit mode modifies the customer-facing order. The bundle product must exist in your store with a matching SKU. Ensure your bundle products are created before activating rules.</p>
                     </Banner>
                   )}
                 </BlockStack>
@@ -444,35 +511,43 @@ export default function Settings() {
               {/* System Info */}
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">System</Text>
+                  <Text as="h2" variant="headingMd" fontWeight="semibold">System Information</Text>
+                  <Divider />
                   <InlineStack gap="200" wrap>
                     <Badge tone={isProduction ? "success" : "info"}>{isProduction ? "Production" : "Development"}</Badge>
-                    <Badge tone="success">DB Connected</Badge>
-                    <Badge tone={autoConvertOrders ? "success" : "attention"}>{autoConvertOrders ? "Auto" : "Manual"}</Badge>
+                    <Badge tone="success">Database Connected</Badge>
+                    <Badge tone={webhooksHealthy ? "success" : "critical"}>{webhooksHealthy ? "Webhooks Active" : "Webhooks Inactive"}</Badge>
+                    <Badge tone={autoConvertOrders ? "success" : "attention"}>{autoConvertOrders ? "Auto Convert" : "Manual Mode"}</Badge>
+                    <Badge tone="info">{fulfillmentMode === 'order_edit' ? "Order Edit" : "Tag Only"}</Badge>
                   </InlineStack>
-                  {appUrl && <Text as="p" variant="bodySm" tone="subdued">{appUrl}</Text>}
+                  {appUrl && <Text as="p" variant="bodySm" tone="subdued">App URL: {appUrl}</Text>}
                 </BlockStack>
               </Card>
+
             </BlockStack>
           </Layout.Section>
 
+          {/* Sidebar */}
           <Layout.Section variant="oneThird">
             <BlockStack gap="400">
               <Card>
                 <BlockStack gap="300">
-                  <Text as="h3" variant="headingMd">Actions</Text>
+                  <Text as="h3" variant="headingMd" fontWeight="semibold">Actions</Text>
+                  <Divider />
                   <Button variant="primary" fullWidth onClick={handleSave} loading={isLoading && !isRegistering} disabled={!hasChanges}>
-                    {hasChanges ? "Save Changes" : "Saved"}
+                    {hasChanges ? "Save Changes" : "All changes saved"}
                   </Button>
                   <Button fullWidth onClick={handleRegisterWebhooks} loading={isRegistering}>Register Webhooks</Button>
                 </BlockStack>
               </Card>
               <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Quick Links</Text>
-                  <Button url="/app/orders" variant="plain" fullWidth>Orders</Button>
-                  <Button url="/app/bundle-rules" variant="plain" fullWidth>Rules</Button>
-                  <Button url="/app/fulfillment" variant="plain" fullWidth>Fulfillment</Button>
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingMd" fontWeight="semibold">Quick Links</Text>
+                  <Divider />
+                  <Button url="/app/orders" variant="plain" fullWidth icon={ArrowRightIcon}>Order Conversions</Button>
+                  <Button url="/app/bundle-rules" variant="plain" fullWidth icon={ArrowRightIcon}>Bundle Rules</Button>
+                  <Button url="/app/fulfillment" variant="plain" fullWidth icon={ArrowRightIcon}>Fulfillment Status</Button>
+                  <Button url="/app/billing" variant="plain" fullWidth icon={ArrowRightIcon}>Billing & Plans</Button>
                 </BlockStack>
               </Card>
             </BlockStack>

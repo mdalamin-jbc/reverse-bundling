@@ -408,11 +408,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 throw new Error(`Bundle product with SKU "${rule.bundledSku}" not found in Shopify — cannot edit order. Create the product or switch to Tag Only mode.`);
               }
 
-              // Step 2: Begin order edit
+              // Step 2: Begin order edit — fetch calculated line items with their proper IDs
               const editBeginResponse = await admin.graphql(`
                 mutation orderEditBegin($id: ID!) {
                   orderEditBegin(id: $id) {
-                    calculatedOrder { id }
+                    calculatedOrder {
+                      id
+                      lineItems(first: 50) {
+                        edges {
+                          node {
+                            id
+                            quantity
+                            variant {
+                              id
+                              sku
+                            }
+                          }
+                        }
+                      }
+                    }
                     userErrors { field message }
                   }
                 }
@@ -427,20 +441,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }
 
               const calculatedOrderId = calculatedOrder.id;
+              const calculatedLineItems = calculatedOrder.lineItems?.edges?.map((e: any) => e.node) || [];
 
-              // Step 3: Remove the individual items that make up the bundle
+              logInfo('Order edit started — calculated line items:', {
+                shop,
+                orderId: String(order.id),
+                calculatedOrderId,
+                lineItemCount: calculatedLineItems.length,
+                lineItems: calculatedLineItems.map((cli: any) => ({
+                  id: cli.id,
+                  sku: cli.variant?.sku,
+                  variantId: cli.variant?.id,
+                  quantity: cli.quantity,
+                })),
+              });
+
+              // Step 3: Remove the individual items using CalculatedLineItem IDs from the calculated order
+              let removedCount = 0;
               for (const ruleItem of ruleItems) {
-                const matchingLineItem = lineItems.find(li => {
-                  const matchesSku = li.sku === ruleItem;
-                  const matchesVariant = li.variant_id
-                    ? `gid://shopify/ProductVariant/${li.variant_id}` === ruleItem
-                    : false;
-                  return matchesSku || matchesVariant;
+                // Match against the CALCULATED order's line items (not webhook payload)
+                const matchingCalcItem = calculatedLineItems.find((cli: any) => {
+                  const matchesSku = cli.variant?.sku === ruleItem;
+                  const matchesVariant = cli.variant?.id === ruleItem;
+                  return (matchesSku || matchesVariant) && cli.quantity > 0;
                 });
 
-                if (matchingLineItem) {
-                  const lineItemId = `gid://shopify/CalculatedLineItem/${matchingLineItem.id}`;
-                  await admin.graphql(`
+                if (matchingCalcItem) {
+                  const setQtyResponse = await admin.graphql(`
                     mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
                       orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
                         calculatedOrder { id }
@@ -448,13 +475,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                       }
                     }
                   `, {
-                    variables: { id: calculatedOrderId, lineItemId, quantity: 0 }
+                    variables: { id: calculatedOrderId, lineItemId: matchingCalcItem.id, quantity: 0 }
+                  });
+
+                  const setQtyData = await setQtyResponse.json();
+                  const setQtyErrors = setQtyData.data?.orderEditSetQuantity?.userErrors || [];
+
+                  if (setQtyErrors.length > 0) {
+                    logWarning(`orderEditSetQuantity failed for ${ruleItem}: ${setQtyErrors.map((e: any) => e.message).join(', ')}`, {
+                      shop, orderId: String(order.id), ruleItem, lineItemId: matchingCalcItem.id,
+                    });
+                  } else {
+                    removedCount++;
+                    logInfo(`Removed line item for rule item: ${ruleItem}`, {
+                      shop, orderId: String(order.id), lineItemId: matchingCalcItem.id,
+                    });
+                  }
+                } else {
+                  logWarning(`No matching calculated line item found for rule item: ${ruleItem}`, {
+                    shop, orderId: String(order.id), ruleItem,
+                    availableItems: calculatedLineItems.map((cli: any) => ({
+                      id: cli.id, sku: cli.variant?.sku, variantId: cli.variant?.id,
+                    })),
                   });
                 }
               }
 
               // Step 4: Add the bundle variant
-              await admin.graphql(`
+              const addVariantResponse = await admin.graphql(`
                 mutation orderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
                   orderEditAddVariant(id: $id, variantId: $variantId, quantity: 1) {
                     calculatedOrder { id }
@@ -463,6 +511,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
               `, {
                 variables: { id: calculatedOrderId, variantId: bundleVariant.id, quantity: 1 }
+              });
+
+              const addVariantData = await addVariantResponse.json();
+              const addVariantErrors = addVariantData.data?.orderEditAddVariant?.userErrors || [];
+
+              if (addVariantErrors.length > 0) {
+                throw new Error(`orderEditAddVariant failed: ${addVariantErrors.map((e: any) => e.message).join(', ')}`);
+              }
+
+              logInfo(`Added bundle variant to order`, {
+                shop, orderId: String(order.id), bundleVariantId: bundleVariant.id, removedItems: removedCount,
               });
 
               // Step 5: Commit the edit

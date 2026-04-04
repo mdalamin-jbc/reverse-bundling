@@ -12,7 +12,17 @@ import {
   Badge,
   Banner,
   Box,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
+import {
+  DeliveryIcon,
+  OrderIcon,
+  InventoryIcon,
+  CheckCircleIcon,
+  AlertCircleIcon,
+  ExternalIcon,
+} from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -636,43 +646,70 @@ export default function FulfillmentIntegration() {
   const { providers, stats, detectionErrors, hasErrors } = useLoaderData<typeof loader>();
 
   const connectedCount = providers.filter((p: any) => p.connectionVerified).length;
+  const errorCount = providers.filter((p: any) => !p.connectionVerified).length;
 
   return (
-    <Page title="Fulfillment Status">
+    <Page
+      title="Fulfillment Status"
+      subtitle="Monitor your fulfillment providers and bundle order processing"
+    >
       <TitleBar title="Fulfillment Status" />
 
-      <BlockStack gap="400">
+      <BlockStack gap="500">
         {/* Detection warnings */}
         {hasErrors && detectionErrors.length > 0 && (
           <Banner tone="info">
-            <p>Some detection features are limited. Your providers are still detected through other methods.</p>
+            <p>Some detection features are limited due to API permissions. Your providers are still detected through other methods.</p>
           </Banner>
         )}
 
-        {/* Stats row */}
+        {/* Stats */}
         <Layout>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">{connectedCount} connected</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
+                  <Box background={connectedCount > 0 ? "bg-fill-success-secondary" : "bg-fill-caution-secondary"} padding="100" borderRadius="full">
+                    <Icon source={DeliveryIcon} tone={connectedCount > 0 ? "success" : "caution"} />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">{connectedCount}</Text>
+                <Divider />
+                <InlineStack gap="200">
+                  <Badge tone="success">{connectedCount} connected</Badge>
+                  {errorCount > 0 && <Badge tone="critical">{errorCount} issues</Badge>}
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Bundle Orders</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">{stats.monthlyOrders} this month</Text>
-                <Text as="p" variant="bodySm" tone="subdued">{stats.totalOrders} total</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Bundle Orders</Text>
+                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
+                    <Icon source={OrderIcon} tone="info" />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">{stats.monthlyOrders}</Text>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">{stats.totalOrders} total processed</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
           <Layout.Section variant="oneThird">
             <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
-                <Text as="p" variant="headingLg" fontWeight="bold">{stats.activeBundleRules}</Text>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
+                  <Box background="bg-fill-info-secondary" padding="100" borderRadius="full">
+                    <Icon source={InventoryIcon} tone="info" />
+                  </Box>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">{stats.activeBundleRules}</Text>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">Monitoring incoming orders</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -682,39 +719,49 @@ export default function FulfillmentIntegration() {
         {providers.length > 0 ? (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Connected Providers</Text>
+              <BlockStack gap="100">
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Connected Providers</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Fulfillment services detected from your Shopify store</Text>
+              </BlockStack>
+              <Divider />
 
               {providers.map((provider: any) => (
-                <Box key={provider.id} padding="300" background="bg-surface-secondary" borderRadius="200">
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="h3" variant="headingSm">{provider.name}</Text>
+                <Box key={provider.id} padding="400" background="bg-surface-secondary" borderRadius="300">
+                  <BlockStack gap="300">
+                    <InlineStack align="space-between" blockAlign="start" wrap={false}>
+                      <InlineStack gap="300" blockAlign="center">
+                        <Box background={provider.connectionVerified ? "bg-fill-success-secondary" : "bg-fill-critical-secondary"} padding="200" borderRadius="200">
+                          <Icon source={provider.connectionVerified ? CheckCircleIcon : AlertCircleIcon} tone={provider.connectionVerified ? "success" : "critical"} />
+                        </Box>
+                        <BlockStack gap="100">
+                          <Text as="h3" variant="headingSm" fontWeight="semibold">{provider.name}</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <InlineStack gap="200">
                         <Badge tone={provider.connectionVerified ? "success" : "critical"}>
                           {provider.connectionVerified ? "Connected" : "Issue"}
                         </Badge>
-                        <Badge tone="info">{provider.type}</Badge>
-                      </InlineStack>
-                      <InlineStack gap="200">
-                        {provider.setupUrl && (
-                          <Button size="slim" url={provider.setupUrl} target="_blank">Configure</Button>
-                        )}
-                        {provider.docsUrl && (
-                          <Button size="slim" variant="plain" url={provider.docsUrl} target="_blank">Docs</Button>
-                        )}
+                        <Badge>{provider.type}</Badge>
                       </InlineStack>
                     </InlineStack>
-
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {provider.description}
-                      {provider.location && ` — ${provider.location}`}
-                    </Text>
 
                     {provider.capabilities.length > 0 && (
                       <InlineStack gap="100" wrap>
                         {provider.capabilities.map((cap: string, i: number) => (
-                          <Badge key={i} size="small">{cap}</Badge>
+                          <Badge key={i} size="small" tone="info">{cap}</Badge>
                         ))}
+                      </InlineStack>
+                    )}
+
+                    {(provider.setupUrl || provider.docsUrl) && (
+                      <InlineStack gap="200">
+                        {provider.setupUrl && (
+                          <Button size="slim" icon={ExternalIcon} url={provider.setupUrl} target="_blank">Configure</Button>
+                        )}
+                        {provider.docsUrl && (
+                          <Button size="slim" variant="plain" url={provider.docsUrl} target="_blank">Documentation</Button>
+                        )}
                       </InlineStack>
                     )}
 
@@ -725,25 +772,29 @@ export default function FulfillmentIntegration() {
                 </Box>
               ))}
 
-              <Text as="p" variant="bodySm" tone="subdued">
-                Bundle orders automatically sync to connected providers via Shopify's integrations.
-              </Text>
+              <Box paddingBlockStart="200">
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Bundle orders are automatically synced to connected providers through Shopify's fulfillment integrations.
+                </Text>
+              </Box>
             </BlockStack>
           </Card>
         ) : (
           <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">No Providers Detected</Text>
-              <Text as="p" variant="bodyMd">
-                Connect a fulfillment provider through Shopify Admin to enable automatic order syncing.
-              </Text>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm">1. Go to Shopify Admin &rarr; Settings &rarr; Apps and sales channels</Text>
-                <Text as="p" variant="bodySm">2. Install a fulfillment app (ShipStation, ShipBob, etc.)</Text>
-                <Text as="p" variant="bodySm">3. Return here and refresh to detect the connection</Text>
+            <EmptyState
+              heading="No fulfillment providers detected"
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              action={{ content: "Refresh", onAction: () => window.location.reload() }}
+            >
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd">Connect a fulfillment provider through Shopify Admin to enable automatic order syncing.</Text>
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">1. Go to Shopify Admin &rarr; Settings &rarr; Apps and sales channels</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">2. Install a fulfillment app (ShipStation, ShipBob, etc.)</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">3. Return here and refresh to detect the connection</Text>
+                </BlockStack>
               </BlockStack>
-              <Button onClick={() => window.location.reload()}>Refresh</Button>
-            </BlockStack>
+            </EmptyState>
           </Card>
         )}
       </BlockStack>
