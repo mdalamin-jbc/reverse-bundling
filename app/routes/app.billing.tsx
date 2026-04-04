@@ -579,11 +579,11 @@ export default function Billing() {
                     <Text as="p" variant="headingLg" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued"> /month</Text></Text>
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Basic bundling rules</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Tag & note mode</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Email support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Shopify admin integration</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Basic bundling rules</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Tag & note mode</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Email support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Shopify admin integration</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Free');
@@ -609,11 +609,11 @@ export default function Billing() {
                     })()}
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited rules</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Real-time analytics</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Email notifications</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Bundle analysis AI</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Unlimited rules</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Real-time analytics</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Email notifications</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Bundle analysis AI</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Starter', 4.99);
@@ -645,11 +645,11 @@ export default function Billing() {
                     })()}
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Advanced analytics</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Priority support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Order edit mode</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">Advanced analytics</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">Priority support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">Order edit mode</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Professional', 9.99);
@@ -678,11 +678,11 @@ export default function Billing() {
                     })()}
                     <Divider />
                     <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Dedicated support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">All integrations</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">White-glove onboarding</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Dedicated support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">All integrations</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">White-glove onboarding</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Enterprise', 14.99);
