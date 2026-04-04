@@ -821,7 +821,7 @@ export default function Guidelines() {
             </Box>
 
             <InlineStack align="end">
-              <Button variant="plain" onClick={() => navigate("/app/bundle-analysis")}>Open Bundle Analysis →</Button>
+              <Button variant="plain" onClick={() => navigate("/app/bundle-rules")}>Open Bundle Rules →</Button>
             </InlineStack>
           </BlockStack>
         </Card>

@@ -335,12 +335,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalRules
     });
 
+    // Load existing bundle suggestions from database
+    const bundleSuggestions = await db.bundleSuggestion.findMany({
+      where: {
+        shop: session.shop,
+        status: 'pending',
+      },
+      orderBy: { confidence: 'desc' },
+      take: 50,
+    });
+
     return json({
       bundleRules: paginatedRules,
       products,
       productMap,
       categories: finalCategories,
       tags: dynamicTags,
+      bundleSuggestions,
       pagination: {
         page,
         limit,
@@ -366,6 +377,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       productMap,
       categories: dynamicCategories, // Use product categories only in error case
       tags: dynamicTags,
+      bundleSuggestions: [],
       pagination: {
         page: 1,
         limit,
@@ -1356,7 +1368,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 
 export default function BundleRules() {
-  const { bundleRules, products, categories, tags, pagination, sorting, filters } = useLoaderData<typeof loader>();
+  const { bundleRules, products, categories, tags, pagination, sorting, filters, bundleSuggestions: loaderSuggestions } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{
     success: boolean;
     message: string;
@@ -1420,10 +1432,17 @@ export default function BundleRules() {
     return filtered;
   }, [products, modalSearchQuery]);
 
-  // Bundle suggestions state
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  // Bundle suggestions state - initialize from loader data
+  const [suggestions, setSuggestions] = useState<any[]>(loaderSuggestions || []);
   const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+
+  // Sync suggestions with loader data when it changes
+  useEffect(() => {
+    if (loaderSuggestions && loaderSuggestions.length > 0) {
+      setSuggestions(loaderSuggestions);
+    }
+  }, [loaderSuggestions]);
 
   // Filter state
   const [searchValue, setSearchValue] = useState(filters.search);
@@ -1830,6 +1849,45 @@ export default function BundleRules() {
     }
   }, [fetcher]);
 
+  // Section navigation with active highlighting
+  const SECTIONS = [
+    { id: 'bundle-rules-section', label: '📋 Bundle Rules', icon: '📋' },
+    { id: 'data-suggestions-section', label: '📊 Suggestions', icon: '📊' },
+    { id: 'best-practices-section', label: '💡 Best Practices', icon: '💡' },
+  ];
+
+  const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 180; // Offset for sticky nav
+      let currentSection = SECTIONS[0].id;
+
+      for (const section of SECTIONS) {
+        const element = document.getElementById(section.id);
+        if (element) {
+          const { offsetTop } = element;
+          if (scrollPosition >= offsetTop) {
+            currentSection = section.id;
+          }
+        }
+      }
+
+      setActiveSection(currentSection);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Set initial state
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
   return (
     <Page>
       <>
@@ -2034,6 +2092,60 @@ export default function BundleRules() {
               </div>
             </div>
           </BlockStack>
+        </div>
+
+        {/* Sticky Section Navigation */}
+        <div
+          style={{
+            position: 'sticky',
+            top: '0',
+            zIndex: 50,
+            background: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+            padding: '8px 16px',
+            border: '1px solid #e5e7eb',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {SECTIONS.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: activeSection === section.id ? '2px solid #8b5cf6' : '2px solid transparent',
+                  background: activeSection === section.id
+                    ? 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)'
+                    : '#f3f4f6',
+                  color: activeSection === section.id ? 'white' : '#374151',
+                  fontWeight: activeSection === section.id ? '700' : '500',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: activeSection === section.id
+                    ? '0 4px 12px rgba(139, 92, 246, 0.3)'
+                    : 'none',
+                  transform: activeSection === section.id ? 'scale(1.05)' : 'scale(1)',
+                }}
+                onMouseEnter={(e) => {
+                  if (activeSection !== section.id) {
+                    e.currentTarget.style.background = '#e5e7eb';
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeSection !== section.id) {
+                    e.currentTarget.style.background = '#f3f4f6';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Main Content - Full Width */}

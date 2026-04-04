@@ -242,7 +242,7 @@ export default function Dashboard() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Scan your order history to discover products frequently bought together.
                     </Text>
-                    <Button onClick={() => navigate('/app/bundle-analysis')}>Run analysis</Button>
+                    <Button onClick={() => navigate('/app/bundle-rules')}>Run analysis</Button>
                   </BlockStack>
                 </Layout.Section>
                 <Layout.Section variant="oneThird">

@@ -360,9 +360,9 @@ export class OrderAnalysisService {
       console.log(`[Analysis:${analysisId}] Storing co-occurrence data (${associationRules.length} rules)`);
       await this.storeCooccurrenceData(associationRules);
 
-      // Store frequent itemsets for bundle suggestions
+      // Store frequent itemsets for bundle suggestions (pass association rules for accurate confidence)
       console.log(`[Analysis:${analysisId}] Storing frequent itemsets for bundle generation`);
-      const storeResult = await this.storeFrequentItemsets(frequentItemsets, this.config);
+      const storeResult = await this.storeFrequentItemsets(frequentItemsets, this.config, associationRules, transactions.length);
 
       console.log(`[Analysis:${analysisId}] ✅ Analysis completed successfully!`);
       console.log(`[Analysis:${analysisId}] 📊 Results: ${storeResult.storedBundles} bundles stored, $${storeResult.totalSavings.toFixed(2)} potential savings, ${storeResult.abTestCandidates.length} A/B test candidates`);
@@ -728,17 +728,35 @@ export class OrderAnalysisService {
    */
   async storeFrequentItemsets(
     itemsets: FrequentItemset[],
-    analysisConfig: AnalysisConfig
+    analysisConfig: AnalysisConfig,
+    associationRules: AssociationRule[] = [],
+    totalTransactions: number = 0
   ): Promise<{
     storedBundles: number;
     totalSavings: number;
     abTestCandidates: Array<{ bundleId: string; items: string[] }>;
   }> {
     console.log(`[Analysis] Storing ${itemsets.length} frequent itemsets as bundle suggestions`);
+    console.log(`[Analysis] Using ${associationRules.length} association rules for accurate confidence scoring`);
 
     const bundleSuggestions: BundleSuggestionData[] = [];
     let totalSavings = 0;
     const abTestCandidates: Array<{ bundleId: string; items: string[] }> = [];
+
+    // Build a lookup map from association rules for each itemset
+    // Key: sorted items joined by comma, Value: best confidence & lift from rules
+    const ruleMetrics = new Map<string, { maxConfidence: number; avgConfidence: number; maxLift: number; avgLift: number; ruleCount: number }>();
+    
+    for (const rule of associationRules) {
+      const fullItemset = [...rule.antecedent, ...rule.consequent].sort().join(',');
+      const existing = ruleMetrics.get(fullItemset) || { maxConfidence: 0, avgConfidence: 0, maxLift: 0, avgLift: 0, ruleCount: 0 };
+      existing.maxConfidence = Math.max(existing.maxConfidence, rule.confidence);
+      existing.maxLift = Math.max(existing.maxLift, rule.lift);
+      existing.avgConfidence = ((existing.avgConfidence * existing.ruleCount) + rule.confidence) / (existing.ruleCount + 1);
+      existing.avgLift = ((existing.avgLift * existing.ruleCount) + rule.lift) / (existing.ruleCount + 1);
+      existing.ruleCount++;
+      ruleMetrics.set(fullItemset, existing);
+    }
 
     for (const itemset of itemsets) {
       if (itemset.items.length >= 2) {
@@ -748,17 +766,52 @@ export class OrderAnalysisService {
 
         const bundleId = `bundle-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+        // Calculate accurate confidence using composite scoring from association rules
+        const itemsetKey = itemset.items.sort().join(',');
+        const metrics = ruleMetrics.get(itemsetKey);
+        
+        let confidence: number;
+        if (metrics && metrics.ruleCount > 0) {
+          // Use real association rule metrics for accurate confidence
+          // Composite score: weighted combination of confidence, lift, and support
+          const normalizedLift = Math.min(metrics.avgLift / 5, 1.0); // Normalize lift (5.0+ = perfect)
+          const normalizedSupport = Math.min(itemset.support / 0.1, 1.0); // Normalize support (10%+ = perfect)
+          
+          // Weighted composite: 50% confidence, 25% lift, 15% support, 10% statistical strength
+          const statisticalStrength = Math.min(itemset.supportCount / 20, 1.0); // Need 20+ occurrences for full score
+          confidence = (
+            metrics.avgConfidence * 0.50 +
+            normalizedLift * 0.25 +
+            normalizedSupport * 0.15 +
+            statisticalStrength * 0.10
+          );
+          
+          // Cap at 0.99 (never 100% - stay honest)
+          confidence = Math.min(confidence, 0.99);
+          
+          console.log(`[Analysis] Bundle ${itemsetKey}: conf=${(metrics.avgConfidence * 100).toFixed(1)}%, lift=${metrics.avgLift.toFixed(2)}, support=${(itemset.support * 100).toFixed(2)}%, occurrences=${itemset.supportCount}, composite=${(confidence * 100).toFixed(1)}%`);
+        } else {
+          // Fallback: use support-based estimate with statistical penalty for no association rules
+          // This means the itemset was found but no strong directional rules exist
+          const supportScore = Math.min(itemset.support * 3, 0.6); // Lower ceiling without rules
+          const strengthPenalty = Math.min(itemset.supportCount / 30, 1.0);
+          confidence = supportScore * strengthPenalty;
+          confidence = Math.max(confidence, 0.05); // Minimum 5%
+          
+          console.log(`[Analysis] Bundle ${itemsetKey} (no rules): support=${(itemset.support * 100).toFixed(2)}%, occurrences=${itemset.supportCount}, fallback=${(confidence * 100).toFixed(1)}%`);
+        }
+
         const suggestion: BundleSuggestionData = {
           shop: this.shop,
           name: await this.generateBundleName(itemset.items),
           items: JSON.stringify(itemset.items),
-          confidence: itemset.support * 5, // Scale up support to confidence range
+          confidence,
           potentialSavings: bundleSavings,
           orderFrequency: itemset.supportCount,
           status: 'pending',
           bundleId,
           savings: bundleSavings,
-          abTestGroup: null, // Will be assigned during A/B testing
+          abTestGroup: null,
           performanceMetrics: {
             impressions: 0,
             clicks: 0,
@@ -770,13 +823,16 @@ export class OrderAnalysisService {
         bundleSuggestions.push(suggestion);
 
         // Add to A/B test candidates if meets criteria
-        if (itemset.support >= analysisConfig.minSupport * 1.2 && bundleSavings >= 50) {
+        if (confidence >= 0.5 && bundleSavings >= 50) {
           abTestCandidates.push({ bundleId, items: itemset.items });
         }
 
-        console.log(`[Analysis] Created bundle ${bundleId}: ${itemset.items.join(', ')} (support: ${(itemset.support * 100).toFixed(1)}%, savings: $${bundleSavings.toFixed(2)})`);
+        console.log(`[Analysis] Created bundle ${bundleId}: ${itemset.items.join(', ')} (confidence: ${(confidence * 100).toFixed(1)}%, savings: $${bundleSavings.toFixed(2)})`);
       }
     }
+
+    // Sort by confidence before storing (best suggestions first)
+    bundleSuggestions.sort((a, b) => b.confidence - a.confidence);
 
     // Store suggestions in database
     if (bundleSuggestions.length > 0) {
@@ -805,15 +861,6 @@ export class OrderAnalysisService {
       totalSavings,
       abTestCandidates
     };
-  }
-
-  /**
-   * Calculate average confidence for an itemset based on its association rules
-   */
-  private async calculateItemsetConfidence(itemset: FrequentItemset): Promise<number> {
-    // For now, use the itemset support as confidence proxy
-    // In a full implementation, we'd calculate this from association rules
-    return Math.min(itemset.support * 5, 1.0); // Scale up support to confidence range
   }
 
   /**
