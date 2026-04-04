@@ -189,7 +189,33 @@ export default function Dashboard() {
                   Automatically detect when customers order items that can ship as a pre-packed bundle, saving you fulfillment costs on every qualifying order.
                 </Text>
               </BlockStack>
+
+              {/* Setup Wizard CTA */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                  borderRadius: "12px",
+                  padding: "20px 24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                }}
+              >
+                <div>
+                  <Text as="p" variant="headingSm" fontWeight="bold">
+                    <span style={{ color: "#fff" }}>⚡ Quick Setup — Create your first rule in under 2 minutes</span>
+                  </Text>
+                  <Text as="p" variant="bodySm">
+                    <span style={{ color: "rgba(255,255,255,0.8)" }}>Our guided wizard walks you through selecting products, setting costs, and going live.</span>
+                  </Text>
+                </div>
+                <Button variant="primary" onClick={() => navigate('/app/setup-wizard')}>Launch Setup Wizard →</Button>
+              </div>
+
               <Divider />
+              <Text as="p" variant="bodySm" tone="subdued" alignment="center">Or set up manually:</Text>
               <Layout>
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">

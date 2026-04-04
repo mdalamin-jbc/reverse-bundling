@@ -26,6 +26,7 @@ export default function App() {
         <Link to="/app/bundle-analysis">Bundle Analysis</Link>
         <Link to="/app/orders">Order Conversions</Link>
         <Link to="/app/fulfillment">Fulfillment Provider</Link>
+        <Link to="/app/analytics">Reports & Analytics</Link>
         <Link to="/app/billing">Billing</Link>
         <Link to="/app/guidelines">Easy Tutorial Guide</Link>
         <Link to="/app/settings">Settings</Link>
