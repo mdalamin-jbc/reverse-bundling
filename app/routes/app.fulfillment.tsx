@@ -727,7 +727,9 @@ export default function FulfillmentIntegration() {
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="start" wrap={false}>
                       <InlineStack gap="300" blockAlign="center">
-                        <Icon source={provider.connectionVerified ? CheckCircleIcon : AlertCircleIcon} tone={provider.connectionVerified ? "success" : "critical"} />
+                        <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                          <Icon source={provider.connectionVerified ? CheckCircleIcon : AlertCircleIcon} tone={provider.connectionVerified ? "success" : "critical"} />
+                        </Box>
                         <BlockStack gap="100">
                           <Text as="h3" variant="headingSm" fontWeight="semibold">{provider.name}</Text>
                           <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>

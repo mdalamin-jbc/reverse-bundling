@@ -372,7 +372,9 @@ export default function Settings() {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <InlineStack gap="200" blockAlign="center">
-                          <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"} />
+                          <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                            <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"} />
+                          </Box>
                           <Text as="p" variant="bodyMd">Orders Create</Text>
                         </InlineStack>
                         <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_CREATE') ? "success" : "critical"}>
@@ -381,7 +383,9 @@ export default function Settings() {
                       </InlineStack>
                       <InlineStack align="space-between" blockAlign="center">
                         <InlineStack gap="200" blockAlign="center">
-                          <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"} />
+                          <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                            <Icon source={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? CheckCircleIcon : AlertCircleIcon} tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"} />
+                          </Box>
                           <Text as="p" variant="bodyMd">Orders Updated</Text>
                         </InlineStack>
                         <Badge tone={webhooks.some((w: any) => w.topic === 'ORDERS_UPDATED') ? "success" : "critical"}>

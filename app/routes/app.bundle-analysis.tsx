@@ -373,7 +373,9 @@ export default function BundleAnalysis() {
               {appliedSuggestions.map((s: any) => (
                 <InlineStack key={s.id} align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={CheckCircleIcon} tone="success" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={CheckCircleIcon} tone="success" />
+                    </Box>
                     <Text as="span" variant="bodyMd">{s.name}</Text>
                   </InlineStack>
                   <InlineStack gap="200" blockAlign="center">
