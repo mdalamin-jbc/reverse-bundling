@@ -171,6 +171,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       minimumSavings: parseFloat(formData.get("minimumSavings") as string) || 0,
       individualShipCost: parseFloat(formData.get("individualShipCost") as string) || 7.0,
       bundleShipCost: parseFloat(formData.get("bundleShipCost") as string) || 9.0,
+      fulfillmentMode: (formData.get("fulfillmentMode") as string) || 'tag_only',
     };
 
     const settings = await db.appSettings.upsert({
@@ -253,6 +254,7 @@ export default function Settings() {
   const [minimumSavings, setMinimumSavings] = useState(String(settings.minimumSavings));
   const [individualShipCost, setIndividualShipCost] = useState(String((settings as any).individualShipCost ?? 7.0));
   const [bundleShipCost, setBundleShipCost] = useState(String((settings as any).bundleShipCost ?? 9.0));
+  const [fulfillmentMode, setFulfillmentMode] = useState<string>((settings as any).fulfillmentMode ?? 'tag_only');
   const [hasChanges, setHasChanges] = useState(false);
 
   // Track changes
@@ -264,9 +266,10 @@ export default function Settings() {
       autoConvertOrders !== settings.autoConvertOrders ||
       minimumSavings !== String(settings.minimumSavings) ||
       individualShipCost !== String((settings as any).individualShipCost ?? 7.0) ||
-      bundleShipCost !== String((settings as any).bundleShipCost ?? 9.0);
+      bundleShipCost !== String((settings as any).bundleShipCost ?? 9.0) ||
+      fulfillmentMode !== ((settings as any).fulfillmentMode ?? 'tag_only');
     setHasChanges(changed);
-  }, [notificationsEnabled, emailNotifications, slackWebhook, autoConvertOrders, minimumSavings, individualShipCost, bundleShipCost, settings]);
+  }, [notificationsEnabled, emailNotifications, slackWebhook, autoConvertOrders, minimumSavings, individualShipCost, bundleShipCost, fulfillmentMode, settings]);
 
   useEffect(() => {
     if (fetcher.data?.success) {
@@ -286,6 +289,7 @@ export default function Settings() {
     formData.append("minimumSavings", minimumSavings);
     formData.append("individualShipCost", individualShipCost);
     formData.append("bundleShipCost", bundleShipCost);
+    formData.append("fulfillmentMode", fulfillmentMode);
     
     fetcher.submit(formData, { method: "POST" });
   };
@@ -539,6 +543,72 @@ export default function Settings() {
                       </Banner>
                     )}
                   </FormLayout>
+                </BlockStack>
+              </Card>
+
+              {/* Fulfillment Mode */}
+              <Card>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingLg" fontWeight="semibold">
+                      Fulfillment Mode
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      How should matched orders be handled for warehouse fulfillment?
+                    </Text>
+                  </BlockStack>
+
+                  <Divider />
+
+                  <BlockStack gap="300">
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', padding: '12px', borderRadius: '8px', border: fulfillmentMode === 'tag_only' ? '2px solid #008060' : '2px solid #e1e3e5', background: fulfillmentMode === 'tag_only' ? '#f1f8f5' : '#fff' }}>
+                      <input
+                        type="radio"
+                        name="fulfillmentMode"
+                        value="tag_only"
+                        checked={fulfillmentMode === 'tag_only'}
+                        onChange={() => setFulfillmentMode('tag_only')}
+                        style={{ marginTop: '4px' }}
+                      />
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">Tag &amp; Note Only</Text>
+                          <Badge tone="success">Recommended</Badge>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Adds tags, order notes, and metafields with bundle fulfillment instructions. The customer-facing order stays unchanged. Best for manual fulfillment or when staff reads order notes.
+                        </Text>
+                      </BlockStack>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', padding: '12px', borderRadius: '8px', border: fulfillmentMode === 'order_edit' ? '2px solid #008060' : '2px solid #e1e3e5', background: fulfillmentMode === 'order_edit' ? '#f1f8f5' : '#fff' }}>
+                      <input
+                        type="radio"
+                        name="fulfillmentMode"
+                        value="order_edit"
+                        checked={fulfillmentMode === 'order_edit'}
+                        onChange={() => setFulfillmentMode('order_edit')}
+                        style={{ marginTop: '4px' }}
+                      />
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">Full Order Edit</Text>
+                          <Badge tone="attention">Advanced</Badge>
+                        </InlineStack>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Replaces individual line items with the pre-packed bundle SKU in the actual order. 3PL software (ShipStation, ShipBob, etc.) will automatically pick the bundle. Note: customer sees the modified order.
+                        </Text>
+                      </BlockStack>
+                    </label>
+                  </BlockStack>
+
+                  {fulfillmentMode === 'order_edit' && (
+                    <Banner tone="warning">
+                      <Text as="p" variant="bodyMd">
+                        <strong>Important:</strong> Order Edit mode modifies the customer-facing order. The bundle product must exist in your Shopify store with the matching SKU, and inventory will be managed through Shopify's standard inventory system.
+                      </Text>
+                    </Banner>
+                  )}
                 </BlockStack>
               </Card>
 

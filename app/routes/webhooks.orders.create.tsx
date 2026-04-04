@@ -164,11 +164,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Get merchant fulfillment cost settings for accurate savings calculation
     let individualShipCost = 7.0;
     let bundleShipCost = 9.0;
+    let fulfillmentMode = 'tag_only';
     try {
       const settings = await db.appSettings.findUnique({ where: { shop } });
       if (settings) {
         individualShipCost = (settings as any).individualShipCost ?? 7.0;
         bundleShipCost = (settings as any).bundleShipCost ?? 9.0;
+        fulfillmentMode = (settings as any).fulfillmentMode ?? 'tag_only';
       }
     } catch { /* use defaults */ }
 
@@ -369,86 +371,219 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             logError(slackError as Error, { context: 'send_slack_notification', shop, orderId: String(order.id) });
           }
           
-          // TAG THE ORDER FOR FULFILLMENT — safe approach that doesn't modify customer-facing line items
-          // The warehouse reads tags/notes/metafields to know which pre-packed bundle to ship
+          // TAG THE ORDER FOR FULFILLMENT — mode depends on merchant's fulfillmentMode setting
           try {
             if (!admin) {
               throw new Error('Admin API not available in webhook context - order tagging skipped');
             }
 
             const orderId = `gid://shopify/Order/${order.id}`;
-            
-            // Build fulfillment note with clear instructions
-            const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
-            
-            // Existing note (if any) — append rather than overwrite
-            const existingNote = (payload as any).note || '';
-            const fullNote = existingNote 
-              ? `${existingNote}\n\n${bundleNote}` 
-              : bundleNote;
 
-            // Step 1: Add tags to the order for easy filtering in Shopify admin
-            const tagsToAdd = [
-              'reverse-bundled',
-              `bundle:${rule.bundledSku}`,
-              `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
-            ];
+            if (fulfillmentMode === 'order_edit') {
+              // === ORDER EDIT MODE ===
+              // Replaces individual line items with the bundle product variant
+              // 3PL software (ShipStation, ShipBob) reads line items automatically
+              logInfo('Using order_edit fulfillment mode', { shop, orderId: String(order.id), bundledSku: rule.bundledSku });
 
-            await admin.graphql(`
-              mutation tagsAdd($id: ID!, $tags: [String!]!) {
-                tagsAdd(id: $id, tags: $tags) {
-                  userErrors {
-                    field
-                    message
+              // Step 1: Find the bundle product variant by SKU
+              const skuLookupResponse = await admin.graphql(`
+                query FindVariantBySku($query: String!) {
+                  productVariants(first: 1, query: $query) {
+                    edges {
+                      node {
+                        id
+                        sku
+                        title
+                        product { title }
+                      }
+                    }
                   }
                 }
-              }
-            `, {
-              variables: { id: orderId, tags: tagsToAdd }
-            });
+              `, { variables: { query: `sku:${rule.bundledSku}` } });
 
-            // Step 2: Update order note with fulfillment instructions
-            await admin.graphql(`
-              mutation orderUpdate($input: OrderInput!) {
-                orderUpdate(input: $input) {
-                  order { id }
-                  userErrors { field message }
+              const skuLookupData = await skuLookupResponse.json();
+              const bundleVariant = skuLookupData.data?.productVariants?.edges?.[0]?.node;
+
+              if (!bundleVariant) {
+                throw new Error(`Bundle product with SKU "${rule.bundledSku}" not found in Shopify — cannot edit order. Create the product or switch to Tag Only mode.`);
+              }
+
+              // Step 2: Begin order edit
+              const editBeginResponse = await admin.graphql(`
+                mutation orderEditBegin($id: ID!) {
+                  orderEditBegin(id: $id) {
+                    calculatedOrder { id }
+                    userErrors { field message }
+                  }
+                }
+              `, { variables: { id: orderId } });
+
+              const editBeginData = await editBeginResponse.json();
+              const calculatedOrder = editBeginData.data?.orderEditBegin?.calculatedOrder;
+              const beginErrors = editBeginData.data?.orderEditBegin?.userErrors || [];
+
+              if (beginErrors.length > 0 || !calculatedOrder) {
+                throw new Error(`orderEditBegin failed: ${beginErrors.map((e: any) => e.message).join(', ') || 'No calculated order returned'}`);
+              }
+
+              const calculatedOrderId = calculatedOrder.id;
+
+              // Step 3: Remove the individual items that make up the bundle
+              for (const ruleItem of ruleItems) {
+                const matchingLineItem = lineItems.find(li => {
+                  const matchesSku = li.sku === ruleItem;
+                  const matchesVariant = li.variant_id
+                    ? `gid://shopify/ProductVariant/${li.variant_id}` === ruleItem
+                    : false;
+                  return matchesSku || matchesVariant;
+                });
+
+                if (matchingLineItem) {
+                  const lineItemId = `gid://shopify/CalculatedLineItem/${matchingLineItem.id}`;
+                  await admin.graphql(`
+                    mutation orderEditSetQuantity($id: ID!, $lineItemId: ID!, $quantity: Int!) {
+                      orderEditSetQuantity(id: $id, lineItemId: $lineItemId, quantity: $quantity) {
+                        calculatedOrder { id }
+                        userErrors { field message }
+                      }
+                    }
+                  `, {
+                    variables: { id: calculatedOrderId, lineItemId, quantity: 0 }
+                  });
                 }
               }
-            `, {
-              variables: {
-                input: {
-                  id: orderId,
-                  note: fullNote,
-                  metafields: [{
-                    namespace: "reverse_bundle",
-                    key: "fulfillment_instruction",
-                    type: "json",
-                    value: JSON.stringify({
-                      bundledSku: rule.bundledSku,
-                      bundleRuleName: rule.name,
-                      originalItems: ruleItems,
-                      savings: actualSavings,
-                      convertedAt: new Date().toISOString(),
-                      instruction: `Ship pre-packed bundle SKU ${rule.bundledSku} instead of ${ruleItems.length} individual items`
-                    })
-                  }]
-                }
-              }
-            });
 
-            // Mark conversion as successful
+              // Step 4: Add the bundle variant
+              await admin.graphql(`
+                mutation orderEditAddVariant($id: ID!, $variantId: ID!, $quantity: Int!) {
+                  orderEditAddVariant(id: $id, variantId: $variantId, quantity: 1) {
+                    calculatedOrder { id }
+                    userErrors { field message }
+                  }
+                }
+              `, {
+                variables: { id: calculatedOrderId, variantId: bundleVariant.id, quantity: 1 }
+              });
+
+              // Step 5: Commit the edit
+              const commitResponse = await admin.graphql(`
+                mutation orderEditCommit($id: ID!) {
+                  orderEditCommit(id: $id) {
+                    order { id }
+                    userErrors { field message }
+                  }
+                }
+              `, { variables: { id: calculatedOrderId } });
+
+              const commitData = await commitResponse.json();
+              const commitErrors = commitData.data?.orderEditCommit?.userErrors || [];
+
+              if (commitErrors.length > 0) {
+                throw new Error(`orderEditCommit failed: ${commitErrors.map((e: any) => e.message).join(', ')}`);
+              }
+
+              // Also add tags for tracking
+              const tagsToAdd = [
+                'reverse-bundled',
+                'order-edited',
+                `bundle:${rule.bundledSku}`,
+                `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+              ];
+
+              await admin.graphql(`
+                mutation tagsAdd($id: ID!, $tags: [String!]!) {
+                  tagsAdd(id: $id, tags: $tags) {
+                    userErrors { field message }
+                  }
+                }
+              `, { variables: { id: orderId, tags: tagsToAdd } });
+
+              logInfo('✅ Order edited for bundle fulfillment (line items replaced)', {
+                shop,
+                orderId: String(order.id),
+                bundledSku: rule.bundledSku,
+                bundleVariantId: bundleVariant.id,
+                mode: 'order_edit'
+              });
+
+            } else {
+              // === TAG ONLY MODE (default) ===
+              // Safe approach — doesn't modify customer-facing line items
+              // Warehouse reads tags/notes/metafields to know which pre-packed bundle to ship
+            
+              // Build fulfillment note with clear instructions
+              const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
+            
+              // Existing note (if any) — append rather than overwrite
+              const existingNote = (payload as any).note || '';
+              const fullNote = existingNote 
+                ? `${existingNote}\n\n${bundleNote}` 
+                : bundleNote;
+
+              // Step 1: Add tags to the order for easy filtering in Shopify admin
+              const tagsToAdd = [
+                'reverse-bundled',
+                `bundle:${rule.bundledSku}`,
+                `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
+              ];
+
+              await admin.graphql(`
+                mutation tagsAdd($id: ID!, $tags: [String!]!) {
+                  tagsAdd(id: $id, tags: $tags) {
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }
+              `, {
+                variables: { id: orderId, tags: tagsToAdd }
+              });
+
+              // Step 2: Update order note with fulfillment instructions
+              await admin.graphql(`
+                mutation orderUpdate($input: OrderInput!) {
+                  orderUpdate(input: $input) {
+                    order { id }
+                    userErrors { field message }
+                  }
+                }
+              `, {
+                variables: {
+                  input: {
+                    id: orderId,
+                    note: fullNote,
+                    metafields: [{
+                      namespace: "reverse_bundle",
+                      key: "fulfillment_instruction",
+                      type: "json",
+                      value: JSON.stringify({
+                        bundledSku: rule.bundledSku,
+                        bundleRuleName: rule.name,
+                        originalItems: ruleItems,
+                        savings: actualSavings,
+                        convertedAt: new Date().toISOString(),
+                        instruction: `Ship pre-packed bundle SKU ${rule.bundledSku} instead of ${ruleItems.length} individual items`
+                      })
+                    }]
+                  }
+                }
+              });
+
+              logInfo('✅ Order tagged for bundle fulfillment', {
+                shop,
+                orderId: String(order.id),
+                bundledSku: rule.bundledSku,
+                tags: tagsToAdd,
+                note: bundleNote,
+                mode: 'tag_only'
+              });
+            }
+
+            // Mark conversion as successful (both modes reach here on success)
             await db.orderConversion.updateMany({
               where: { shop, orderId: String(order.id) },
               data: { status: "success" }
-            });
-
-            logInfo('✅ Order tagged for bundle fulfillment', {
-              shop,
-              orderId: String(order.id),
-              bundledSku: rule.bundledSku,
-              tags: tagsToAdd,
-              note: bundleNote
             });
 
           } catch (taggingError) {

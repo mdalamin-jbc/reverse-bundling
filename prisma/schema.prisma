@@ -123,6 +123,7 @@ model AppSettings {
   minimumSavings        Float    @default(0.0)
   individualShipCost    Float    @default(7.0)  // Cost to ship each item individually
   bundleShipCost        Float    @default(9.0)  // Cost to ship as pre-packed bundle
+  fulfillmentMode       String   @default("tag_only") // "tag_only" or "order_edit"
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
