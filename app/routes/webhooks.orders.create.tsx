@@ -224,6 +224,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             bundledSku: rule.bundledSku
           });
 
+          // Guard: skip rules with invalid bundledSku (e.g. literal "undefined" from form bug)
+          if (!rule.bundledSku || rule.bundledSku === 'undefined' || rule.bundledSku === 'null') {
+            logWarning(`Skipping rule "${rule.name}" — bundledSku is invalid: "${rule.bundledSku}"`, {
+              shop, orderId: String(order.id), ruleId: rule.id
+            });
+            continue;
+          }
+
           // Check if conversion already exists for this order to prevent duplicates
           const existingConversion = await db.orderConversion.findFirst({
             where: {

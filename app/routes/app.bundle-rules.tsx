@@ -396,7 +396,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (action === "createRule") {
     const name = formData.get("name") as string;
     const items = formData.get("items") as string;
-    const bundledSku = formData.get("bundledSku") as string;
+    const rawBundledSku = formData.get("bundledSku") as string;
+    // Sanitize: treat literal "undefined"/"null" as empty (FormData serializes JS undefined to string "undefined")
+    const bundledSku = (rawBundledSku && rawBundledSku !== "undefined" && rawBundledSku !== "null") ? rawBundledSku : '';
     const savings = parseFloat(formData.get("savings") as string) || 0;
     const autoCreateProduct = formData.get("autoCreateProduct") === "true";
 
@@ -812,7 +814,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const ruleId = formData.get("ruleId") as string;
     const name = formData.get("name") as string;
     const items = formData.get("items") as string;
-    const bundledSku = formData.get("bundledSku") as string;
+    const rawBundledSku = formData.get("bundledSku") as string;
+    // Sanitize: treat literal "undefined"/"null" as empty
+    const bundledSku = (rawBundledSku && rawBundledSku !== "undefined" && rawBundledSku !== "null") ? rawBundledSku : '';
     const savings = parseFloat(formData.get("savings") as string) || 0;
 
     console.log('updateRule action received:', { ruleId, name, items, bundledSku, savings, shop: session.shop });
@@ -1806,7 +1810,7 @@ export default function BundleRules() {
         ruleId: editingRule?.id,
         name: formData.name,
         items: formData.items.join(","),
-        bundledSku: formData.bundledSku,
+        bundledSku: formData.bundledSku || '',
         savings: formData.savings,
         category: formData.category,
         tags: JSON.stringify(formData.tags),
