@@ -359,7 +359,9 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={AppsIcon} tone="base" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={AppsIcon} tone="base" />
+                    </Box>
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingMd" fontWeight="semibold">Webhook Status</Text>
                       <Text as="p" variant="bodySm" tone="subdued">Real-time order event listeners</Text>
@@ -395,7 +397,9 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={NotificationIcon} tone="base" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={NotificationIcon} tone="base" />
+                    </Box>
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingMd" fontWeight="semibold">Notifications</Text>
                       <Text as="p" variant="bodySm" tone="subdued">Get notified when bundles are detected</Text>
@@ -425,7 +429,9 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={SettingsIcon} tone="base" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={SettingsIcon} tone="base" />
+                    </Box>
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingMd" fontWeight="semibold">Order Processing</Text>
                       <Text as="p" variant="bodySm" tone="subdued">Control how orders are matched and converted</Text>
@@ -443,7 +449,9 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={DeliveryIcon} tone="base" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={DeliveryIcon} tone="base" />
+                    </Box>
                     <BlockStack gap="100">
                       <Text as="h2" variant="headingMd" fontWeight="semibold">Fulfillment Costs</Text>
                       <Text as="p" variant="bodySm" tone="subdued">Used to calculate savings per bundled order</Text>

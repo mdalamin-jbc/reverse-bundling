@@ -670,7 +670,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
-                  <Icon source={DeliveryIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={DeliveryIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{connectedCount}</Text>
                 <InlineStack gap="200">
@@ -685,7 +687,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Bundle Orders</Text>
-                  <Icon source={OrderIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={OrderIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.monthlyOrders}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{stats.totalOrders} total processed</Text>
@@ -697,7 +701,9 @@ export default function FulfillmentIntegration() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
-                  <Icon source={InventoryIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={InventoryIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.activeBundleRules}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Monitoring incoming orders</Text>

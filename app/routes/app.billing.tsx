@@ -490,7 +490,9 @@ export default function Billing() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="300" blockAlign="center">
-                <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
+                <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                  <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
+                </Box>
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd" fontWeight="bold">{planName} Plan</Text>
                   <Text as="p" variant="bodySm" tone="subdued">
@@ -509,7 +511,9 @@ export default function Billing() {
               <Layout.Section variant="oneThird">
                 <BlockStack gap="200">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={OrderIcon} tone="subdued" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={OrderIcon} tone="subdued" />
+                    </Box>
                     <Text as="p" variant="bodySm" tone="subdued">Orders Used</Text>
                   </InlineStack>
                   <Text as="p" variant="headingSm" fontWeight="bold">
@@ -520,7 +524,9 @@ export default function Billing() {
               <Layout.Section variant="oneThird">
                 <BlockStack gap="200">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={CashDollarIcon} tone="subdued" />
+                    <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                      <Icon source={CashDollarIcon} tone="subdued" />
+                    </Box>
                     <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
                   </InlineStack>
                   <Text as="p" variant="headingSm" fontWeight="bold">${totalSavings.toLocaleString()}</Text>
@@ -554,15 +560,11 @@ export default function Billing() {
                 <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
                 <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial. No credit card required.</Text>
               </BlockStack>
-              <Box background="bg-surface-secondary" padding="100" borderRadius="full">
-                <InlineStack gap="100">
-                  <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
-                  <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'tertiary'} onClick={() => setBillingInterval('yearly')}>
-                    Yearly
-                    <Badge tone="success" size="small">Save up to 17%</Badge>
-                  </Button>
-                </InlineStack>
-              </Box>
+              <InlineStack gap="200" blockAlign="center">
+                <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
+                <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('yearly')}>Yearly</Button>
+                {billingInterval === 'yearly' && <Badge tone="success">Save up to 17%</Badge>}
+              </InlineStack>
             </InlineStack>
 
             <Divider />
@@ -580,6 +582,8 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Basic bundling rules</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Tag & note mode</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Email support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="subdued" /><Text as="p" variant="bodySm">Shopify admin integration</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Free');
@@ -608,6 +612,8 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited rules</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Real-time analytics</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Email notifications</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Bundle analysis AI</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Starter', 4.99);
@@ -642,6 +648,8 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Advanced analytics</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Priority support</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Order edit mode</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="info" /><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Professional', 9.99);
@@ -673,6 +681,8 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Dedicated support</Text></InlineStack>
                       <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">All integrations</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">White-glove onboarding</Text></InlineStack>
+                      <InlineStack gap="200" blockAlign="center"><Icon source={CheckCircleIcon} tone="success" /><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
                     </BlockStack>
                     {(() => {
                       const b = getPlanButton('Enterprise', 14.99);
@@ -690,25 +700,30 @@ export default function Billing() {
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd" fontWeight="semibold">Frequently Asked Questions</Text>
             <Divider />
-            <BlockStack gap="300">
-              <Box>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. No credit card required upfront. Cancel anytime during the trial at no cost.</Text>
+            <BlockStack gap="200">
+              <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. No credit card required upfront. Cancel anytime during the trial at no cost.</Text>
+                </BlockStack>
               </Box>
-              <Divider />
-              <Box>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">Can I change plans anytime?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Yes, upgrade or downgrade at any time through the Shopify App Store. Plan changes take effect immediately and are prorated.</Text>
+              <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">Can I change plans anytime?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Yes, upgrade or downgrade at any time through the Shopify App Store. Plan changes take effect immediately and are prorated.</Text>
+                </BlockStack>
               </Box>
-              <Divider />
-              <Box>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">What happens if I exceed my order limit?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">Order processing pauses until your next billing cycle or until you upgrade. You'll receive a notification at 80% and 90% usage. No orders are lost.</Text>
+              <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">What happens if I exceed my order limit?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Order processing pauses until your next billing cycle or until you upgrade. You'll receive a notification at 80% and 90% usage. No orders are lost.</Text>
+                </BlockStack>
               </Box>
-              <Divider />
-              <Box>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">Is there a long-term contract?</Text>
-                <Text as="p" variant="bodySm" tone="subdued">No. All plans are pay-as-you-go with no lock-in. Cancel anytime from your Shopify admin.</Text>
+              <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">Is there a long-term contract?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">No. All plans are pay-as-you-go with no lock-in. Cancel anytime from your Shopify admin.</Text>
+                </BlockStack>
               </Box>
             </BlockStack>
           </BlockStack>

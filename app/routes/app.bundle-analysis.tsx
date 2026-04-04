@@ -239,7 +239,12 @@ export default function BundleAnalysis() {
           <Layout.Section variant="oneThird">
             <Card>
               <BlockStack gap="300">
-                <Text as="p" variant="bodySm" tone="subdued">Time Range</Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodySm" tone="subdued">Time Range</Text>
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={SearchIcon} tone="base" />
+                  </Box>
+                </InlineStack>
                 <Select
                   label=""
                   labelHidden
@@ -252,6 +257,7 @@ export default function BundleAnalysis() {
                   value={daysBack}
                   onChange={setDaysBack}
                 />
+                <Text as="p" variant="bodySm" tone="subdued">Select a period to analyze</Text>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -260,7 +266,9 @@ export default function BundleAnalysis() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Orders Analyzed</Text>
-                  <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalOrders.toLocaleString()}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{stats.cooccurrences} item pairs found</Text>
@@ -272,7 +280,9 @@ export default function BundleAnalysis() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Suggestions</Text>
-                  <Icon source={ProductIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={ProductIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{pendingSuggestions.length} pending</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{appliedSuggestions.length} applied as rules</Text>

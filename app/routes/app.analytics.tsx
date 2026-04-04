@@ -122,7 +122,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Orders Processed</Text>
-                  <Icon source={OrderIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={OrderIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{summary.totalOrders.toLocaleString()}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">{summary.totalRecords} analytics records</Text>
@@ -134,7 +136,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Icon source={CashDollarIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={CashDollarIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">${summary.totalSavings.toFixed(2)}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Across all bundle rules</Text>
@@ -146,7 +150,9 @@ export default function Analytics() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Avg Savings / Order</Text>
-                  <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">${summary.avgOrderValue.toFixed(2)}</Text>
                 <Text as="p" variant="bodySm" tone="subdued">Per bundled order</Text>

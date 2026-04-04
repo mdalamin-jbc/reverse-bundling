@@ -194,7 +194,9 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Icon source={InventoryIcon} tone="info" />
+                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                        <Icon source={InventoryIcon} tone="info" />
+                      </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">1. Create rules</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -206,7 +208,9 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Icon source={ChartVerticalFilledIcon} tone="info" />
+                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                        <Icon source={ChartVerticalFilledIcon} tone="info" />
+                      </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">2. Analyze orders</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -218,7 +222,9 @@ export default function Dashboard() {
                 <Layout.Section variant="oneThird">
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
-                      <Icon source={CashDollarIcon} tone="info" />
+                      <Box padding="200" borderRadius="300" background="bg-surface-info">
+                        <Icon source={CashDollarIcon} tone="info" />
+                      </Box>
                       <Text as="h3" variant="headingSm" fontWeight="semibold">3. Save on shipping</Text>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
@@ -239,7 +245,9 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
-                  <Icon source={OrderIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={OrderIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">
                   {analytics.totalConversions.toLocaleString()}
@@ -256,7 +264,9 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Icon source={CashDollarIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={CashDollarIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">
                   ${analytics.totalSavings.toLocaleString()}
@@ -273,7 +283,9 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Active Rules</Text>
-                  <Icon source={InventoryIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={InventoryIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">
                   {analytics.activeBundleRules}

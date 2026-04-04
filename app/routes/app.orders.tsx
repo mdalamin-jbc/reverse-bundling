@@ -168,7 +168,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Conversions</Text>
-                  <Icon source={OrderIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={OrderIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">{stats.totalConversions.toLocaleString()}</Text>
               </BlockStack>
@@ -179,7 +181,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Total Savings</Text>
-                  <Icon source={CashDollarIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={CashDollarIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">${stats.totalSavings.toFixed(2)}</Text>
               </BlockStack>
@@ -190,7 +194,9 @@ export default function OrderConversions() {
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodySm" tone="subdued">Average Savings</Text>
-                  <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  <Box padding="200" borderRadius="300" background="bg-surface-secondary">
+                    <Icon source={ChartVerticalFilledIcon} tone="base" />
+                  </Box>
                 </InlineStack>
                 <Text as="p" variant="headingLg" fontWeight="bold">${stats.avgSavings.toFixed(2)}</Text>
               </BlockStack>
