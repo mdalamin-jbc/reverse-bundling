@@ -151,15 +151,19 @@ export class OrderAnalysisService {
   }
 
   /**
-   * Fetch orders from Shopify Admin API
+   * Fetch orders from Shopify Admin API with cursor-based pagination
    */
   private async fetchOrdersFromShopify(daysBack: number): Promise<AnalyzedOrder[]> {
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - daysBack);
 
     const query = `
-      query GetOrders($first: Int!, $query: String!) {
-        orders(first: $first, query: $query) {
+      query GetOrders($first: Int!, $query: String!, $after: String) {
+        orders(first: $first, query: $query, after: $after) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
           edges {
             node {
               id
@@ -187,58 +191,91 @@ export class OrderAnalysisService {
       }
     `;
 
-    const variables = {
-      first: 250, // Shopify's max per request
-      query: `created_at:>${sinceDate.toISOString()}`,
-    };
+    const allOrders: AnalyzedOrder[] = [];
+    let hasNextPage = true;
+    let cursor: string | null = null;
+    const maxPages = 20; // Safety limit: 20 * 250 = 5000 orders max
+    let pageCount = 0;
 
-    const response = await this.admin.graphql(query, { variables });
-    const data = await response.json();
+    while (hasNextPage && pageCount < maxPages) {
+      const variables: Record<string, any> = {
+        first: 250,
+        query: `created_at:>${sinceDate.toISOString()}`,
+      };
+      if (cursor) {
+        variables.after = cursor;
+      }
 
-    if (data.errors || !data.data) {
-      throw new Error(`Shopify API error: ${JSON.stringify(data.errors || data)}`);
+      const response = await this.admin.graphql(query, { variables });
+      const data = await response.json();
+
+      if (data.errors || !data.data) {
+        throw new Error(`Shopify API error: ${JSON.stringify(data.errors || data)}`);
+      }
+
+      const pageInfo = data.data.orders.pageInfo;
+      hasNextPage = pageInfo.hasNextPage;
+      cursor = pageInfo.endCursor;
+      pageCount++;
+
+      const orders = data.data.orders.edges.map((edge: any) => ({
+        id: edge.node.id,
+        items: edge.node.lineItems.edges
+          .map((itemEdge: any) => {
+            const variant = itemEdge.node.variant;
+            if (!variant || !variant.product) {
+              return null;
+            }
+            return {
+              variantId: variant.id,
+              productId: variant.product.id,
+              quantity: itemEdge.node.quantity,
+              price: parseFloat(variant.price || '0'),
+              sku: variant.sku,
+              productTitle: variant.product.title,
+            };
+          })
+          .filter((item: any) => item !== null),
+        totalPrice: parseFloat(edge.node.totalPrice),
+        createdAt: edge.node.createdAt,
+      })).filter((order: AnalyzedOrder) => order.items.length > 0);
+
+      allOrders.push(...orders);
+      console.log(`[Analysis] Fetched page ${pageCount}: ${orders.length} orders (total: ${allOrders.length})`);
     }
 
-    return data.data.orders.edges.map((edge: any) => ({
-      id: edge.node.id,
-      items: edge.node.lineItems.edges
-        .map((itemEdge: any) => {
-          const variant = itemEdge.node.variant;
-          if (!variant || !variant.product) {
-            return null; // Skip items without variant or product data
-          }
-          return {
-            variantId: variant.id,
-            productId: variant.product.id,
-            quantity: itemEdge.node.quantity,
-            price: parseFloat(variant.price || '0'),
-            sku: variant.sku,
-            productTitle: variant.product.title,
-          };
-        })
-        .filter((item: any) => item !== null), // Remove null items
-      totalPrice: parseFloat(edge.node.totalPrice),
-      createdAt: edge.node.createdAt,
-    })).filter((order: AnalyzedOrder) => order.items.length > 0); // Only include orders with items
+    console.log(`[Analysis] Pagination complete: ${allOrders.length} total orders from ${pageCount} pages`);
+    return allOrders;
   }
 
   /**
-   * Store order history in database
+   * Store order history in database (upsert to handle duplicates)
    */
   private async storeOrderHistory(orders: AnalyzedOrder[]): Promise<void> {
-    const orderHistoryData = orders.map(order => ({
-      shop: this.shop,
-      orderId: order.id,
-      orderNumber: order.id.split('/').pop(), // Extract order number from Shopify GID
-      orderDate: new Date(order.createdAt),
-      lineItems: JSON.stringify(order.items),
-      totalValue: order.totalPrice,
-      processed: false,
-    }));
-
-    await prisma.orderHistory.createMany({
-      data: orderHistoryData,
-    });
+    for (const order of orders) {
+      await prisma.orderHistory.upsert({
+        where: {
+          shop_orderId: {
+            shop: this.shop,
+            orderId: order.id,
+          },
+        },
+        update: {
+          lineItems: JSON.stringify(order.items),
+          totalValue: order.totalPrice,
+          orderDate: new Date(order.createdAt),
+        },
+        create: {
+          shop: this.shop,
+          orderId: order.id,
+          orderNumber: order.id.split('/').pop(),
+          orderDate: new Date(order.createdAt),
+          lineItems: JSON.stringify(order.items),
+          totalValue: order.totalPrice,
+          processed: false,
+        },
+      });
+    }
   }
 
   /**

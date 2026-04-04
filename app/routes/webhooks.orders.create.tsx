@@ -92,15 +92,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               const amount = pricing.price?.amount || 0;
               const interval = pricing.interval;
               
-              // Map pricing to plan limits
+              // Map pricing to plan limits based on actual billing.server.ts plan prices
               if (interval === 'ANNUAL') {
-                if (amount >= 1000) planLimit = 999999; // Enterprise
-                else if (amount >= 500) planLimit = 2050; // Professional
-                else if (amount >= 200) planLimit = 550; // Starter
+                // Annual plan prices (approx 10x monthly)
+                if (amount >= 120) planLimit = 999999;   // Enterprise ($14.99/mo annual)
+                else if (amount >= 80) planLimit = 550;   // Professional ($9.99/mo annual)
+                else if (amount >= 40) planLimit = 150;   // Starter ($4.99/mo annual)
               } else {
-                if (amount >= 199) planLimit = 999999; // Enterprise
-                else if (amount >= 79) planLimit = 2050; // Professional
-                else if (amount >= 29) planLimit = 550; // Starter
+                // Monthly plan prices
+                if (amount >= 14.99) planLimit = 999999;  // Enterprise
+                else if (amount >= 9.99) planLimit = 550; // Professional (25 free + 500 paid + 25 buffer)
+                else if (amount >= 4.99) planLimit = 150; // Starter (25 free + 100 paid + 25 buffer)
               }
             }
           }
@@ -191,9 +193,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         
         // Check if all items in the rule are present in the order
         // Support both SKU matching AND variant ID matching
-        const hasAllItems = ruleItems.every(ruleItem => 
-          orderSkus.includes(ruleItem) || orderVariantIds.includes(ruleItem)
-        );
+        // Also verify each rule item has at least quantity 1
+        const hasAllItems = ruleItems.every(ruleItem => {
+          // Find a matching line item with quantity >= 1
+          return lineItems.some(li => {
+            const matchesSku = li.sku === ruleItem;
+            const matchesVariant = li.variant_id
+              ? `gid://shopify/ProductVariant/${li.variant_id}` === ruleItem
+              : false;
+            return (matchesSku || matchesVariant) && (li.quantity || 0) >= 1;
+          });
+        });
 
         if (hasAllItems) {
           logInfo(`Bundle match found! Rule: ${rule.name}`, { 

@@ -27,20 +27,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Fetch ALL data from database - NO MOCK DATA
     const [
       activeBundleRulesCount,
-      allOrderConversions,
+      recentConversions,
       totalConversionsCount,
       totalSavingsAmount,
       topPerformingRules,
+      recentConversionsCount,
+      monthlySavingsResult,
     ] = await Promise.all([
       // Count of active bundle rules
       db.bundleRule.count({
         where: { shop: session.shop, status: "active" },
       }),
       
-      // All order conversions for calculations (unlimited)
+      // Only fetch the 10 most recent conversions (not all of them)
       db.orderConversion.findMany({
         where: { shop: session.shop },
         orderBy: { convertedAt: "desc" },
+        take: 10,
         include: { bundleRule: true },
       }),
 
@@ -61,6 +64,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         orderBy: { frequency: "desc" },
         take: 5,
       }),
+
+      // Last 30 days conversion count
+      db.orderConversion.count({
+        where: {
+          shop: session.shop,
+          convertedAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+        },
+      }),
+
+      // Last 30 days savings
+      db.orderConversion.aggregate({
+        where: {
+          shop: session.shop,
+          convertedAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+        },
+        _sum: { savingsAmount: true },
+      }),
     ]);
 
     // Calculate real analytics from database
@@ -68,14 +92,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const totalSavings = totalSavingsAmount._sum.savingsAmount || 0;
     const avgSavingsPerOrder = totalConversions > 0 ? totalSavings / totalConversions : 0;
 
-    // Calculate last 30 days metrics
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const recentConversions = allOrderConversions.filter(
-      (conv) => new Date(conv.convertedAt) >= thirtyDaysAgo
-    );
-    const monthlySavings = recentConversions.reduce((sum, conv) => sum + conv.savingsAmount, 0);
+    // Last 30 days metrics (from aggregate queries above)
+    const monthlySavings = monthlySavingsResult._sum.savingsAmount || 0;
 
     logInfo("Dashboard loaded successfully", { 
       shop: session.shop, 
@@ -90,9 +108,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         avgSavingsPerOrder: Math.round(avgSavingsPerOrder * 100) / 100,
         monthlySavings: Math.round(monthlySavings * 100) / 100,
         activeBundleRules: activeBundleRulesCount,
-        recentConversionsCount: recentConversions.length,
+        recentConversionsCount: recentConversionsCount,
       },
-      recentConversions: allOrderConversions.slice(0, 10),
+      recentConversions: recentConversions,
       topRules: topPerformingRules,
       shop: session.shop,
     });

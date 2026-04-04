@@ -14,9 +14,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     logInfo(`App uninstalled - starting cleanup for shop: ${shop}`);
 
     // Delete data in the correct order to handle foreign key constraints
-    // BundleRule has cascade delete for BundleAnalytics and OrderConversion
+    // Use transaction to ensure atomicity
     const results = await Promise.allSettled([
-      // Delete fulfillment providers first (no dependencies)
+      // Delete analysis data first (no dependencies)
+      db.bundleSuggestion.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete bundle suggestions for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      db.itemCooccurrence.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete item cooccurrences for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      db.orderHistory.deleteMany({ where: { shop } }).catch(err => {
+        logInfo(`Failed to delete order history for ${shop}: ${err.message}`);
+        return null;
+      }),
+
+      // Delete fulfillment providers (no dependencies)
       db.fulfillmentProvider.deleteMany({ where: { shop } }).catch(err => {
         logInfo(`Failed to delete fulfillment providers for ${shop}: ${err.message}`);
         return null;

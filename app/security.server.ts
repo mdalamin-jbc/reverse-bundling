@@ -1,14 +1,16 @@
 // Security headers for production
+// NOTE: frame-ancestors must allow Shopify admin domains for embedded app iframe
 export const securityHeaders = {
-  // Prevent clickjacking
-  "X-Frame-Options": "DENY",
+  // Do NOT set X-Frame-Options — Shopify embedded apps run in iframes
+  // "X-Frame-Options": "DENY", // REMOVED — breaks Shopify embedded app
+
   // Prevent MIME type sniffing
   "X-Content-Type-Options": "nosniff",
   // Enable XSS protection
   "X-XSS-Protection": "1; mode=block",
   // Referrer policy
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  // Content Security Policy (basic)
+  // Content Security Policy — must allow Shopify framing
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com",
@@ -19,8 +21,8 @@ export const securityHeaders = {
     "frame-src 'self' https://cdn.shopify.com",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'"
+    "form-action 'self' https://*.myshopify.com https://admin.shopify.com",
+    "frame-ancestors https://*.myshopify.com https://admin.shopify.com"
   ].join("; "),
   // HSTS (HTTP Strict Transport Security) - only in production
   ...(process.env.NODE_ENV === "production" ? {
