@@ -160,7 +160,7 @@ export default function Dashboard() {
 
   const hasData = analytics.totalConversions > 0 || analytics.activeBundleRules > 0;
   const successRate = analytics.totalConversions > 0
-    ? Math.round(((analytics.totalConversions - analytics.failedConversions) / analytics.totalConversions) * 100)
+    ? Math.max(0, Math.round(((analytics.totalConversions - analytics.failedConversions) / analytics.totalConversions) * 100))
     : 100;
 
   return (

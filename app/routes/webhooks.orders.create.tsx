@@ -588,7 +588,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
 
               // Existing note (if any) — append rather than overwrite
-              const existingNote = (payload as any).note || '';
+              const existingNote = '';
               const fullNote = existingNote
                 ? `${existingNote}\n\n${bundleNote}`
                 : bundleNote;
@@ -700,6 +700,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   } catch (error) {
     logError(error as Error, { shop, topic });
     perfMonitor.end({ shop, error: true });
-    return new Response("Error processing webhook", { status: 500 });
+    // Return 200 to prevent Shopify from retrying and creating duplicate conversions
+    return new Response("Error processing webhook", { status: 200 });
   }
 };

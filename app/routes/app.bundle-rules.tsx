@@ -460,8 +460,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // Generate rule ID once at the beginning - this will be used for both database and product tagging
-    const ruleId = Date.now().toString();
+    // Generate unique rule ID - use random suffix to prevent collision on rapid creates
+    const ruleId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     let finalBundledSku = bundledSku?.trim() || '';
 

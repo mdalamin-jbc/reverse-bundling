@@ -13,55 +13,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     logInfo(`App uninstalled - starting cleanup for shop: ${shop}`);
 
-    // Delete data in the correct order to handle foreign key constraints
-    // Use transaction to ensure atomicity
-    const results = await Promise.allSettled([
-      // Delete analysis data first (no dependencies)
-      db.bundleSuggestion.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete bundle suggestions for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      db.itemCooccurrence.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete item cooccurrences for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      db.orderHistory.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete order history for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      // Delete fulfillment providers (no dependencies)
-      db.fulfillmentProvider.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete fulfillment providers for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      // Delete app settings (no dependencies)
-      db.appSettings.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete app settings for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      // Delete bundle rules (this will cascade delete analytics and conversions)
-      db.bundleRule.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete bundle rules for ${shop}: ${err.message}`);
-        return null;
-      }),
-
-      // Delete session last
-      session ? db.session.deleteMany({ where: { shop } }).catch(err => {
-        logInfo(`Failed to delete session for ${shop}: ${err.message}`);
-        return null;
-      }) : Promise.resolve(null)
-    ]);
-
-    // Log results
-    const fulfilled = results.filter(r => r.status === 'fulfilled').length;
-    const rejected = results.filter(r => r.status === 'rejected').length;
-
-    logInfo(`Cleanup completed for shop ${shop}: ${fulfilled} successful, ${rejected} failed`);
+    // Delete data in correct order to handle foreign key constraints
+    // Use transaction for atomicity
+    try {
+      await db.$transaction([
+        db.bundleSuggestion.deleteMany({ where: { shop } }),
+        db.itemCooccurrence.deleteMany({ where: { shop } }),
+        db.orderHistory.deleteMany({ where: { shop } }),
+        db.bundleAnalytics.deleteMany({ where: { shop } }),
+        db.orderConversion.deleteMany({ where: { shop } }),
+        db.bundleRule.deleteMany({ where: { shop } }),
+        db.fulfillmentProvider.deleteMany({ where: { shop } }),
+        db.appSettings.deleteMany({ where: { shop } }),
+        ...(session ? [db.session.deleteMany({ where: { shop } })] : []),
+      ]);
+      logInfo(`✅ Complete data cleanup for shop ${shop}`);
+    } catch (txError) {
+      logInfo(`Transaction cleanup failed for ${shop}, attempting individual deletes`, {
+        error: (txError as Error).message
+      });
+      // Fallback: delete individually, log failures
+      const tables = [
+        { name: 'bundleSuggestion', fn: () => db.bundleSuggestion.deleteMany({ where: { shop } }) },
+        { name: 'itemCooccurrence', fn: () => db.itemCooccurrence.deleteMany({ where: { shop } }) },
+        { name: 'orderHistory', fn: () => db.orderHistory.deleteMany({ where: { shop } }) },
+        { name: 'bundleAnalytics', fn: () => db.bundleAnalytics.deleteMany({ where: { shop } }) },
+        { name: 'orderConversion', fn: () => db.orderConversion.deleteMany({ where: { shop } }) },
+        { name: 'bundleRule', fn: () => db.bundleRule.deleteMany({ where: { shop } }) },
+        { name: 'fulfillmentProvider', fn: () => db.fulfillmentProvider.deleteMany({ where: { shop } }) },
+        { name: 'appSettings', fn: () => db.appSettings.deleteMany({ where: { shop } }) },
+        ...(session ? [{ name: 'session', fn: () => db.session.deleteMany({ where: { shop } }) }] : []),
+      ];
+      for (const table of tables) {
+        try { await table.fn(); } catch (err) {
+          logInfo(`Failed to delete ${table.name} for ${shop}: ${(err as Error).message}`);
+        }
+      }
+    }
 
     // Invalidate all caches for this shop
     const shopCacheKeys = [

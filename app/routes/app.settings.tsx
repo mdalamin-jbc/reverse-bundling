@@ -173,46 +173,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
   
-  // Handle settings update
-  try {
-    const settingsData = {
-      notificationsEnabled: formData.get("notificationsEnabled") === "true",
-      emailNotifications: formData.get("emailNotifications") === "true",
-      slackWebhook: formData.get("slackWebhook") as string || null,
-      autoConvertOrders: formData.get("autoConvertOrders") === "true",
-      minimumSavings: parseFloat(formData.get("minimumSavings") as string) || 0,
-      individualShipCost: parseFloat(formData.get("individualShipCost") as string) || 7.0,
-      bundleShipCost: parseFloat(formData.get("bundleShipCost") as string) || 9.0,
-      fulfillmentMode: (formData.get("fulfillmentMode") as string) || 'tag_only',
-    };
-
-    const settings = await db.appSettings.upsert({
-      where: { shop: session.shop },
-      update: settingsData,
-      create: {
-        shop: session.shop,
-        ...settingsData
-      }
-    });
-
-    logInfo('Updated app settings', {
-      shop: session.shop,
-      settingsId: settings.id
-    });
-
-    return json({ 
-      success: true, 
-      message: "Settings saved successfully!",
-      settings
-    });
-  } catch (error) {
-    logError(error instanceof Error ? error : new Error('Error saving settings'), { shop: session.shop });
-    return json({ 
-      success: false, 
-      message: error instanceof Error ? error.message : "Failed to save settings"
-    });
-  }
-
   // Handle Slack webhook testing
   if (action === "testSlackWebhook") {
     try {
@@ -251,6 +211,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: `❌ ${errorMessage}`
       }, { status: 500 });
     }
+  }
+
+  // Handle settings update
+  try {
+    const rawMinSavings = parseFloat(formData.get("minimumSavings") as string);
+    const rawIndividualShipCost = parseFloat(formData.get("individualShipCost") as string);
+    const rawBundleShipCost = parseFloat(formData.get("bundleShipCost") as string);
+    const rawFulfillmentMode = (formData.get("fulfillmentMode") as string) || 'tag_only';
+    const allowedModes = ['tag_only', 'order_edit'];
+
+    const settingsData = {
+      notificationsEnabled: formData.get("notificationsEnabled") === "true",
+      emailNotifications: formData.get("emailNotifications") === "true",
+      slackWebhook: formData.get("slackWebhook") as string || null,
+      autoConvertOrders: formData.get("autoConvertOrders") === "true",
+      minimumSavings: isNaN(rawMinSavings) || rawMinSavings < 0 ? 0 : rawMinSavings,
+      individualShipCost: isNaN(rawIndividualShipCost) || rawIndividualShipCost < 0 ? 7.0 : rawIndividualShipCost,
+      bundleShipCost: isNaN(rawBundleShipCost) || rawBundleShipCost < 0 ? 9.0 : rawBundleShipCost,
+      fulfillmentMode: allowedModes.includes(rawFulfillmentMode) ? rawFulfillmentMode : 'tag_only',
+    };
+
+    const settings = await db.appSettings.upsert({
+      where: { shop: session.shop },
+      update: settingsData,
+      create: {
+        shop: session.shop,
+        ...settingsData
+      }
+    });
+
+    logInfo('Updated app settings', {
+      shop: session.shop,
+      settingsId: settings.id
+    });
+
+    return json({ 
+      success: true, 
+      message: "Settings saved successfully!",
+      settings
+    });
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error('Error saving settings'), { shop: session.shop });
+    return json({ 
+      success: false, 
+      message: error instanceof Error ? error.message : "Failed to save settings"
+    });
   }
 };
 

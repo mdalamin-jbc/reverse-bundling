@@ -142,7 +142,8 @@ export default function OrderConversions() {
   }, [validConversions, searchQuery, filterStatus, sortBy]);
 
   const tableRows = filteredConversions.map(conversion => {
-    const originalItems = JSON.parse(conversion.originalItems);
+    let originalItems: any[] = [];
+    try { originalItems = JSON.parse(conversion.originalItems); } catch { /* corrupted data */ }
     return [
       conversion.orderId,
       conversion.bundleRule.name,

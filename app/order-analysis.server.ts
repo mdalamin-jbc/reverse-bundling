@@ -196,6 +196,7 @@ export class OrderAnalysisService {
     let cursor: string | null = null;
     const maxPages = 20; // Safety limit: 20 * 250 = 5000 orders max
     let pageCount = 0;
+    let truncated = false;
 
     while (hasNextPage && pageCount < maxPages) {
       const variables: Record<string, any> = {
@@ -244,7 +245,12 @@ export class OrderAnalysisService {
       console.log(`[Analysis] Fetched page ${pageCount}: ${orders.length} orders (total: ${allOrders.length})`);
     }
 
-    console.log(`[Analysis] Pagination complete: ${allOrders.length} total orders from ${pageCount} pages`);
+    if (hasNextPage && pageCount >= maxPages) {
+      truncated = true;
+      console.warn(`[Analysis] WARNING: Order fetching truncated at ${allOrders.length} orders (${maxPages} pages). Some orders were not analyzed.`);
+    }
+
+    console.log(`[Analysis] Pagination complete: ${allOrders.length} total orders from ${pageCount} pages${truncated ? ' (TRUNCATED)' : ''}`);
     return allOrders;
   }
 

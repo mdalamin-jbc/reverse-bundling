@@ -501,6 +501,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop: session.shop }
     });
 
+    // Calculate actual savings from OrderConversion records
+    const monthlySavingsResult = await db.orderConversion.aggregate({
+      where: {
+        shop: session.shop,
+        convertedAt: { gte: firstDayOfMonth }
+      },
+      _sum: { savingsAmount: true }
+    });
+
+    const totalSavingsResult = await db.orderConversion.aggregate({
+      where: { shop: session.shop },
+      _sum: { savingsAmount: true }
+    });
+
     const activeBundleRules = await db.bundleRule.count({
       where: {
         shop: session.shop,
@@ -522,8 +536,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       stats: {
         monthlyOrders,
         totalOrders,
-        monthlySavings: monthlyOrders * 8, // Assuming $8 average savings per order
-        totalSavings: totalOrders * 8,
+        monthlySavings: Math.round((monthlySavingsResult._sum.savingsAmount || 0) * 100) / 100,
+        totalSavings: Math.round((totalSavingsResult._sum.savingsAmount || 0) * 100) / 100,
         activeBundleRules,
         hasData: totalOrders > 0
       },
