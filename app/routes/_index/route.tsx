@@ -152,15 +152,15 @@ export default function App() {
               <div className={styles.pricingHeader}>
                 <h3 className={styles.pricingTitle}>Starter</h3>
                 <div className={styles.pricingPrice}>
-                  <span className={styles.priceAmount}>$29</span>
-                  <span className={styles.pricePeriod}>/month</span>
+                  <span className={styles.priceAmount}>$17.99</span>
+                  <span className={styles.pricePeriod}>/30 days</span>
                 </div>
                 <p className={styles.pricingDesc}>Perfect for small stores getting started with bundling</p>
               </div>
               <ul className={styles.pricingFeatures}>
-                <li>Up to 100 bundles</li>
-                <li>Basic analytics</li>
-                <li>Email support</li>
+                <li>Up to 25 bundle rules</li>
+                <li>Full order analysis &amp; suggestions</li>
+                <li>Basic analytics dashboard</li>
                 <li>14-day free trial</li>
               </ul>
               <a href="/pricing" className={styles.pricingButton}>Start Free Trial</a>
@@ -172,16 +172,16 @@ export default function App() {
               <div className={styles.pricingHeader}>
                 <h3 className={styles.pricingTitle}>Professional</h3>
                 <div className={styles.pricingPrice}>
-                  <span className={styles.priceAmount}>$79</span>
-                  <span className={styles.pricePeriod}>/month</span>
+                  <span className={styles.priceAmount}>$39.99</span>
+                  <span className={styles.pricePeriod}>/30 days</span>
                 </div>
                 <p className={styles.pricingDesc}>Ideal for growing businesses with advanced bundling needs</p>
               </div>
               <ul className={styles.pricingFeatures}>
-                <li>Unlimited bundles</li>
-                <li>Advanced analytics</li>
+                <li>Unlimited bundle rules</li>
+                <li>Advanced analytics &amp; CSV exports</li>
                 <li>Priority support</li>
-                <li>API access</li>
+                <li>Data-driven bundle suggestions</li>
                 <li>All Starter features</li>
               </ul>
               <a href="/pricing" className={styles.pricingButton + " " + styles.pricingButtonPrimary}>Start Free Trial</a>
@@ -192,19 +192,19 @@ export default function App() {
               <div className={styles.pricingHeader}>
                 <h3 className={styles.pricingTitle}>Enterprise</h3>
                 <div className={styles.pricingPrice}>
-                  <span className={styles.priceAmount}>Custom</span>
-                  <span className={styles.pricePeriod}>pricing</span>
+                  <span className={styles.priceAmount}>$79.99</span>
+                  <span className={styles.pricePeriod}>/30 days</span>
                 </div>
-                <p className={styles.pricingDesc}>For large-scale operations with custom requirements</p>
+                <p className={styles.pricingDesc}>For large-scale operations with maximum power</p>
               </div>
               <ul className={styles.pricingFeatures}>
                 <li>Everything in Professional</li>
-                <li>Custom integrations</li>
+                <li>Fulfillment optimization</li>
                 <li>Dedicated success manager</li>
-                <li>SLA guarantee</li>
-                <li>White-label options</li>
+                <li>Slack &amp; email notifications</li>
+                <li>14-day free trial</li>
               </ul>
-              <a href="/pricing" className={styles.pricingButton}>Contact Sales</a>
+              <a href="/pricing" className={styles.pricingButton}>Start Free Trial</a>
             </div>
           </div>
 
