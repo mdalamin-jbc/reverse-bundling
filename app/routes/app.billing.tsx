@@ -116,13 +116,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // Map normalized amount to plan details based on interval
         if (planInterval === 'ANNUAL') {
           // For yearly plans, match the yearly amounts
-          if (normalizedAmount === 50 || normalizedAmount === 50.00) {
+          if (normalizedAmount === 150 || normalizedAmount === 150.00) {
             planName = "Starter";
             planLimit = 125;
-          } else if (normalizedAmount === 100 || normalizedAmount === 100.00) {
+          } else if (normalizedAmount === 350 || normalizedAmount === 350.00) {
             planName = "Professional"; 
             planLimit = 525;
-          } else if (normalizedAmount === 150 || normalizedAmount === 150.00) {
+          } else if (normalizedAmount === 700 || normalizedAmount === 700.00) {
             planName = "Enterprise";
             planLimit = 999999; // Unlimited
           } else {
@@ -131,26 +131,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             if (subName.includes('enterprise')) {
               planName = "Enterprise";
               planLimit = 999999;
-              planAmount = 150;
+              planAmount = 700;
             } else if (subName.includes('professional')) {
               planName = "Professional";
               planLimit = 525;
-              planAmount = 100;
+              planAmount = 350;
             } else if (subName.includes('starter')) {
               planName = "Starter";
               planLimit = 125;
-              planAmount = 50;
+              planAmount = 150;
             }
           }
         } else {
           // For monthly plans, match the monthly amounts
-          if (normalizedAmount === 4.99 || normalizedAmount === 4.99) {
+          if (Math.abs(normalizedAmount - 17.99) < 0.1) {
             planName = "Starter";
             planLimit = 125;
-          } else if (normalizedAmount === 9.99 || normalizedAmount === 9.99) {
+          } else if (Math.abs(normalizedAmount - 39.99) < 0.1) {
             planName = "Professional"; 
             planLimit = 525;
-          } else if (normalizedAmount === 14.99 || normalizedAmount === 14.99) {
+          } else if (Math.abs(normalizedAmount - 79.99) < 0.1) {
             planName = "Enterprise";
             planLimit = 999999; // Unlimited
           } else {
@@ -159,15 +159,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             if (subName.includes('enterprise')) {
               planName = "Enterprise";
               planLimit = 999999;
-              planAmount = 14.99;
+              planAmount = 79.99;
             } else if (subName.includes('professional')) {
               planName = "Professional";
               planLimit = 525;
-              planAmount = 9.99;
+              planAmount = 39.99;
             } else if (subName.includes('starter')) {
               planName = "Starter";
               planLimit = 125;
-              planAmount = 4.99;
+              planAmount = 17.99;
             }
             
             logInfo("Plan detected by name fallback", { 
@@ -186,15 +186,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         if (subName.includes('enterprise')) {
           planName = "Enterprise";
           planLimit = 999999;
-          planAmount = planInterval === "ANNUAL" ? 180 : 14.99;
+          planAmount = planInterval === "ANNUAL" ? 700 : 79.99;
         } else if (subName.includes('professional')) {
           planName = "Professional";
           planLimit = 525;
-          planAmount = planInterval === "ANNUAL" ? 120 : 9.99;
+          planAmount = planInterval === "ANNUAL" ? 350 : 39.99;
         } else if (subName.includes('starter')) {
           planName = "Starter";
           planLimit = 125;
-          planAmount = planInterval === "ANNUAL" ? 60 : 4.99;
+          planAmount = planInterval === "ANNUAL" ? 150 : 17.99;
         }
         
         logInfo("No pricing details, using name-based detection", { 
@@ -339,39 +339,38 @@ export default function Billing() {
 
     // Helper function to get pricing display for a plan
   const getPlanPricing = (monthlyPrice: number) => {
-    // Define yearly prices based on the discounted rates
+    // Define yearly prices based on the actual App Store pricing
     let yearlyPrice: number;
+    let yearlySavings: number;
 
     // Use precise comparison for pricing lookup
-    if (Math.abs(monthlyPrice - 4.99) < 0.01) {
-      yearlyPrice = 50;   // Starter: $50/year
-    } else if (Math.abs(monthlyPrice - 9.99) < 0.01) {
-      yearlyPrice = 100;  // Professional: $100/year
-    } else if (Math.abs(monthlyPrice - 14.99) < 0.01) {
-      yearlyPrice = 150;  // Enterprise: $150/year
+    if (Math.abs(monthlyPrice - 17.99) < 0.1) {
+      yearlyPrice = 150;    // Starter: $150/year
+      yearlySavings = 65;   // $65 off vs monthly
+    } else if (Math.abs(monthlyPrice - 39.99) < 0.1) {
+      yearlyPrice = 350;    // Professional: $350/year
+      yearlySavings = 129;  // $129 off vs monthly
+    } else if (Math.abs(monthlyPrice - 79.99) < 0.1) {
+      yearlyPrice = 700;    // Enterprise: $700/year
+      yearlySavings = 259;  // $259 off vs monthly
     } else {
       yearlyPrice = monthlyPrice * 12; // Fallback
+      yearlySavings = 0;
     }
-
-    const monthlyYearly = monthlyPrice * 12;
-    const savingsAmount = monthlyYearly - yearlyPrice;
-    const savingsPercent = Math.round((savingsAmount / monthlyYearly) * 100);
 
     if (billingInterval === 'monthly') {
       return {
         primaryPrice: monthlyPrice,
-        primaryPeriod: '/month',
-        secondaryPrice: yearlyPrice,
-        secondaryPeriod: '/year',
-        savings: `save ${savingsPercent}%`
+        primaryPeriod: '/ 30 days',
+        secondaryText: `$${yearlyPrice}/year ($${yearlySavings} off)`,
+        savings: yearlySavings > 0 ? `$${yearlySavings} off` : ''
       };
     } else {
       return {
         primaryPrice: yearlyPrice,
-        primaryPeriod: '/year',
-        secondaryPrice: monthlyPrice,
-        secondaryPeriod: '/month',
-        savings: `save ${savingsPercent}%`
+        primaryPeriod: '/ year',
+        secondaryText: `$${monthlyPrice}/30 days`,
+        savings: yearlySavings > 0 ? `$${yearlySavings} off` : ''
       };
     }
   };
@@ -400,11 +399,11 @@ export default function Billing() {
 
     let cardPlanName: string = planCardName;
     if (monthlyPrice) {
-      if (Math.abs(monthlyPrice - 4.99) < 0.01) {
+      if (Math.abs(monthlyPrice - 17.99) < 0.1) {
         cardPlanName = 'Starter';
-      } else if (Math.abs(monthlyPrice - 9.99) < 0.01) {
+      } else if (Math.abs(monthlyPrice - 39.99) < 0.1) {
         cardPlanName = 'Professional';
-      } else if (Math.abs(monthlyPrice - 14.99) < 0.01) {
+      } else if (Math.abs(monthlyPrice - 79.99) < 0.1) {
         cardPlanName = 'Enterprise';
       }
     }
@@ -558,12 +557,12 @@ export default function Billing() {
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
                 <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
-                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial. No credit card required.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">All plans include a 2-day free trial. Cancel anytime.</Text>
               </BlockStack>
               <InlineStack gap="200" blockAlign="center">
                 <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
                 <Button size="slim" variant={billingInterval === 'yearly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('yearly')}>Yearly</Button>
-                {billingInterval === 'yearly' && <Badge tone="success">Save up to 17%</Badge>}
+                {billingInterval === 'yearly' && <Badge tone="success">Save up to $259/year</Badge>}
               </InlineStack>
             </InlineStack>
 
@@ -599,14 +598,16 @@ export default function Billing() {
                   <BlockStack gap="300">
                     <Text as="h3" variant="headingMd" fontWeight="bold">Starter</Text>
                     {(() => {
-                      const p = getPlanPricing(4.99);
+                      const p = getPlanPricing(17.99);
                       return (
                         <BlockStack gap="100">
                           <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
-                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                          <Text as="p" variant="bodySm" tone="subdued">{p.secondaryText}</Text>
+                          {p.savings && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
                     })()}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
@@ -616,7 +617,7 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Bundle analysis AI</Text></InlineStack>
                     </BlockStack>
                     {(() => {
-                      const b = getPlanButton('Starter', 4.99);
+                      const b = getPlanButton('Starter', 17.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'starter'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
@@ -635,14 +636,16 @@ export default function Billing() {
                       <Badge tone="info">Most Popular</Badge>
                     </InlineStack>
                     {(() => {
-                      const p = getPlanPricing(9.99);
+                      const p = getPlanPricing(39.99);
                       return (
                         <BlockStack gap="100">
                           <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
-                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                          <Text as="p" variant="bodySm" tone="subdued">{p.secondaryText}</Text>
+                          {p.savings && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
                     })()}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
@@ -652,7 +655,7 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">Slack integration</Text></InlineStack>
                     </BlockStack>
                     {(() => {
-                      const b = getPlanButton('Professional', 9.99);
+                      const b = getPlanButton('Professional', 39.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'professional'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
@@ -668,14 +671,16 @@ export default function Billing() {
                       <Badge tone="attention">Best Value</Badge>
                     </InlineStack>
                     {(() => {
-                      const p = getPlanPricing(14.99);
+                      const p = getPlanPricing(79.99);
                       return (
                         <BlockStack gap="100">
                           <Text as="p" variant="headingLg" fontWeight="bold">${p.primaryPrice}<Text as="span" variant="bodySm" tone="subdued"> {p.primaryPeriod}</Text></Text>
-                          {billingInterval === 'yearly' && <Badge tone="success" size="small">{p.savings}</Badge>}
+                          <Text as="p" variant="bodySm" tone="subdued">{p.secondaryText}</Text>
+                          {p.savings && <Badge tone="success" size="small">{p.savings}</Badge>}
                         </BlockStack>
                       );
                     })()}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
@@ -685,7 +690,7 @@ export default function Billing() {
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Custom development</Text></InlineStack>
                     </BlockStack>
                     {(() => {
-                      const b = getPlanButton('Enterprise', 14.99);
+                      const b = getPlanButton('Enterprise', 79.99);
                       return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'enterprise'} fullWidth>{b.text}</Button>;
                     })()}
                   </BlockStack>
@@ -704,7 +709,7 @@ export default function Billing() {
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. No credit card required upfront. Cancel anytime during the trial at no cost.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 2 days. Cancel anytime during the trial at no cost.</Text>
                 </BlockStack>
               </Box>
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">

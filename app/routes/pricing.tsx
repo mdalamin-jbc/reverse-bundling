@@ -20,34 +20,76 @@ export default function Pricing() {
         </section>
 
         <div className={styles.pricingGrid}>
-          {/* Starter Plan */}
+          {/* Free Plan */}
           <div className={styles.pricingCard}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.planName}>Starter</h3>
+              <h3 className={styles.planName}>Free</h3>
               <div className={styles.planPrice}>
-                <span className={styles.priceAmount}>$29</span>
-                <span className={styles.pricePeriod}>/month</span>
+                <span className={styles.priceAmount}>$0</span>
+                <span className={styles.pricePeriod}>forever</span>
               </div>
-              <p className={styles.planDescription}>Perfect for small stores getting started with bundling</p>
+              <p className={styles.planDescription}>Get started with basic reverse bundling features</p>
             </div>
             <ul className={styles.featureList}>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Up to 100 bundles
+                Up to 5 bundle rules
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Basic analytics
+                Basic order analysis
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
                 Email support
+              </li>
+            </ul>
+            <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>
+              Get Started Free
+            </button>
+          </div>
+
+          {/* Starter Plan */}
+          <div className={styles.pricingCard}>
+            <div className={styles.cardHeader}>
+              <h3 className={styles.planName}>Starter</h3>
+              <div className={styles.planPrice}>
+                <span className={styles.priceAmount}>$17.99</span>
+                <span className={styles.pricePeriod}>/ 30 days</span>
+              </div>
+              <p className={styles.planDescription}>Perfect for small stores getting started with bundling</p>
+              <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $150/year ($65 off)</p>
+            </div>
+            <ul className={styles.featureList}>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Up to 25 bundle rules
+              </li>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Full order analysis &amp; suggestions
+              </li>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Basic analytics dashboard
+              </li>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                2-day free trial
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>
@@ -61,23 +103,24 @@ export default function Pricing() {
             <div className={styles.cardHeader}>
               <h3 className={styles.planName}>Professional</h3>
               <div className={styles.planPrice}>
-                <span className={styles.priceAmount}>$79</span>
-                <span className={styles.pricePeriod}>/month</span>
+                <span className={styles.priceAmount}>$39.99</span>
+                <span className={styles.pricePeriod}>/ 30 days</span>
               </div>
               <p className={styles.planDescription}>Ideal for growing businesses with advanced bundling needs</p>
+              <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $350/year ($129 off)</p>
             </div>
             <ul className={styles.featureList}>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Unlimited bundles
+                Unlimited bundle rules
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Advanced analytics
+                Advanced analytics &amp; CSV exports
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
@@ -89,7 +132,13 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                API access
+                Data-driven bundle suggestions
+              </li>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                2-day free trial
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.primaryButton}`}>
@@ -102,10 +151,11 @@ export default function Pricing() {
             <div className={styles.cardHeader}>
               <h3 className={styles.planName}>Enterprise</h3>
               <div className={styles.planPrice}>
-                <span className={styles.priceAmount}>Custom</span>
-                <span className={styles.pricePeriod}>pricing</span>
+                <span className={styles.priceAmount}>$79.99</span>
+                <span className={styles.pricePeriod}>/ 30 days</span>
               </div>
-              <p className={styles.planDescription}>For large-scale operations with custom requirements</p>
+              <p className={styles.planDescription}>For large-scale operations with maximum power</p>
+              <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $700/year ($259 off)</p>
             </div>
             <ul className={styles.featureList}>
               <li className={styles.featureItem}>
@@ -118,7 +168,7 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Custom integrations
+                Fulfillment optimization
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
@@ -130,11 +180,17 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                SLA guarantee
+                Slack &amp; email notifications
+              </li>
+              <li className={styles.featureItem}>
+                <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                2-day free trial
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>
-              Contact Sales
+              Start Free Trial
             </button>
           </div>
         </div>
@@ -148,7 +204,7 @@ export default function Pricing() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className={styles.featureTitle}>14-day free trial</h3>
+              <h3 className={styles.featureTitle}>2-day free trial</h3>
             </div>
             <div className={styles.featureCard}>
               <div className={`${styles.featureIconContainer} ${styles.featureIconBlue}`}>

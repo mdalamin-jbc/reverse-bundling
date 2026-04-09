@@ -7,25 +7,31 @@ import { authenticate } from "./shopify.server";
  */
 export const BILLING_CONFIG = {
   required: true, // Always required for managed pricing apps
-  trialDays: 14,
+  trialDays: 2,
   freeOrderLimit: 25, // Free tier: 25 orders/month for everyone
   plans: {
     starter: {
-      amount: 4.99,
+      amount: 17.99,
+      yearlyAmount: 150,
+      yearlySavings: 65,
       currencyCode: "USD",
       interval: "EVERY_30_DAYS" as const,
       name: "Starter Plan",
       description: "Up to 125 orders per month (25 free + 100 paid) - Perfect for small stores",
     },
     professional: {
-      amount: 9.99,
+      amount: 39.99,
+      yearlyAmount: 350,
+      yearlySavings: 129,
       currencyCode: "USD",
       interval: "EVERY_30_DAYS" as const,
       name: "Professional Plan",
       description: "Up to 525 orders per month (25 free + 500 paid) - Most popular choice",
     },
     enterprise: {
-      amount: 14.99,
+      amount: 79.99,
+      yearlyAmount: 700,
+      yearlySavings: 259,
       currencyCode: "USD",
       interval: "EVERY_30_DAYS" as const,
       name: "Enterprise Plan",
