@@ -72,14 +72,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       db.orderConversion.count({ where: { shop } }),
       db.bundleAnalytics.count({ where: { shop } }),
       db.appSettings.count({ where: { shop } }),
-      db.fulfillmentProvider.count({ where: { shop } })
+      db.fulfillmentProvider.count({ where: { shop } }),
+      db.bundleSuggestion.count({ where: { shop } }),
+      db.itemCooccurrence.count({ where: { shop } }),
+      db.orderHistory.count({ where: { shop } }),
+      db.session.count({ where: { shop } }),
     ]);
 
-    const [rules, conversions, analytics, settings, providers] = remainingData;
+    const [rules, conversions, analytics, settings, providers, suggestions, cooccurrences, history, sessions] = remainingData;
+    const totalRemaining = rules + conversions + analytics + settings + providers + suggestions + cooccurrences + history + sessions;
 
-    if (rules > 0 || conversions > 0 || analytics > 0 || settings > 0 || providers > 0) {
+    if (totalRemaining > 0) {
       logInfo(`WARNING: Data still remains after cleanup for shop ${shop}:`, {
-        rules, conversions, analytics, settings, providers
+        rules, conversions, analytics, settings, providers, suggestions, cooccurrences, history, sessions
       });
     } else {
       logInfo(`✅ Complete data cleanup verified for shop ${shop}`);

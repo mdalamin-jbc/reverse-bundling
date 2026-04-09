@@ -210,7 +210,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     try {
       orderCount = await db.orderConversion.count({
         where: {
-          shop: session.shop
+          shop: session.shop,
+          status: 'success'
         }
       });
     } catch (error) {

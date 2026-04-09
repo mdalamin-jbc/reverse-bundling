@@ -257,7 +257,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           // Create order conversion record with status tracking
           const originalIdentifiers = [...new Set([...orderSkus, ...orderVariantIds])];
-          const ruleItems = JSON.parse(rule.items) as string[];
           // Calculate real savings from merchant's fulfillment costs
           const calculatedSavings = (ruleItems.length * individualShipCost) - bundleShipCost;
           const actualSavings = calculatedSavings > 0 ? calculatedSavings : rule.savings;
@@ -587,8 +586,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               // Build fulfillment note with clear instructions
               const bundleNote = `⚡ REVERSE BUNDLE: Fulfill with pre-packed SKU "${rule.bundledSku}" instead of shipping ${ruleItems.length} individual items. Rule: ${rule.name}`;
 
-              // Existing note (if any) — append rather than overwrite
-              const existingNote = '';
+              // Fetch existing note to avoid overwriting merchant's notes
+              let existingNote = '';
+              try {
+                const orderDataResp = await admin.graphql(`
+                  query getOrderNote($id: ID!) {
+                    order(id: $id) { note }
+                  }
+                `, { variables: { id: orderId } });
+                const orderData = await orderDataResp.json();
+                existingNote = orderData.data?.order?.note || '';
+              } catch { /* use empty if fetch fails */ }
               const fullNote = existingNote
                 ? `${existingNote}\n\n${bundleNote}`
                 : bundleNote;

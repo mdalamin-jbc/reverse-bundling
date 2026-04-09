@@ -16,7 +16,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       financial_status?: string;
     };
 
-    // Handle cancellation — if an order we converted gets cancelled, log it
+    // Handle cancellation — if an order we converted gets cancelled, reverse stats
     if (order.cancelled_at) {
       const orderId = String(order.id);
 
@@ -25,7 +25,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         include: { bundleRule: true },
       });
 
-      if (existingConversion) {
+      if (existingConversion && existingConversion.status !== 'cancelled') {
         logWarning("Converted order was cancelled", {
           shop,
           orderId,
@@ -34,10 +34,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           savings: existingConversion.savingsAmount,
         });
 
-        // Decrement the bundle rule frequency
+        // Decrement the bundle rule frequency AND savings, mark conversion as cancelled
         await db.bundleRule.update({
           where: { id: existingConversion.bundleRuleId },
-          data: { frequency: { decrement: 1 } },
+          data: {
+            frequency: { decrement: 1 },
+            savings: { decrement: existingConversion.savingsAmount },
+          },
+        });
+
+        await db.orderConversion.update({
+          where: { id: existingConversion.id },
+          data: { status: 'cancelled' },
         });
       }
     }
