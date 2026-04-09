@@ -7,7 +7,7 @@ import { authenticate } from "./shopify.server";
  */
 export const BILLING_CONFIG = {
   required: true, // Always required for managed pricing apps
-  trialDays: 2,
+  trialDays: 14,
   freeOrderLimit: 25, // Free tier: 25 orders/month for everyone
   plans: {
     starter: {

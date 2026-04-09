@@ -557,7 +557,7 @@ export default function Billing() {
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
                 <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
-                <Text as="p" variant="bodySm" tone="subdued">All plans include a 2-day free trial. Cancel anytime.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial. Cancel anytime.</Text>
               </BlockStack>
               <InlineStack gap="200" blockAlign="center">
                 <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
@@ -607,7 +607,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">14-day free trial included</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
@@ -645,7 +645,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">14-day free trial included</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
@@ -680,7 +680,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">14-day free trial included</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
@@ -709,7 +709,7 @@ export default function Billing() {
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 2 days. Cancel anytime during the trial at no cost.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. Cancel anytime during the trial at no cost.</Text>
                 </BlockStack>
               </Box>
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">
