@@ -607,7 +607,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">125 orders/month</Text></InlineStack>
@@ -645,7 +645,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="info" /></Box><Text as="p" variant="bodySm">525 orders/month</Text></InlineStack>
@@ -680,7 +680,7 @@ export default function Billing() {
                         </BlockStack>
                       );
                     })()}
-                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>}
+                    <Text as="p" variant="bodySm" tone="subdued">2 trial days remaining</Text>
                     <Divider />
                     <BlockStack gap="200">
                       <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="success" /></Box><Text as="p" variant="bodySm">Unlimited orders</Text></InlineStack>
