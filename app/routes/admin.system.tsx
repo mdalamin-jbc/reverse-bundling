@@ -7,249 +7,278 @@ import styles from "./styles/admin.module.css";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);
 
-  const start = Date.now();
+  const startTime = Date.now();
 
-  // Database health
-  let dbStatus = "healthy";
+  // DB health check
+  let dbHealthy = true;
   let dbLatency = 0;
   try {
     const dbStart = Date.now();
     await db.$queryRaw`SELECT 1`;
     dbLatency = Date.now() - dbStart;
-    if (dbLatency > 500) dbStatus = "degraded";
   } catch {
-    dbStatus = "down";
+    dbHealthy = false;
   }
 
-  // Table sizes
+  // Table row counts
   const [
-    sessionCount, ruleCount, conversionCount,
-    settingsCount, orderHistoryCount, cooccurrenceCount,
-    suggestionCount, analyticsCount, fulfillmentCount,
+    sessions, bundleRules, bundleAnalytics,
+    orderConversions, fulfillmentProviders, appSettings,
+    orderHistory, itemCooccurrences, bundleSuggestions,
   ] = await Promise.all([
     db.session.count(),
     db.bundleRule.count(),
+    db.bundleAnalytics.count(),
     db.orderConversion.count(),
+    db.fulfillmentProvider.count(),
     db.appSettings.count(),
     db.orderHistory.count(),
     db.itemCooccurrence.count(),
     db.bundleSuggestion.count(),
-    db.bundleAnalytics.count(),
-    db.fulfillmentProvider.count(),
   ]);
 
-  // Memory usage (Node.js)
-  const memUsage = process.memoryUsage();
+  const totalRows = sessions + bundleRules + bundleAnalytics + orderConversions +
+    fulfillmentProviders + appSettings + orderHistory + itemCooccurrences + bundleSuggestions;
 
-  // Uptime
+  // Memory usage
+  const mem = process.memoryUsage();
   const uptime = process.uptime();
 
-  const totalLatency = Date.now() - start;
+  const loaderTime = Date.now() - startTime;
 
   return json({
-    timestamp: new Date().toISOString(),
-    database: {
-      status: dbStatus,
-      latency: dbLatency,
-      tables: {
-        sessions: sessionCount,
-        bundle_rules: ruleCount,
-        order_conversions: conversionCount,
-        app_settings: settingsCount,
-        order_history: orderHistoryCount,
-        item_cooccurrence: cooccurrenceCount,
-        bundle_suggestions: suggestionCount,
-        bundle_analytics: analyticsCount,
-        fulfillment_providers: fulfillmentCount,
-      },
-    },
-    server: {
-      uptime,
-      nodeVersion: process.version,
-      env: process.env.NODE_ENV || "production",
-      totalLatency,
-    },
+    dbHealthy,
+    dbLatency,
+    loaderTime,
+    tables: [
+      { name: "Session", rows: sessions, icon: "🔑" },
+      { name: "BundleRule", rows: bundleRules, icon: "📋" },
+      { name: "BundleAnalytics", rows: bundleAnalytics, icon: "📈" },
+      { name: "OrderConversion", rows: orderConversions, icon: "🔄" },
+      { name: "FulfillmentProvider", rows: fulfillmentProviders, icon: "📦" },
+      { name: "AppSettings", rows: appSettings, icon: "⚙️" },
+      { name: "OrderHistory", rows: orderHistory, icon: "📜" },
+      { name: "ItemCooccurrence", rows: itemCooccurrences, icon: "🔗" },
+      { name: "BundleSuggestion", rows: bundleSuggestions, icon: "🤖" },
+    ],
+    totalRows,
     memory: {
-      rss: memUsage.rss,
-      heapUsed: memUsage.heapUsed,
-      heapTotal: memUsage.heapTotal,
-      external: memUsage.external,
+      rss: (mem.rss / 1024 / 1024).toFixed(1),
+      heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(1),
+      heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(1),
+      external: (mem.external / 1024 / 1024).toFixed(1),
+      heapPercent: ((mem.heapUsed / mem.heapTotal) * 100).toFixed(0),
     },
+    uptime: {
+      days: Math.floor(uptime / 86400),
+      hours: Math.floor((uptime % 86400) / 3600),
+      minutes: Math.floor((uptime % 3600) / 60),
+      seconds: Math.floor(uptime % 60),
+      raw: uptime,
+    },
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    pid: process.pid,
+    env: process.env.NODE_ENV || "development",
+    checkedAt: new Date().toISOString(),
   });
 };
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatUptime(seconds: number) {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const parts = [];
-  if (d > 0) parts.push(`${d}d`);
-  if (h > 0) parts.push(`${h}h`);
-  parts.push(`${m}m`);
-  return parts.join(" ");
-}
-
 export default function AdminSystem() {
-  const { timestamp, database, server, memory } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
-
-  const heapUsagePercent = (memory.heapUsed / memory.heapTotal) * 100;
-  const healthColor = (status: string) =>
-    status === "healthy" ? styles.healthGreen : status === "degraded" ? styles.healthYellow : styles.healthRed;
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <span style={{ fontSize: 13, color: "#6b7280" }}>
-          Last checked: {new Date(timestamp).toLocaleString()}
-        </span>
-        <button
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => revalidator.revalidate()}
-          disabled={revalidator.state === "loading"}
-        >
-          {revalidator.state === "loading" ? "Refreshing..." : "🔄 Refresh"}
-        </button>
+      <div className={styles.pageHeader}>
+        <div className={styles.pageHeaderRow}>
+          <div>
+            <h2 className={styles.pageHeaderTitle}>System Health</h2>
+            <p className={styles.pageHeaderSub}>
+              Last checked: {new Date(data.checkedAt).toLocaleString()} · Loaded in {data.loaderTime}ms
+            </p>
+          </div>
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={() => revalidator.revalidate()}
+            disabled={revalidator.state === "loading"}
+          >
+            {revalidator.state === "loading" ? "⏳ Refreshing..." : "🔄 Refresh"}
+          </button>
+        </div>
       </div>
 
-      {/* Health Overview */}
+      {/* Health Status Cards */}
       <div className={styles.statsGrid}>
-        <div className={`${styles.statCard} ${styles.statCardGreen}`}>
+        <div className={`${styles.statCard} ${data.dbHealthy ? styles.statCardGreen : styles.statCardRed}`}>
           <div className={styles.statHeader}>
             <span className={styles.statLabel}>Database</span>
-            <span className={`${styles.healthDot} ${healthColor(database.status)}`} />
+            <div className={`${styles.healthDot} ${data.dbHealthy ? styles.healthGreen : styles.healthRed}`} />
           </div>
-          <div className={styles.statValue} style={{ fontSize: 20 }}>
-            {database.status.charAt(0).toUpperCase() + database.status.slice(1)}
+          <div className={styles.statValue} style={{ fontSize: 20 }}>{data.dbHealthy ? "Healthy" : "Unhealthy"}</div>
+          <div className={styles.statChange}>
+            <span className={data.dbLatency < 100 ? styles.statUp : styles.statDown}>
+              {data.dbLatency}ms latency
+            </span>
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>{database.latency}ms latency</div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardBlue}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Server Uptime</span>
-            <span className={styles.statIcon}>⏱️</span>
+            <span className={styles.statLabel}>Memory (Heap)</span>
+            <div className={`${styles.statIcon} ${styles.statIconBlue}`}>🧠</div>
           </div>
-          <div className={styles.statValue} style={{ fontSize: 20 }}>{formatUptime(server.uptime)}</div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>Node {server.nodeVersion}</div>
+          <div className={styles.statValue} style={{ fontSize: 20 }}>
+            {data.memory.heapUsed} / {data.memory.heapTotal} MB
+          </div>
+          <div className={styles.statChange}>
+            <span className={parseInt(data.memory.heapPercent) < 80 ? styles.statUp : styles.statDown}>
+              {data.memory.heapPercent}% used · RSS {data.memory.rss} MB
+            </span>
+          </div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardPurple}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Heap Usage</span>
-            <span className={styles.statIcon}>🧠</span>
+            <span className={styles.statLabel}>Uptime</span>
+            <div className={`${styles.statIcon} ${styles.statIconPurple}`}>⏱️</div>
           </div>
-          <div className={styles.statValue} style={{ fontSize: 20 }}>{formatBytes(memory.heapUsed)}</div>
-          <div className={styles.progressBar}>
-            <div
-              className={`${styles.progressFill} ${heapUsagePercent > 85 ? styles.progressRed : heapUsagePercent > 70 ? styles.progressYellow : styles.progressGreen}`}
-              style={{ width: `${heapUsagePercent}%` }}
-            />
+          <div className={styles.statValue} style={{ fontSize: 20 }}>
+            {data.uptime.days}d {data.uptime.hours}h {data.uptime.minutes}m
           </div>
-          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{heapUsagePercent.toFixed(0)}% of {formatBytes(memory.heapTotal)}</div>
+          <div className={styles.statChange}>
+            <span className={styles.statUp}>PID {data.pid}</span>
+          </div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardOrange}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Page Load</span>
-            <span className={styles.statIcon}>⚡</span>
+            <span className={styles.statLabel}>Total Records</span>
+            <div className={`${styles.statIcon} ${styles.statIconOrange}`}>💾</div>
           </div>
-          <div className={styles.statValue} style={{ fontSize: 20 }}>{server.totalLatency}ms</div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>Total response time</div>
-        </div>
-      </div>
-
-      <div className={styles.twoCol}>
-        {/* Memory Details */}
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>🧠 Memory Usage</span>
-          </div>
-          <div className={styles.cardBody}>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>RSS (Total)</span>
-              <span className={styles.detailValue}>{formatBytes(memory.rss)}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Heap Used</span>
-              <span className={styles.detailValue}>{formatBytes(memory.heapUsed)}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Heap Total</span>
-              <span className={styles.detailValue}>{formatBytes(memory.heapTotal)}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>External</span>
-              <span className={styles.detailValue}>{formatBytes(memory.external)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Server Info */}
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>🖥️ Server Info</span>
-          </div>
-          <div className={styles.cardBody}>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Node.js</span>
-              <span className={styles.detailValue}>{server.nodeVersion}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Environment</span>
-              <span className={`${styles.badge} ${server.env === "production" ? styles.badgeRed : styles.badgeGreen}`}>
-                {server.env}
-              </span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Uptime</span>
-              <span className={styles.detailValue}>{formatUptime(server.uptime)}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>DB Latency</span>
-              <span className={styles.detailValue}>{database.latency}ms</span>
-            </div>
+          <div className={styles.statValue} style={{ fontSize: 20 }}>{data.totalRows.toLocaleString()}</div>
+          <div className={styles.statChange}>
+            <span className={styles.statNeutral}>Across 9 tables</span>
           </div>
         </div>
       </div>
 
-      {/* Database Tables */}
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>🗃️ Database Tables</span>
-          <span className={`${styles.badge} ${styles.badgeBlue}`}>
-            {Object.values(database.tables).reduce((a, b) => a + b, 0).toLocaleString()} total rows
-          </span>
-        </div>
-        <div className={styles.cardBodyNoPad}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Table</th>
-                <th>Rows</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(database.tables).map(([table, count]) => (
-                <tr key={table}>
-                  <td style={{ fontWeight: 500 }}>
-                    <code style={{ fontSize: 13, background: "#f3f4f6", padding: "2px 8px", borderRadius: 4 }}>{table}</code>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{(count as number).toLocaleString()}</td>
-                  <td>
-                    <span className={`${styles.badge} ${styles.badgeGreen}`}>OK</span>
-                  </td>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {/* Database Tables */}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>💾 Database Tables</span>
+            <span className={`${styles.badge} ${styles.badgeBlue}`}>{data.totalRows.toLocaleString()} rows</span>
+          </div>
+          <div className={styles.cardBodyNoPad}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Table</th>
+                  <th style={{ textAlign: "right" }}>Rows</th>
+                  <th style={{ textAlign: "right" }}>% of Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.tables
+                  .sort((a, b) => b.rows - a.rows)
+                  .map((t) => (
+                    <tr key={t.name}>
+                      <td style={{ width: 30, textAlign: "center" }}>{t.icon}</td>
+                      <td style={{ fontWeight: 600 }}>{t.name}</td>
+                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
+                        {t.rows.toLocaleString()}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                          <div style={{ width: 60, height: 6, background: "#f3f4f6", borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%",
+                              borderRadius: 3,
+                              background: "#6366f1",
+                              width: `${data.totalRows > 0 ? (t.rows / data.totalRows * 100) : 0}%`,
+                            }} />
+                          </div>
+                          <span style={{ fontSize: 12, color: "#6b7280", width: 36, textAlign: "right" }}>
+                            {data.totalRows > 0 ? (t.rows / data.totalRows * 100).toFixed(0) : 0}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Runtime Info */}
+        <div>
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>🖥️ Runtime Environment</span>
+            </div>
+            <div className={styles.cardBody}>
+              <div className={styles.detailGrid}>
+                <div className={styles.detailLabel}>Node.js</div>
+                <div className={styles.detailValue}><span className={styles.codeInline}>{data.nodeVersion}</span></div>
+                <div className={styles.detailLabel}>Platform</div>
+                <div className={styles.detailValue}>{data.platform} / {data.arch}</div>
+                <div className={styles.detailLabel}>Environment</div>
+                <div className={styles.detailValue}>
+                  <span className={`${styles.badge} ${data.env === "production" ? styles.badgeGreen : styles.badgeYellow}`}>
+                    {data.env}
+                  </span>
+                </div>
+                <div className={styles.detailLabel}>Process ID</div>
+                <div className={styles.detailValue}><span className={styles.codeInline}>{data.pid}</span></div>
+                <div className={styles.detailLabel}>RSS Memory</div>
+                <div className={styles.detailValue}>{data.memory.rss} MB</div>
+                <div className={styles.detailLabel}>External Memory</div>
+                <div className={styles.detailValue}>{data.memory.external} MB</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Memory Breakdown */}
+          <div className={styles.card}>
+            <div className={styles.cardHeader}>
+              <span className={styles.cardTitle}>🧠 Memory Breakdown</span>
+            </div>
+            <div className={styles.cardBody}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: "#6b7280" }}>Heap Usage</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{data.memory.heapPercent}%</span>
+                </div>
+                <div className={styles.progressBar}>
+                  <div
+                    className={`${styles.progressFill} ${parseInt(data.memory.heapPercent) < 70 ? styles.progressGreen : parseInt(data.memory.heapPercent) < 90 ? styles.progressYellow : styles.progressRed}`}
+                    style={{ width: `${data.memory.heapPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
+                <div>
+                  <span style={{ color: "#6b7280" }}>Heap Used:</span>{" "}
+                  <strong>{data.memory.heapUsed} MB</strong>
+                </div>
+                <div>
+                  <span style={{ color: "#6b7280" }}>Heap Total:</span>{" "}
+                  <strong>{data.memory.heapTotal} MB</strong>
+                </div>
+                <div>
+                  <span style={{ color: "#6b7280" }}>RSS:</span>{" "}
+                  <strong>{data.memory.rss} MB</strong>
+                </div>
+                <div>
+                  <span style={{ color: "#6b7280" }}>External:</span>{" "}
+                  <strong>{data.memory.external} MB</strong>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>

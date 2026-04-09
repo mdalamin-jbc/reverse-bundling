@@ -6,23 +6,27 @@ import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  // Skip auth check for login page to avoid redirect loop
   if (url.pathname === "/admin/login") {
-    return json({ merchantCount: 0, ruleCount: 0, conversionCount: 0, env: process.env.NODE_ENV || "production", isLogin: true });
+    return json({
+      merchantCount: 0, ruleCount: 0, conversionCount: 0,
+      totalSavings: 0, env: process.env.NODE_ENV || "production", isLogin: true,
+    });
   }
 
   await requireAdmin(request);
 
-  const [merchantCount, ruleCount, conversionCount] = await Promise.all([
-    db.session.findMany({ distinct: ["shop"], select: { shop: true } }).then(s => s.length),
+  const [merchants, ruleCount, conversionCount, savingsAgg] = await Promise.all([
+    db.session.findMany({ distinct: ["shop"], select: { shop: true } }),
     db.bundleRule.count(),
     db.orderConversion.count(),
+    db.orderConversion.aggregate({ _sum: { savingsAmount: true } }),
   ]);
 
   return json({
-    merchantCount,
+    merchantCount: merchants.length,
     ruleCount,
     conversionCount,
+    totalSavings: savingsAgg._sum.savingsAmount || 0,
     env: process.env.NODE_ENV || "production",
     isLogin: false,
   });
@@ -37,13 +41,14 @@ const navItems = [
 ];
 
 export default function AdminLayout() {
-  const { merchantCount, ruleCount, conversionCount, env, isLogin } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
   const location = useLocation();
 
-  // Login page renders without the admin layout chrome
-  if (isLogin || location.pathname === "/admin/login") {
+  if (data.isLogin || location.pathname === "/admin/login") {
     return <Outlet />;
   }
+
+  const { merchantCount, ruleCount, conversionCount, totalSavings, env } = data;
 
   const isActive = (href: string, end?: boolean) => {
     if (end) return location.pathname === href;
@@ -62,7 +67,6 @@ export default function AdminLayout() {
 
   return (
     <div className={styles.adminLayout}>
-      {/* Sidebar */}
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <Link to="/admin" className={styles.sidebarLogo}>
@@ -76,7 +80,7 @@ export default function AdminLayout() {
 
         <nav className={styles.sidebarNav}>
           <div className={styles.navSection}>
-            <div className={styles.navSectionTitle}>Main</div>
+            <div className={styles.navSectionTitle}>Navigation</div>
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -85,7 +89,7 @@ export default function AdminLayout() {
               >
                 <span className={styles.navIcon}>{item.icon}</span>
                 {item.label}
-                {item.label === "Merchants" && (
+                {item.label === "Merchants" && merchantCount > 0 && (
                   <span className={styles.navBadge}>{merchantCount}</span>
                 )}
               </Link>
@@ -93,19 +97,23 @@ export default function AdminLayout() {
           </div>
 
           <div className={styles.navSection}>
-            <div className={styles.navSectionTitle}>Quick Stats</div>
-            <div style={{ padding: "0 12px", fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <div className={styles.navSectionTitle}>Overview</div>
+            <div style={{ padding: "0 14px", fontSize: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
                 <span>Merchants</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{merchantCount}</span>
+                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{merchantCount}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
                 <span>Bundle Rules</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{ruleCount}</span>
+                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ruleCount}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
                 <span>Conversions</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{conversionCount}</span>
+                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{conversionCount}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
+                <span>Total Savings</span>
+                <span style={{ color: "#34d399", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>${totalSavings.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -120,7 +128,6 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className={styles.mainContent}>
         <div className={styles.topBar}>
           <h1 className={styles.pageTitle}>{pageTitle}</h1>

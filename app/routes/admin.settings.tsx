@@ -1,5 +1,5 @@
-import { type LoaderFunctionArgs, type ActionFunctionArgs, json, redirect } from "@remix-run/node";
-import { useLoaderData, useActionData, Form, useNavigation } from "@remix-run/react";
+import { type LoaderFunctionArgs, type ActionFunctionArgs, json } from "@remix-run/node";
+import { useLoaderData, useFetcher } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
@@ -7,41 +7,44 @@ import styles from "./styles/admin.module.css";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);
 
-  const [totalMerchants, totalRules, totalConversions] = await Promise.all([
-    db.session.count({ where: { shop: { not: "" } } }),
+  const envVars = [
+    { key: "NODE_ENV", value: process.env.NODE_ENV || "—" },
+    { key: "DATABASE_URL", value: process.env.DATABASE_URL ? "****" + process.env.DATABASE_URL.slice(-20) : "—" },
+    { key: "SHOPIFY_API_KEY", value: process.env.SHOPIFY_API_KEY ? process.env.SHOPIFY_API_KEY.slice(0, 8) + "..." : "—" },
+    { key: "SHOPIFY_API_SECRET", value: process.env.SHOPIFY_API_SECRET ? "****" : "—" },
+    { key: "SHOPIFY_APP_URL", value: process.env.SHOPIFY_APP_URL || "—" },
+    { key: "SCOPES", value: process.env.SCOPES || "—" },
+    { key: "SESSION_SECRET", value: process.env.SESSION_SECRET ? "****" : "—" },
+    { key: "ADMIN_PASSWORD", value: "****" },
+    { key: "PORT", value: process.env.PORT || "3000" },
+  ];
+
+  const [totalSessions, totalRules, totalConversions, totalOrders, totalCooccurrences, totalSuggestions] = await Promise.all([
+    db.session.count(),
     db.bundleRule.count(),
     db.orderConversion.count(),
+    db.orderHistory.count(),
+    db.itemCooccurrence.count(),
+    db.bundleSuggestion.count(),
   ]);
 
-  // Get distinct shops
-  const sessions = await db.session.findMany({
-    select: { shop: true },
-    where: { shop: { not: "" } },
-    distinct: ["shop"],
-  });
-
   return json({
-    env: {
-      NODE_ENV: process.env.NODE_ENV || "not set",
-      DATABASE_URL: process.env.DATABASE_URL ? "✅ Configured" : "❌ Missing",
-      SHOPIFY_API_KEY: process.env.SHOPIFY_API_KEY ? "✅ Configured" : "❌ Missing",
-      SHOPIFY_API_SECRET: process.env.SHOPIFY_API_SECRET ? "✅ Configured" : "❌ Missing",
-      SESSION_SECRET: process.env.SESSION_SECRET ? "✅ Configured" : "❌ Missing",
-      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ? "✅ Custom" : "⚠️ Default",
-      SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL ? "✅ Configured" : "⚪ Not set",
-      SMTP_HOST: process.env.SMTP_HOST ? "✅ Configured" : "⚪ Not set",
-    },
-    stats: {
-      totalMerchants: sessions.length,
-      totalSessions: totalMerchants,
-      totalRules,
-      totalConversions,
-    },
+    envVars,
     appInfo: {
-      version: process.env.npm_package_version || "1.0.0",
-      nodeVersion: process.version,
-      platform: process.platform,
-      arch: process.arch,
+      name: "Reverse Bundle Pro",
+      version: "1.0.0",
+      framework: "Remix + Shopify App",
+      database: "PostgreSQL (NeonDB) + Prisma",
+      hosting: "DigitalOcean",
+      domain: "reverse-bundling.me",
+    },
+    dataCounts: {
+      sessions: totalSessions,
+      rules: totalRules,
+      conversions: totalConversions,
+      orders: totalOrders,
+      cooccurrences: totalCooccurrences,
+      suggestions: totalSuggestions,
     },
   });
 };
@@ -49,202 +52,207 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   await requireAdmin(request);
   const form = await request.formData();
-  const intent = form.get("intent");
+  const actionType = form.get("_action") as string;
 
-  if (intent === "clear-analytics") {
-    const deleted = await db.bundleAnalytics.deleteMany({});
-    return json({ success: true, message: `Cleared ${deleted.count} analytics records.` });
+  try {
+    switch (actionType) {
+      case "clear-old-conversions": {
+        const daysStr = form.get("days") as string;
+        const days = parseInt(daysStr || "90", 10);
+        if (days < 7) return json({ error: "Minimum 7 days" }, { status: 400 });
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const result = await db.orderConversion.deleteMany({ where: { convertedAt: { lt: cutoff } } });
+        return json({ success: true, message: `Deleted ${result.count} conversions older than ${days} days` });
+      }
+      case "clear-dismissed-suggestions": {
+        const result = await db.bundleSuggestion.deleteMany({ where: { status: "dismissed" } });
+        return json({ success: true, message: `Deleted ${result.count} dismissed suggestions` });
+      }
+      case "clear-old-cooccurrences": {
+        const daysStr = form.get("days") as string;
+        const days = parseInt(daysStr || "180", 10);
+        if (days < 30) return json({ error: "Minimum 30 days" }, { status: 400 });
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const result = await db.itemCooccurrence.deleteMany({ where: { updatedAt: { lt: cutoff } } });
+        return json({ success: true, message: `Deleted ${result.count} old co-occurrence records` });
+      }
+      case "reset-failed-conversions": {
+        const result = await db.orderConversion.updateMany({
+          where: { status: "failed" },
+          data: { status: "pending", errorMessage: null },
+        });
+        return json({ success: true, message: `Reset ${result.count} failed conversions to pending` });
+      }
+      default:
+        return json({ error: "Unknown action" }, { status: 400 });
+    }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return json({ error: message }, { status: 500 });
   }
-
-  if (intent === "clear-cooccurrence") {
-    const deleted = await db.itemCooccurrence.deleteMany({});
-    return json({ success: true, message: `Cleared ${deleted.count} co-occurrence records.` });
-  }
-
-  if (intent === "clear-order-history") {
-    const deleted = await db.orderHistory.deleteMany({});
-    return json({ success: true, message: `Cleared ${deleted.count} order history records.` });
-  }
-
-  return json({ success: false, message: "Unknown action." });
 };
 
 export default function AdminSettings() {
-  const { env, stats, appInfo } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === "submitting";
+  const { envVars, appInfo, dataCounts } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
 
   return (
     <>
-      {actionData?.message && (
-        <div
-          className={styles.card}
-          style={{
-            marginBottom: 24,
-            background: actionData.success ? "#f0fdf4" : "#fef2f2",
-            border: `1px solid ${actionData.success ? "#bbf7d0" : "#fecaca"}`,
-          }}
-        >
-          <div className={styles.cardBody} style={{ padding: "12px 20px" }}>
-            <span style={{ fontWeight: 500, color: actionData.success ? "#166534" : "#991b1b" }}>
-              {actionData.success ? "✅" : "❌"} {actionData.message}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* App Information */}
-      <div className={styles.twoCol}>
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>📦 Application Info</span>
-          </div>
-          <div className={styles.cardBody}>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>App Name</span>
-              <span className={styles.detailValue}>Reverse Bundle Pro</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Version</span>
-              <span className={styles.detailValue}>{appInfo.version}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Node.js</span>
-              <span className={styles.detailValue}>{appInfo.nodeVersion}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Platform</span>
-              <span className={styles.detailValue}>{appInfo.platform} / {appInfo.arch}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>📊 Quick Stats</span>
-          </div>
-          <div className={styles.cardBody}>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Merchants</span>
-              <span className={styles.detailValue} style={{ fontWeight: 700 }}>{stats.totalMerchants}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Sessions</span>
-              <span className={styles.detailValue}>{stats.totalSessions}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Bundle Rules</span>
-              <span className={styles.detailValue}>{stats.totalRules}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Conversions</span>
-              <span className={styles.detailValue}>{stats.totalConversions}</span>
-            </div>
+      <div className={styles.pageHeader}>
+        <div className={styles.pageHeaderRow}>
+          <div>
+            <h2 className={styles.pageHeaderTitle}>Settings</h2>
+            <p className={styles.pageHeaderSub}>Application configuration and maintenance tools</p>
           </div>
         </div>
       </div>
 
-      {/* Environment Variables */}
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>🔐 Environment Configuration</span>
-          <span className={`${styles.badge} ${styles.badgePurple}`}>{Object.keys(env).length} variables</span>
+      {/* Action Result */}
+      {fetcher.data && (
+        <div className={`${styles.alert} ${fetcher.data.success ? styles.alertSuccess : styles.alertError}`} style={{ marginBottom: 20 }}>
+          {fetcher.data.success ? `✅ ${fetcher.data.message}` : `❌ ${fetcher.data.error}`}
         </div>
-        <div className={styles.cardBodyNoPad}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Variable</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(env).map(([key, val]) => (
-                <tr key={key}>
-                  <td>
-                    <code style={{ fontSize: 13, background: "#f3f4f6", padding: "2px 8px", borderRadius: 4 }}>{key}</code>
-                  </td>
-                  <td style={{ fontWeight: 500 }}>{val}</td>
-                </tr>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {/* App Info */}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>📱 App Information</span>
+          </div>
+          <div className={styles.cardBody}>
+            <div className={styles.detailGrid}>
+              {Object.entries(appInfo).map(([key, val]) => (
+                <div key={key} style={{ display: "contents" }}>
+                  <div className={styles.detailLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</div>
+                  <div className={styles.detailValue}>{val}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Env Vars */}
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>🔐 Environment Variables</span>
+          </div>
+          <div className={styles.cardBodyNoPad}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Variable</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {envVars.map((e) => (
+                  <tr key={e.key}>
+                    <td><span className={styles.codeInline}>{e.key}</span></td>
+                    <td><span className={styles.codeInline}>{e.value}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Counts */}
+      <div className={styles.card} style={{ marginTop: 24 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>📊 Data Overview</span>
+        </div>
+        <div className={styles.cardBody}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 16, textAlign: "center" }}>
+            {[
+              { label: "Sessions", count: dataCounts.sessions, color: "#2563eb" },
+              { label: "Rules", count: dataCounts.rules, color: "#7c3aed" },
+              { label: "Conversions", count: dataCounts.conversions, color: "#059669" },
+              { label: "Orders", count: dataCounts.orders, color: "#d97706" },
+              { label: "Co-occurrences", count: dataCounts.cooccurrences, color: "#0d9488" },
+              { label: "Suggestions", count: dataCounts.suggestions, color: "#dc2626" },
+            ].map((d) => (
+              <div key={d.label}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: d.color }}>{d.count.toLocaleString()}</div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>{d.label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Maintenance Actions */}
-      <div className={styles.card}>
+      <div className={styles.card} style={{ marginTop: 24 }}>
         <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>🛠️ Maintenance Actions</span>
+          <span className={styles.cardTitle}>🔧 Maintenance Actions</span>
           <span className={`${styles.badge} ${styles.badgeYellow}`}>Use with caution</span>
         </div>
         <div className={styles.cardBody}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f9fafb", borderRadius: 8 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Clear Analytics Data</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Remove all bundle analytics records. This does not affect rules or conversions.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            {/* Clear Old Conversions */}
+            <div className={styles.maintenanceAction}>
+              <div className={styles.maintenanceTitle}>🗑️ Clear Old Conversions</div>
+              <div className={styles.maintenanceDesc}>
+                Remove old conversion records to free up database space. Records older than the specified days will be permanently deleted.
               </div>
-              <Form method="post">
-                <input type="hidden" name="intent" value="clear-analytics" />
-                <button
-                  type="submit"
-                  className={`${styles.btn} ${styles.btnDanger}`}
-                  disabled={isSubmitting}
-                  onClick={(e) => {
-                    if (!confirm("Are you sure you want to clear all analytics data?")) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  {isSubmitting ? "Clearing..." : "Clear Analytics"}
+              <fetcher.Form method="post" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input type="hidden" name="_action" value="clear-old-conversions" />
+                <select name="days" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                  <option value="365">365 days</option>
+                </select>
+                <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}>
+                  Delete Old Records
                 </button>
-              </Form>
+              </fetcher.Form>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f9fafb", borderRadius: 8 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Clear Co-occurrence Data</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Remove all item co-occurrence analysis data. AI suggestions will need to be regenerated.</div>
+            {/* Clear Dismissed Suggestions */}
+            <div className={styles.maintenanceAction}>
+              <div className={styles.maintenanceTitle}>🤖 Clear Dismissed Suggestions</div>
+              <div className={styles.maintenanceDesc}>
+                Remove all AI suggestions that were dismissed by merchants. This frees up space without affecting active suggestions.
               </div>
-              <Form method="post">
-                <input type="hidden" name="intent" value="clear-cooccurrence" />
-                <button
-                  type="submit"
-                  className={`${styles.btn} ${styles.btnDanger}`}
-                  disabled={isSubmitting}
-                  onClick={(e) => {
-                    if (!confirm("Are you sure you want to clear all co-occurrence data?")) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  {isSubmitting ? "Clearing..." : "Clear Co-occurrence"}
+              <fetcher.Form method="post" style={{ marginTop: 10 }}>
+                <input type="hidden" name="_action" value="clear-dismissed-suggestions" />
+                <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}>
+                  Delete Dismissed
                 </button>
-              </Form>
+              </fetcher.Form>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#f9fafb", borderRadius: 8 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Clear Order History</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Remove all stored order history. Order analysis will start fresh on next sync.</div>
+            {/* Clear Old Co-occurrences */}
+            <div className={styles.maintenanceAction}>
+              <div className={styles.maintenanceTitle}>🔗 Clear Old Co-occurrences</div>
+              <div className={styles.maintenanceDesc}>
+                Remove stale item co-occurrence records. Older records may no longer reflect current purchasing patterns.
               </div>
-              <Form method="post">
-                <input type="hidden" name="intent" value="clear-order-history" />
-                <button
-                  type="submit"
-                  className={`${styles.btn} ${styles.btnDanger}`}
-                  disabled={isSubmitting}
-                  onClick={(e) => {
-                    if (!confirm("Are you sure you want to clear all order history?")) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  {isSubmitting ? "Clearing..." : "Clear History"}
+              <fetcher.Form method="post" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input type="hidden" name="_action" value="clear-old-cooccurrences" />
+                <select name="days" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }}>
+                  <option value="180">180 days</option>
+                  <option value="365">365 days</option>
+                </select>
+                <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}>
+                  Delete Old Records
                 </button>
-              </Form>
+              </fetcher.Form>
+            </div>
+
+            {/* Reset Failed Conversions */}
+            <div className={styles.maintenanceAction}>
+              <div className={styles.maintenanceTitle}>🔄 Reset Failed Conversions</div>
+              <div className={styles.maintenanceDesc}>
+                Reset all failed conversions back to pending status so they can be retried. Error messages will be cleared.
+              </div>
+              <fetcher.Form method="post" style={{ marginTop: 10 }}>
+                <input type="hidden" name="_action" value="reset-failed-conversions" />
+                <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
+                  Reset to Pending
+                </button>
+              </fetcher.Form>
             </div>
           </div>
         </div>

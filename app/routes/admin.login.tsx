@@ -38,32 +38,59 @@ export default function AdminLogin() {
     <div className={styles.loginPage}>
       <div className={styles.loginCard}>
         <div className={styles.loginHeader}>
-          <div className={styles.loginLogo}>🔐</div>
-          <h1 className={styles.loginTitle}>Admin Panel</h1>
-          <p className={styles.loginSubtitle}>Reverse Bundle Pro — Management Console</p>
+          <div className={styles.loginLogo}>📦</div>
+          <h1 className={styles.loginTitle}>Reverse Bundle Pro</h1>
+          <p className={styles.loginSubtitle}>Admin Management Console</p>
         </div>
 
         {actionData?.error && (
-          <div className={styles.loginError}>{actionData.error}</div>
+          <div className={styles.loginError}>
+            <span>⚠️</span> {actionData.error}
+          </div>
         )}
 
         <Form method="post">
           <div className={styles.formGroup}>
-            <label className={styles.formLabel} htmlFor="password">Admin Password</label>
+            <label className={styles.formLabel} htmlFor="password">
+              Admin Password
+            </label>
             <input
               id="password"
               name="password"
               type="password"
               className={styles.formInput}
-              placeholder="Enter admin password"
+              placeholder="Enter your admin password"
               autoFocus
               required
             />
           </div>
           <button type="submit" className={styles.loginBtn} disabled={isSubmitting}>
-            {isSubmitting ? "Authenticating..." : "Sign In"}
+            {isSubmitting ? "Authenticating..." : "Sign In to Admin Panel"}
           </button>
         </Form>
+
+        <div className={styles.loginFeatures}>
+          <div className={styles.loginFeature}>
+            <span className={styles.loginFeatureIcon}>🏪</span>
+            <span>Merchant Management</span>
+          </div>
+          <div className={styles.loginFeature}>
+            <span className={styles.loginFeatureIcon}>📊</span>
+            <span>Live Analytics</span>
+          </div>
+          <div className={styles.loginFeature}>
+            <span className={styles.loginFeatureIcon}>💚</span>
+            <span>System Monitoring</span>
+          </div>
+          <div className={styles.loginFeature}>
+            <span className={styles.loginFeatureIcon}>⚙️</span>
+            <span>App Configuration</span>
+          </div>
+        </div>
+
+        <div className={styles.loginFooter}>
+          Protected admin area — Unauthorized access is prohibited
+        </div>
       </div>
     </div>
   );
