@@ -63,7 +63,7 @@ export default function Pricing() {
                 <span className={styles.priceAmount}>$17.99</span>
                 <span className={styles.pricePeriod}>/ 30 days</span>
               </div>
-              <p className={styles.planDescription}>Perfect for small stores getting started with bundling</p>
+              <p className={styles.planDescription}>14-day free trial, then $17.99 every 30 days</p>
               <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $150/year ($65 off)</p>
             </div>
             <ul className={styles.featureList}>
@@ -89,7 +89,7 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                14-day free trial
+                14-day free trial included
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>
@@ -106,7 +106,7 @@ export default function Pricing() {
                 <span className={styles.priceAmount}>$39.99</span>
                 <span className={styles.pricePeriod}>/ 30 days</span>
               </div>
-              <p className={styles.planDescription}>Ideal for growing businesses with advanced bundling needs</p>
+              <p className={styles.planDescription}>14-day free trial, then $39.99 every 30 days</p>
               <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $350/year ($129 off)</p>
             </div>
             <ul className={styles.featureList}>
@@ -138,7 +138,7 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                14-day free trial
+                14-day free trial included
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.primaryButton}`}>
@@ -154,7 +154,7 @@ export default function Pricing() {
                 <span className={styles.priceAmount}>$79.99</span>
                 <span className={styles.pricePeriod}>/ 30 days</span>
               </div>
-              <p className={styles.planDescription}>For large-scale operations with maximum power</p>
+              <p className={styles.planDescription}>14-day free trial, then $79.99 every 30 days</p>
               <p className={styles.planDescription} style={{fontSize: '0.85rem', marginTop: '4px'}}>or $700/year ($259 off)</p>
             </div>
             <ul className={styles.featureList}>
@@ -186,7 +186,7 @@ export default function Pricing() {
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                14-day free trial
+                14-day free trial included
               </li>
             </ul>
             <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>

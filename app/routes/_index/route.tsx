@@ -155,13 +155,13 @@ export default function App() {
                   <span className={styles.priceAmount}>$17.99</span>
                   <span className={styles.pricePeriod}>/30 days</span>
                 </div>
-                <p className={styles.pricingDesc}>Perfect for small stores getting started with bundling</p>
+                <p className={styles.pricingDesc}>14-day free trial, then $17.99 every 30 days</p>
               </div>
               <ul className={styles.pricingFeatures}>
                 <li>Up to 25 bundle rules</li>
                 <li>Full order analysis &amp; suggestions</li>
                 <li>Basic analytics dashboard</li>
-                <li>14-day free trial</li>
+                <li>14-day free trial included</li>
               </ul>
               <a href="/pricing" className={styles.pricingButton}>Start Free Trial</a>
             </div>
@@ -175,7 +175,7 @@ export default function App() {
                   <span className={styles.priceAmount}>$39.99</span>
                   <span className={styles.pricePeriod}>/30 days</span>
                 </div>
-                <p className={styles.pricingDesc}>Ideal for growing businesses with advanced bundling needs</p>
+                <p className={styles.pricingDesc}>14-day free trial, then $39.99 every 30 days</p>
               </div>
               <ul className={styles.pricingFeatures}>
                 <li>Unlimited bundle rules</li>
@@ -195,14 +195,14 @@ export default function App() {
                   <span className={styles.priceAmount}>$79.99</span>
                   <span className={styles.pricePeriod}>/30 days</span>
                 </div>
-                <p className={styles.pricingDesc}>For large-scale operations with maximum power</p>
+                <p className={styles.pricingDesc}>14-day free trial, then $79.99 every 30 days</p>
               </div>
               <ul className={styles.pricingFeatures}>
                 <li>Everything in Professional</li>
                 <li>Fulfillment optimization</li>
                 <li>Dedicated success manager</li>
                 <li>Slack &amp; email notifications</li>
-                <li>14-day free trial</li>
+                <li>14-day free trial included</li>
               </ul>
               <a href="/pricing" className={styles.pricingButton}>Start Free Trial</a>
             </div>
