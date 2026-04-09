@@ -612,7 +612,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 `bundle-rule:${rule.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`
               ];
 
-              await admin.graphql(`
+              const tagsResp = await admin.graphql(`
                 mutation tagsAdd($id: ID!, $tags: [String!]!) {
                   tagsAdd(id: $id, tags: $tags) {
                     userErrors {
@@ -624,6 +624,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               `, {
                 variables: { id: orderId, tags: tagsToAdd }
               });
+              const tagsData = await tagsResp.json();
+              const tagsErrors = tagsData.data?.tagsAdd?.userErrors || [];
+              if (tagsErrors.length > 0) {
+                logWarning('tagsAdd returned userErrors', {
+                  shop, orderId: String(order.id), errors: tagsErrors
+                });
+              }
 
               // Step 2: Update order note with fulfillment instructions
               const orderUpdateResp = await admin.graphql(`
