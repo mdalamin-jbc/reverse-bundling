@@ -144,7 +144,7 @@ export default function AdminMerchants() {
                   <th style={{ textAlign: "center" }}>Rules</th>
                   <th style={{ textAlign: "center" }}>Conversions</th>
                   <th style={{ textAlign: "right" }}>Savings</th>
-                  <th style={{ textAlign: "center" }}>Orders</th>
+                  <th style={{ textAlign: "center" }}>Suggestions</th>
                   <th style={{ textAlign: "center" }}>Mode</th>
                   <th style={{ textAlign: "center" }}>Status</th>
                   <th></th>
@@ -170,8 +170,10 @@ export default function AdminMerchants() {
                       <span style={{ fontWeight: 700, color: "#059669" }}>${m.totalSavings.toFixed(2)}</span>
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <span style={{ fontWeight: 600 }}>{m.orderHistoryCount.toLocaleString()}</span>
-                      <div className={styles.tableSub}>{m.suggestionCount} suggestions</div>
+                      <span style={{ fontWeight: 600 }}>{m.suggestionCount}</span>
+                      {m.orderHistoryCount > 0 && (
+                        <div className={styles.tableSub}>{m.orderHistoryCount.toLocaleString()} analyzed</div>
+                      )}
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <span className={`${styles.badge} ${styles.badgeIndigo}`}>{m.fulfillmentMode}</span>
