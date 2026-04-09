@@ -54,7 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const { hasActiveSubscription } = await import("../billing.server");
         const hasSubscription = await hasActiveSubscription(admin, shop);
         
-        let planLimit = 50; // Free plan default
+        let planLimit = 25; // Free plan default (matches billing.server.ts freeOrderLimit)
         
         if (hasSubscription) {
           // Get current subscription details
@@ -89,21 +89,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (activeSubscription) {
             const pricing = activeSubscription.lineItems?.[0]?.plan?.pricingDetails;
             if (pricing) {
-              const amount = pricing.price?.amount || 0;
+              const amount = parseFloat(pricing.price?.amount) || 0;
               const interval = pricing.interval;
               
               // Map pricing to plan limits based on actual billing.server.ts plan prices
+              // Starter: $17.99/30 days or $150/year → 125 orders/month
+              // Professional: $39.99/30 days or $350/year → 525 orders/month
+              // Enterprise: $79.99/30 days or $700/year → unlimited
               if (interval === 'ANNUAL') {
-                // Annual plan prices (approx 10x monthly)
-                if (amount >= 120) planLimit = 999999;   // Enterprise ($14.99/mo annual)
-                else if (amount >= 80) planLimit = 550;   // Professional ($9.99/mo annual)
-                else if (amount >= 40) planLimit = 150;   // Starter ($4.99/mo annual)
+                if (amount >= 600) planLimit = 999999;      // Enterprise ($700/year)
+                else if (amount >= 300) planLimit = 525;    // Professional ($350/year)
+                else if (amount >= 100) planLimit = 125;    // Starter ($150/year)
               } else {
-                // Monthly plan prices
-                if (amount >= 14.99) planLimit = 999999;  // Enterprise
-                else if (amount >= 9.99) planLimit = 550; // Professional (25 free + 500 paid + 25 buffer)
-                else if (amount >= 4.99) planLimit = 150; // Starter (25 free + 100 paid + 25 buffer)
+                if (Math.abs(amount - 79.99) < 1) planLimit = 999999;  // Enterprise ($79.99/30 days)
+                else if (Math.abs(amount - 39.99) < 1) planLimit = 525; // Professional ($39.99/30 days)
+                else if (Math.abs(amount - 17.99) < 1) planLimit = 125; // Starter ($17.99/30 days)
               }
+            } else {
+              // No pricing details — fallback to subscription name
+              const subName = (activeSubscription.name || '').toLowerCase();
+              if (subName.includes('enterprise')) planLimit = 999999;
+              else if (subName.includes('professional')) planLimit = 525;
+              else if (subName.includes('starter')) planLimit = 125;
             }
           }
         }
@@ -128,7 +135,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             orderId: String(order.id),
             orderCountThisMonth,
             planLimit,
-            planName: planLimit === 999999 ? 'Enterprise' : planLimit === 2050 ? 'Professional' : planLimit === 550 ? 'Starter' : 'Free'
+            planName: planLimit === 999999 ? 'Enterprise' : planLimit === 525 ? 'Professional' : planLimit === 125 ? 'Starter' : 'Free'
           });
           
           perfMonitor.end({ shop, orderId: String(order.id), limitExceeded: true });

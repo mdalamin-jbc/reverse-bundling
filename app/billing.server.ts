@@ -1,6 +1,3 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
-import { authenticate } from "./shopify.server";
-
 /**
  * Billing configuration for managed pricing apps
  * For managed pricing apps, billing is handled entirely by Shopify App Store
@@ -256,23 +253,4 @@ export async function requestPayment(admin: any, session: any, billing: any, pla
   }
 }
 
-/**
- * Billing middleware - checks if shop has active subscription
- * Use this in loaders that require billing
- */
-export async function requireBilling(request: LoaderFunctionArgs["request"]) {
-  const { admin, session, billing } = await authenticate.admin(request);
 
-  const hasSubscription = await hasActiveSubscription(admin, session.shop);
-
-  if (!hasSubscription) {
-    // Redirect to billing page
-    const result = await requestPayment(admin, session, billing, "professional");
-    
-    if (result.success && result.redirectUrl) {
-      return { billing: { required: true, confirmationUrl: result.redirectUrl } };
-    }
-  }
-
-  return { billing: { required: false } };
-}
