@@ -5,6 +5,12 @@ import db from "../db.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  // Skip auth check for login page to avoid redirect loop
+  if (url.pathname === "/admin/login") {
+    return json({ merchantCount: 0, ruleCount: 0, conversionCount: 0, env: process.env.NODE_ENV || "production", isLogin: true });
+  }
+
   await requireAdmin(request);
 
   const [merchantCount, ruleCount, conversionCount] = await Promise.all([
@@ -18,6 +24,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ruleCount,
     conversionCount,
     env: process.env.NODE_ENV || "production",
+    isLogin: false,
   });
 };
 
@@ -30,8 +37,13 @@ const navItems = [
 ];
 
 export default function AdminLayout() {
-  const { merchantCount, ruleCount, conversionCount, env } = useLoaderData<typeof loader>();
+  const { merchantCount, ruleCount, conversionCount, env, isLogin } = useLoaderData<typeof loader>();
   const location = useLocation();
+
+  // Login page renders without the admin layout chrome
+  if (isLogin || location.pathname === "/admin/login") {
+    return <Outlet />;
+  }
 
   const isActive = (href: string, end?: boolean) => {
     if (end) return location.pathname === href;
