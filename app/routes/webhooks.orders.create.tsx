@@ -302,12 +302,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             // Don't fail the webhook if history update fails
           }
 
-          // Update bundle rule statistics
+          // Update bundle rule statistics (frequency + accumulated savings)
           await db.bundleRule.update({
             where: { id: rule.id },
             data: {
               frequency: {
                 increment: 1,
+              },
+              savings: {
+                increment: actualSavings,
               },
             },
           });

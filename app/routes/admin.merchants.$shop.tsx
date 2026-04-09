@@ -29,13 +29,30 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const totalConversions = await db.orderConversion.count({ where: { shop } });
   const successConversions = await db.orderConversion.count({ where: { shop, status: "success" } });
 
+  // Enrich rules with actual conversion data from OrderConversion table
+  const enrichedRules = await Promise.all(
+    rules.map(async (r) => {
+      const [convCount, convSavings] = await Promise.all([
+        db.orderConversion.count({ where: { bundleRuleId: r.id } }),
+        db.orderConversion.aggregate({ where: { bundleRuleId: r.id }, _sum: { savingsAmount: true } }),
+      ]);
+      return {
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+        actualConversions: convCount,
+        actualSavings: convSavings._sum.savingsAmount || 0,
+      };
+    })
+  );
+
   return json({
     shop,
     sessions: sessions.map(s => ({
       ...s,
       accessToken: s.accessToken ? `${s.accessToken.slice(0, 6)}...${s.accessToken.slice(-4)}` : "—",
     })),
-    rules: rules.map(r => ({ ...r, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })),
+    rules: enrichedRules,
     conversions: conversions.map(c => ({ ...c, convertedAt: c.convertedAt.toISOString() })),
     settings,
     suggestions: suggestions.map(s => ({ ...s, createdAt: s.createdAt.toISOString() })),
@@ -242,8 +259,8 @@ export default function AdminMerchantDetail() {
                     <th>Bundled SKU</th>
                     <th style={{ textAlign: "center" }}>Items</th>
                     <th style={{ textAlign: "center" }}>Status</th>
-                    <th style={{ textAlign: "center" }}>Frequency</th>
-                    <th style={{ textAlign: "right" }}>Savings</th>
+                    <th style={{ textAlign: "center" }}>Conversions</th>
+                    <th style={{ textAlign: "right" }}>Total Savings</th>
                     <th>Category</th>
                     <th>Created</th>
                   </tr>
@@ -259,8 +276,13 @@ export default function AdminMerchantDetail() {
                           {r.status}
                         </span>
                       </td>
-                      <td style={{ textAlign: "center" }}>{r.frequency}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600, color: "#059669" }}>${r.savings.toFixed(2)}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <span style={{ fontWeight: 700 }}>{r.actualConversions}</span>
+                        {r.frequency > 0 && r.frequency !== r.actualConversions && (
+                          <div className={styles.tableSub}>{r.frequency}× matched</div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "#059669" }}>${r.actualSavings.toFixed(2)}</td>
                       <td><span className={`${styles.badge} ${styles.badgeIndigo}`}>{r.category || "—"}</span></td>
                       <td style={{ fontSize: 12, color: "#6b7280" }}>{new Date(r.createdAt).toLocaleDateString()}</td>
                     </tr>
