@@ -387,6 +387,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
 
             const orderId = `gid://shopify/Order/${order.id}`;
+            let bundleVariantFound = false;
 
             if (fulfillmentMode === 'order_edit') {
               // === ORDER EDIT MODE ===
@@ -412,6 +413,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
               const skuLookupData = await skuLookupResponse.json();
               const bundleVariant = skuLookupData.data?.productVariants?.edges?.[0]?.node;
+              bundleVariantFound = !!bundleVariant;
 
               if (!bundleVariant) {
                 logWarning(`Bundle product with SKU "${rule.bundledSku}" not found — falling back to tag_only mode`, {
@@ -579,7 +581,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
 
             // === TAG ONLY MODE (default, or fallback when bundle product not found) ===
-            if (fulfillmentMode !== 'order_edit') {
+            // Also runs when order_edit mode failed to find the bundle variant
+            const needsTagOnly = fulfillmentMode !== 'order_edit' || (fulfillmentMode === 'order_edit' && !bundleVariantFound);
+            if (needsTagOnly) {
               // Safe approach — doesn't modify customer-facing line items
               // Warehouse reads tags/notes/metafields to know which pre-packed bundle to ship
 
@@ -622,7 +626,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               });
 
               // Step 2: Update order note with fulfillment instructions
-              await admin.graphql(`
+              const orderUpdateResp = await admin.graphql(`
                 mutation orderUpdate($input: OrderInput!) {
                   orderUpdate(input: $input) {
                     order { id }
@@ -650,6 +654,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   }
                 }
               });
+
+              const orderUpdateData = await orderUpdateResp.json();
+              const orderUpdateErrors = orderUpdateData.data?.orderUpdate?.userErrors || [];
+              if (orderUpdateErrors.length > 0) {
+                logWarning('orderUpdate returned userErrors', {
+                  shop, orderId: String(order.id), errors: orderUpdateErrors
+                });
+              }
 
               logInfo('✅ Order tagged for bundle fulfillment', {
                 shop,

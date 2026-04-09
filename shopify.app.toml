@@ -21,7 +21,7 @@ redirect_urls = [
 ]
 
 [webhooks]
-# Use stable API version (Shopify recommends using a fixed version, not a future date)
+# Use stable API version matching shopify.server.ts (ApiVersion.January25)
 api_version = "2025-01"
 
   # App lifecycle webhooks

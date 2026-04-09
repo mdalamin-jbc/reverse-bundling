@@ -67,7 +67,7 @@ function validateConfig(config: AppConfig): void {
     throw new Error("SHOPIFY_APP_URL must be a valid URL");
   }
 
-  if (config.databaseUrl && !config.databaseUrl.startsWith("postgresql://") && !config.databaseUrl.startsWith("file:")) {
+  if (config.databaseUrl && !config.databaseUrl.startsWith("postgresql://") && !config.databaseUrl.startsWith("postgres://") && !config.databaseUrl.startsWith("file:")) {
     throw new Error("DATABASE_URL must be a PostgreSQL connection string or SQLite file path");
   }
 }

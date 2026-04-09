@@ -218,8 +218,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       logError(error as Error, { shop: session.shop, context: "fetching order conversion count" });
     }
 
-    // Calculate total savings (simplified - in real app this would be more complex)
-    const totalSavings = 0; // Placeholder for now
+    // Calculate total savings from successful conversions
+    let totalSavings = 0;
+    try {
+      const savingsAgg = await db.orderConversion.aggregate({
+        where: { shop: session.shop, status: 'success' },
+        _sum: { savingsAmount: true },
+      });
+      totalSavings = savingsAgg._sum.savingsAmount || 0;
+    } catch (error) {
+      logError(error as Error, { shop: session.shop, context: 'fetching total savings' });
+    }
 
     logInfo("Billing loader completed", { 
       shop: session.shop, 
