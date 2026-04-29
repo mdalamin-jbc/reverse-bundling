@@ -790,7 +790,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         bundledSku: finalBundledSku,
         status: "active",
         frequency: 0,
-        savings,
+        savings: 0,          // accumulated total — starts at 0
+        savingsPerOrder: savings, // per-order config saved here
         category: formData.get("category") as string || null,
         tags: formData.get("tags") as string || null,
       } as any
@@ -873,7 +874,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         name: name.trim(),
         items: JSON.stringify(items.split(",").filter(item => item.trim())),
         bundledSku: bundledSku.trim(),
-        savings,
+        savingsPerOrder: savings, // per-order config saved here
         category: formData.get("category") as string || null,
         tags: formData.get("tags") as string || null,
       } as any
@@ -1791,7 +1792,7 @@ export default function BundleRules() {
         name: rule.name,
         items: existingItems,
         bundledSku: rule.bundledSku,
-        savings: rule.savings ? parseFloat(rule.savings).toFixed(2) : '',
+        savings: rule.savingsPerOrder != null ? parseFloat(rule.savingsPerOrder).toFixed(2) : (rule.savings && rule.frequency > 0 ? (rule.savings / rule.frequency).toFixed(2) : '10.00'),
         autoCreateProduct: false, // For existing rules, assume they use manual SKUs
         category: rule.category || '',
         tags: JSON.parse(rule.tags || '[]'),
@@ -2084,7 +2085,7 @@ export default function BundleRules() {
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#34d399', marginBottom: '2px' }}>
-                  ${bundleRules.reduce((sum: number, rule: any) => sum + (rule.savings || 0) * (rule.frequency || 0), 0).toLocaleString()}
+                  ${bundleRules.reduce((sum: number, rule: any) => sum + (rule.savings || 0), 0).toLocaleString()}
                 </div>
                 <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>
                   Total Savings/Month
@@ -2291,7 +2292,7 @@ export default function BundleRules() {
                                   {rule.name}
                                 </Text>
                                 <Text variant="bodySm" tone="subdued" as="span">
-                                  {itemsArray.length} items • ${(rule.savings || 0).toFixed(2)} savings
+                                  {itemsArray.length} items • ${(rule.savingsPerOrder || rule.savings || 0).toFixed(2)} savings
                                 </Text>
                               </BlockStack>
                             </div>
@@ -2309,7 +2310,7 @@ export default function BundleRules() {
                           <IndexTable.Cell>
                             <div style={{ minWidth: '120px' }}>
                               <Text variant="bodyMd" as="span" tone="success" fontWeight="medium">
-                                ${(rule.savings || 0).toFixed(2)}
+                                ${(rule.savingsPerOrder || rule.savings || 0).toFixed(2)}
                               </Text>
                               <Text variant="bodySm" tone="subdued" as="span">
                                 per bundle

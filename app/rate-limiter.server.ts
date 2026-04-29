@@ -88,11 +88,14 @@ export const apiRateLimiter = createRateLimiter({
 
 export const webhookRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  maxRequests: 60, // 60 webhooks per minute (reasonable for Shopify)
+  // Shopify can legitimately burst many webhooks/min per shop during sales.
+  // Set a generous per-shop limit to avoid 429s that cause Shopify to auto-remove subscriptions.
+  maxRequests: 600,
   keyGenerator: (request: Request) => {
-    // Rate limit by shop domain for webhooks
-    const url = new URL(request.url);
-    const shop = url.searchParams.get("shop") || "unknown";
+    // Shopify webhooks include the shop domain in the X-Shopify-Shop-Domain header,
+    // NOT in a query parameter. Using the query param caused every webhook to fall into
+    // a single "webhook:unknown" bucket and get rate-limited globally.
+    const shop = request.headers.get("x-shopify-shop-domain") || "unknown";
     return `webhook:${shop}`;
   }
 });

@@ -259,7 +259,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const originalIdentifiers = [...new Set([...orderSkus, ...orderVariantIds])];
           // Calculate real savings from merchant's fulfillment costs
           const calculatedSavings = (ruleItems.length * individualShipCost) - bundleShipCost;
-          const actualSavings = calculatedSavings > 0 ? calculatedSavings : rule.savings;
+          // Fallback: use merchant's configured per-order savings (savingsPerOrder), NOT the accumulated total (savings)
+          const configuredSavings = (rule as any).savingsPerOrder ?? rule.savings;
+          const actualSavings = calculatedSavings > 0 ? calculatedSavings : configuredSavings;
           
           await db.orderConversion.create({
             data: {
