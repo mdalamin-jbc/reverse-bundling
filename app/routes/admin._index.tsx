@@ -3,6 +3,7 @@ import { useLoaderData, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
+import { getMerchantStage, stageLabel } from "../merchant-health.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);
@@ -43,6 +44,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const savingsResult = await db.orderConversion.aggregate({ _sum: { savingsAmount: true } });
   const merchantsWithRules = await db.bundleRule.findMany({ distinct: ["shop"], select: { shop: true } });
 
+  const pipelineCounts = { installed: 0, onboarding: 0, rules_live: 0, converting: 0, at_risk: 0 };
+  for (const { shop } of allSessions) {
+    const [activeRuleCount, conversionCount, settings] = await Promise.all([
+      db.bundleRule.count({ where: { shop, status: "active" } }),
+      db.orderConversion.count({ where: { shop } }),
+      db.appSettings.findFirst({ where: { shop }, select: { createdAt: true } }),
+    ]);
+    const daysSinceFirst =
+      settings?.createdAt
+        ? Math.floor((Date.now() - settings.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+    const stage = getMerchantStage({
+      configured: !!settings,
+      activeRuleCount,
+      conversionCount,
+      daysSinceFirstActivity: daysSinceFirst,
+    });
+    pipelineCounts[stage]++;
+  }
+
   // Recent conversions for activity feed
   const recentConversionsList = await db.orderConversion.findMany({
     orderBy: { convertedAt: "desc" }, take: 5,
@@ -65,11 +86,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentRules: recentRules.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })),
     recentMerchants,
     recentConversions: recentConversionsList.map(c => ({ ...c, convertedAt: c.convertedAt.toISOString() })),
+    pipelineCounts,
   });
 };
 
 export default function AdminDashboard() {
-  const { stats, recentRules, recentMerchants, recentConversions } = useLoaderData<typeof loader>();
+  const { stats, recentRules, recentMerchants, recentConversions, pipelineCounts } = useLoaderData<typeof loader>();
 
   return (
     <>
@@ -139,6 +161,32 @@ export default function AdminDashboard() {
           <div className={styles.statValue}>${stats.totalSavings.toFixed(2)}</div>
           <div className={styles.statChange}>
             <span className={styles.statUp}>Across all merchants</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Merchant pipeline */}
+      <div className={styles.card} style={{ marginBottom: 28 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>🎯 Merchant Pipeline</span>
+          <Link to="/admin/merchants?stage=at_risk" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
+            View at-risk →
+          </Link>
+        </div>
+        <div className={styles.cardBody}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+            {(["installed", "onboarding", "rules_live", "converting", "at_risk"] as const).map((stage) => (
+              <Link
+                key={stage}
+                to={`/admin/merchants?stage=${stage}`}
+                style={{ textDecoration: "none", textAlign: "center", padding: 12, borderRadius: 10, background: "#f9fafb", border: "1px solid #e5e7eb" }}
+              >
+                <div style={{ fontSize: 22, fontWeight: 800, color: stage === "at_risk" ? "#dc2626" : "#111827" }}>
+                  {pipelineCounts[stage]}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{stageLabel(stage)}</div>
+              </Link>
+            ))}
           </div>
         </div>
       </div>

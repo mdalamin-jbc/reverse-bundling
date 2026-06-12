@@ -3,19 +3,33 @@ import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
+import {
+  type MerchantStage,
+  daysSince,
+  getMerchantHealth,
+  getMerchantStage,
+  stageLabel,
+} from "../merchant-health.server";
 
 const PER_PAGE_OPTIONS = [10, 25, 50];
+const STAGE_FILTERS: MerchantStage[] = [
+  "installed",
+  "onboarding",
+  "rules_live",
+  "converting",
+  "at_risk",
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() || "";
+  const stageFilter = url.searchParams.get("stage") as MerchantStage | null;
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const perPage = PER_PAGE_OPTIONS.includes(parseInt(url.searchParams.get("perPage") || "10", 10))
     ? parseInt(url.searchParams.get("perPage") || "10", 10)
     : 10;
 
-  // Get unique shops
   const allSessions = await db.session.findMany({
     distinct: ["shop"],
     where: query ? { shop: { contains: query, mode: "insensitive" } } : undefined,
@@ -23,17 +37,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: { id: "desc" },
   });
 
-  const totalCount = allSessions.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
-  const currentPage = Math.min(page, totalPages);
-  const paginatedShops = allSessions.slice((currentPage - 1) * perPage, currentPage * perPage);
-
-  // Enrich merchant data
-  const merchants = await Promise.all(
-    paginatedShops.map(async ({ shop }) => {
+  const allMerchants = await Promise.all(
+    allSessions.map(async ({ shop }) => {
       const [
         ruleCount, activeRuleCount, conversionCount, settings, savingsAgg,
-        orderHistoryCount, suggestionCount,
+        orderHistoryCount, suggestionCount, ownerSession,
+        latestConversion, latestRule, earliestSettings,
       ] = await Promise.all([
         db.bundleRule.count({ where: { shop } }),
         db.bundleRule.count({ where: { shop, status: "active" } }),
@@ -42,7 +51,49 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         db.orderConversion.aggregate({ where: { shop }, _sum: { savingsAmount: true } }),
         db.orderHistory.count({ where: { shop } }),
         db.bundleSuggestion.count({ where: { shop } }),
+        db.session.findFirst({
+          where: { shop },
+          select: { email: true, firstName: true, lastName: true, accountOwner: true },
+          orderBy: { id: "desc" },
+        }),
+        db.orderConversion.findFirst({
+          where: { shop },
+          orderBy: { convertedAt: "desc" },
+          select: { convertedAt: true },
+        }),
+        db.bundleRule.findFirst({
+          where: { shop },
+          orderBy: { updatedAt: "desc" },
+          select: { updatedAt: true, createdAt: true },
+        }),
+        db.appSettings.findFirst({
+          where: { shop },
+          select: { createdAt: true },
+        }),
       ]);
+
+      const configured = !!settings;
+      const firstActivityAt =
+        earliestSettings?.createdAt ||
+        latestRule?.createdAt ||
+        null;
+      const lastActivityAt =
+        latestConversion?.convertedAt ||
+        latestRule?.updatedAt ||
+        earliestSettings?.createdAt ||
+        null;
+
+      const stage = getMerchantStage({
+        configured,
+        activeRuleCount,
+        conversionCount,
+        daysSinceFirstActivity: daysSince(firstActivityAt),
+      });
+      const health = getMerchantHealth({
+        stage,
+        daysSinceLastActivity: daysSince(lastActivityAt),
+      });
+
       return {
         shop,
         ruleCount,
@@ -53,20 +104,63 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         suggestionCount,
         autoConvert: settings?.autoConvertOrders || false,
         fulfillmentMode: settings?.fulfillmentMode || "—",
-        configured: !!settings,
+        configured,
+        ownerEmail: ownerSession?.email || null,
+        ownerName: [ownerSession?.firstName, ownerSession?.lastName].filter(Boolean).join(" ") || null,
+        stage,
+        health,
+        lastActivityAt: lastActivityAt?.toISOString() || null,
       };
     })
+  );
+
+  const filteredMerchants =
+    stageFilter && STAGE_FILTERS.includes(stageFilter)
+      ? allMerchants.filter((m) => m.stage === stageFilter)
+      : allMerchants;
+
+  const stageCounts = STAGE_FILTERS.reduce(
+    (acc, stage) => {
+      acc[stage] = allMerchants.filter((m) => m.stage === stage).length;
+      return acc;
+    },
+    {} as Record<MerchantStage, number>
+  );
+
+  const totalCount = filteredMerchants.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const currentPage = Math.min(page, totalPages);
+  const merchants = filteredMerchants.slice(
+    (currentPage - 1) * perPage,
+    currentPage * perPage
   );
 
   return json({
     merchants,
     pagination: { page: currentPage, perPage, totalCount, totalPages },
+    totalMerchants: allMerchants.length,
     query,
+    stageFilter: stageFilter && STAGE_FILTERS.includes(stageFilter) ? stageFilter : null,
+    stageCounts,
   });
 };
 
+const healthBadge: Record<string, string> = {
+  healthy: styles.badgeGreen,
+  needs_attention: styles.badgeYellow,
+  critical: styles.badgeRed,
+};
+
+const stageBadge: Record<MerchantStage, string> = {
+  installed: styles.badgeGray,
+  onboarding: styles.badgeBlue,
+  rules_live: styles.badgeIndigo,
+  converting: styles.badgeGreen,
+  at_risk: styles.badgeRed,
+};
+
 export default function AdminMerchants() {
-  const { merchants, pagination, query } = useLoaderData<typeof loader>();
+  const { merchants, pagination, totalMerchants, query, stageFilter, stageCounts } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const updateParams = (updates: Record<string, string>) => {
@@ -89,6 +183,27 @@ export default function AdminMerchants() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Pipeline filters */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnSm} ${!stageFilter ? styles.btnPrimary : styles.btnSecondary}`}
+          onClick={() => updateParams({ stage: "", page: "1" })}
+        >
+          All ({totalMerchants})
+        </button>
+        {STAGE_FILTERS.map((stage) => (
+          <button
+            key={stage}
+            type="button"
+            className={`${styles.btn} ${styles.btnSm} ${stageFilter === stage ? styles.btnPrimary : styles.btnSecondary}`}
+            onClick={() => updateParams({ stage, page: "1" })}
+          >
+            {stageLabel(stage)} ({stageCounts[stage]})
+          </button>
+        ))}
       </div>
 
       {/* Search & Filters */}
@@ -141,12 +256,12 @@ export default function AdminMerchants() {
               <thead>
                 <tr>
                   <th>Shop</th>
+                  <th>Stage</th>
                   <th style={{ textAlign: "center" }}>Rules</th>
                   <th style={{ textAlign: "center" }}>Conversions</th>
                   <th style={{ textAlign: "right" }}>Savings</th>
-                  <th style={{ textAlign: "center" }}>Suggestions</th>
-                  <th style={{ textAlign: "center" }}>Mode</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
+                  <th style={{ textAlign: "center" }}>Health</th>
+                  <th>Last activity</th>
                   <th></th>
                 </tr>
               </thead>
@@ -158,6 +273,12 @@ export default function AdminMerchants() {
                         {m.shop.replace(".myshopify.com", "")}
                       </Link>
                       <div className={styles.tableSub}>{m.shop}</div>
+                      {m.ownerEmail && (
+                        <div className={styles.tableSub}>{m.ownerName ? `${m.ownerName} · ` : ""}{m.ownerEmail}</div>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`${styles.badge} ${stageBadge[m.stage]}`}>{stageLabel(m.stage)}</span>
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <span style={{ fontWeight: 700, color: "#111827" }}>{m.ruleCount}</span>
@@ -170,27 +291,14 @@ export default function AdminMerchants() {
                       <span style={{ fontWeight: 700, color: "#059669" }}>${m.totalSavings.toFixed(2)}</span>
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <span style={{ fontWeight: 600 }}>{m.suggestionCount}</span>
-                      {m.orderHistoryCount > 0 && (
-                        <div className={styles.tableSub}>{m.orderHistoryCount.toLocaleString()} analyzed</div>
-                      )}
+                      <span className={`${styles.badge} ${healthBadge[m.health]}`}>
+                        {m.health.replace("_", " ")}
+                      </span>
                     </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={`${styles.badge} ${styles.badgeIndigo}`}>{m.fulfillmentMode}</span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {m.configured ? (
-                        <span className={`${styles.badge} ${styles.badgeGreen}`}>
-                          <span className={styles.badgeDot}></span> Configured
-                        </span>
-                      ) : (
-                        <span className={`${styles.badge} ${styles.badgeGray}`}>Not configured</span>
-                      )}
-                      {m.autoConvert && (
-                        <div style={{ marginTop: 4 }}>
-                          <span className={`${styles.badge} ${styles.badgeTeal}`}>Auto-convert</span>
-                        </div>
-                      )}
+                    <td style={{ fontSize: 12, color: "#6b7280" }}>
+                      {m.lastActivityAt
+                        ? new Date(m.lastActivityAt).toLocaleDateString()
+                        : "—"}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <Link

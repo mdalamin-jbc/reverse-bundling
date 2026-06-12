@@ -39,10 +39,10 @@ export default function App() {
       <main>
         <div className={styles.hero}>
           <div className={styles.heroContent}>
-            <h1 className={styles.heading}>Reverse Bundling</h1>
+            <h1 className={styles.heading}>Reverse Bundle Pro</h1>
             <p className={styles.tagline}>
-              Transform individual product orders into profitable bundles automatically.
-              Boost revenue, simplify fulfillment, and enhance customer experience.
+              Automatically convert repeat multi-SKU orders into one pre-packed bundle SKU
+              before fulfillment—fewer picks, lower warehouse cost, cleaner ShipStation workflow.
             </p>
             {showForm && (
               <div className={styles.ctaSection}>
@@ -76,9 +76,9 @@ export default function App() {
 
         <div id="features" className={styles.features}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Powerful Features for Modern E-commerce</h2>
+            <h2 className={styles.sectionTitle}>Built for High-Volume Fulfillment</h2>
             <p className={styles.sectionDesc}>
-              Everything you need to create, manage, and optimize product bundles at scale.
+              For Shopify stores that ship the same product combinations every day.
             </p>
           </div>
           <div className={styles.featureGrid}>
@@ -119,20 +119,20 @@ export default function App() {
             </div>
 
             <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>🔒</div>
-              <h3 className={styles.featureTitle}>Enterprise Security</h3>
+              <div className={styles.featureIcon}>🎯</div>
+              <h3 className={styles.featureTitle}>AI Bundle Suggestions</h3>
               <p className={styles.featureDesc}>
-                Bank-level security with encrypted data storage, compliance monitoring,
-                and automated backups. GDPR compliant with comprehensive audit trails.
+                Analyze order history to surface SKU combinations worth bundling.
+                Turn suggestions into rules in one click.
               </p>
             </div>
 
             <div className={styles.featureCard}>
               <div className={styles.featureIcon}>⚡</div>
-              <h3 className={styles.featureTitle}>Lightning Fast Processing</h3>
+              <h3 className={styles.featureTitle}>Setup Wizard</h3>
               <p className={styles.featureDesc}>
-                Sub-second order processing with optimized algorithms and cloud infrastructure.
-                Handle thousands of orders simultaneously without performance degradation.
+                Guided onboarding gets your first bundle rule live in minutes.
+                No warehouse workflow change required to start.
               </p>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function App() {
 
           <div className={styles.pricingFooter}>
             <p className={styles.pricingFooterText}>
-              All plans include enterprise security, lightning-fast processing, and 24/7 support.
+              14-day free trial on paid plans. Free tier available.
               <a href="/pricing" className={styles.pricingFooterLink}> View full pricing details →</a>
             </p>
           </div>
@@ -284,7 +284,7 @@ export default function App() {
               <span className={styles.footerLogoText}>Reverse Bundling</span>
             </div>
             <p className={styles.footerDesc}>
-              The most advanced product bundling solution for Shopify merchants.
+              Reverse bundling automation for Shopify fulfillment teams.
             </p>
           </div>
 
@@ -325,9 +325,9 @@ export default function App() {
               © 2025 Reverse Bundling. All rights reserved.
             </p>
             <div className={styles.footerBadges}>
-              <span className={styles.badge}>🔒 SOC 2 Compliant</span>
-              <span className={styles.badge}>🛡️ GDPR Ready</span>
-              <span className={styles.badge}>⚡ 99.9% Uptime</span>
+              <span className={styles.badge}>🛍️ Shopify App</span>
+              <span className={styles.badge}>📦 Fulfillment focus</span>
+              <a href="/system-status" className={styles.badge}>💚 System status</a>
             </div>
           </div>
         </div>

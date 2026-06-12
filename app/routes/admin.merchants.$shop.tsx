@@ -4,6 +4,12 @@ import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
 import { useState } from "react";
+import {
+  daysSince,
+  getMerchantHealth,
+  getMerchantStage,
+  stageLabel,
+} from "../merchant-health.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   await requireAdmin(request);
@@ -28,6 +34,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const totalConversions = await db.orderConversion.count({ where: { shop } });
   const successConversions = await db.orderConversion.count({ where: { shop, status: "success" } });
+  const activeRuleCount = rules.filter((r) => r.status === "active").length;
+  const ownerSession = await db.session.findFirst({
+    where: { shop },
+    select: { email: true, firstName: true, lastName: true },
+    orderBy: { id: "desc" },
+  });
+  const stage = getMerchantStage({
+    configured: !!settings,
+    activeRuleCount,
+    conversionCount: totalConversions,
+    daysSinceFirstActivity: daysSince(settings?.createdAt),
+  });
+  const health = getMerchantHealth({
+    stage,
+    daysSinceLastActivity: daysSince(
+      conversions[0]?.convertedAt || rules[0]?.updatedAt || settings?.createdAt
+    ),
+  });
 
   // Enrich rules with actual conversion data from OrderConversion table
   const enrichedRules = await Promise.all(
@@ -48,6 +72,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return json({
     shop,
+    stage,
+    health,
+    ownerEmail: ownerSession?.email || null,
+    ownerName: [ownerSession?.firstName, ownerSession?.lastName].filter(Boolean).join(" ") || null,
     sessions: sessions.map(s => ({
       ...s,
       accessToken: s.accessToken ? `${s.accessToken.slice(0, 6)}...${s.accessToken.slice(-4)}` : "—",
@@ -75,7 +103,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 type Tab = "overview" | "rules" | "conversions" | "suggestions" | "settings";
 
 export default function AdminMerchantDetail() {
-  const { shop, sessions, rules, conversions, settings, suggestions, fulfillmentProviders, stats } = useLoaderData<typeof loader>();
+  const { shop, stage, health, ownerEmail, ownerName, sessions, rules, conversions, settings, suggestions, fulfillmentProviders, stats } = useLoaderData<typeof loader>();
   const [tab, setTab] = useState<Tab>("overview");
   const shortShop = shop.replace(".myshopify.com", "");
 
@@ -91,15 +119,19 @@ export default function AdminMerchantDetail() {
         <div className={styles.pageHeaderRow}>
           <div>
             <h2 className={styles.pageHeaderTitle}>🏪 {shortShop}</h2>
-            <p className={styles.pageHeaderSub}>{shop}</p>
+            <p className={styles.pageHeaderSub}>
+              {shop}
+              {ownerEmail && ` · ${ownerName ? `${ownerName} · ` : ""}${ownerEmail}`}
+            </p>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span className={`${styles.badge} ${styles.badgeIndigo}`}>{stageLabel(stage)}</span>
+            <span className={`${styles.badge} ${health === "healthy" ? styles.badgeGreen : health === "critical" ? styles.badgeRed : styles.badgeYellow}`}>
+              {health.replace("_", " ")}
+            </span>
             {settings?.autoConvertOrders && (
               <span className={`${styles.badge} ${styles.badgeTeal}`}>Auto-convert ON</span>
             )}
-            <span className={`${styles.badge} ${styles.badgeGreen}`}>
-              <span className={styles.badgeDot}></span> Active
-            </span>
           </div>
         </div>
       </div>

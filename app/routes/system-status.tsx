@@ -1,65 +1,75 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
 import { PublicLayout } from "../components/PublicLayout";
+import db from "../db.server";
 import styles from "./styles/system-status.module.css";
 
 export const meta: MetaFunction = () => {
   return [
     { title: "System Status - Reverse Bundling" },
-    { name: "description", content: "Check the current status of Reverse Bundling services and integrations" },
+    { name: "description", content: "Live status of Reverse Bundling services" },
   ];
 };
 
-export default function SystemStatus() {
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const start = Date.now();
+  let dbHealthy = false;
+  let dbLatency = 0;
+
+  try {
+    const dbStart = Date.now();
+    await db.$queryRaw`SELECT 1`;
+    dbLatency = Date.now() - dbStart;
+    dbHealthy = true;
+  } catch {
+    dbHealthy = false;
+  }
+
+  const apiLatency = Date.now() - start;
+  const uptimeSeconds = process.uptime();
+  const uptimeHours = (uptimeSeconds / 3600).toFixed(1);
+
   const services = [
     {
       name: "Reverse Bundling API",
-      status: "operational",
-      uptime: "99.9%",
-      responseTime: "120ms"
+      status: "operational" as const,
+      responseTime: `${apiLatency}ms`,
+      detail: `Node ${process.version} · uptime ${uptimeHours}h`,
+    },
+    {
+      name: "Database (PostgreSQL)",
+      status: dbHealthy ? ("operational" as const) : ("down" as const),
+      responseTime: `${dbLatency}ms`,
+      detail: dbHealthy ? "Connected" : "Connection failed",
     },
     {
       name: "Shopify Integration",
-      status: "operational",
-      uptime: "99.8%",
-      responseTime: "180ms"
+      status: dbHealthy ? ("operational" as const) : ("degraded" as const),
+      responseTime: "—",
+      detail: "OAuth & webhooks via Shopify API",
     },
-    {
-      name: "ShipStation Integration",
-      status: "operational",
-      uptime: "99.7%",
-      responseTime: "250ms"
-    },
-    {
-      name: "FBA Integration",
-      status: "operational",
-      uptime: "99.9%",
-      responseTime: "200ms"
-    },
-    {
-      name: "EDI Systems",
-      status: "operational",
-      uptime: "99.6%",
-      responseTime: "300ms"
-    },
-    {
-      name: "Analytics Dashboard",
-      status: "operational",
-      uptime: "99.9%",
-      responseTime: "150ms"
-    },
-    {
-      name: "Email Notifications",
-      status: "operational",
-      uptime: "99.8%",
-      responseTime: "220ms"
-    },
-    {
-      name: "Database Services",
-      status: "operational",
-      uptime: "99.9%",
-      responseTime: "95ms"
-    }
   ];
+
+  const overall = dbHealthy ? "operational" : "degraded";
+
+  return json({
+    services,
+    overall,
+    checkedAt: new Date().toISOString(),
+    version: process.env.npm_package_version || "1.0.0",
+  });
+};
+
+export default function SystemStatus() {
+  const { services, overall, checkedAt, version } = useLoaderData<typeof loader>();
+
+  const overallLabel =
+    overall === "operational" ? "All Systems Operational" : "Degraded Performance";
+  const overallDesc =
+    overall === "operational"
+      ? "Core services are running normally"
+      : "One or more services need attention";
 
   return (
     <PublicLayout>
@@ -68,45 +78,60 @@ export default function SystemStatus() {
           <div className={styles.header}>
             <h1 className={styles.title}>System Status</h1>
             <p className={styles.subtitle}>
-              Real-time status of all Reverse Bundling services and integrations.
+              Live status from our production server. Refreshes on each page load.
             </p>
           </div>
 
-          {/* Overall Status */}
           <div className={styles.statusOverview}>
             <div className={styles.overallStatus}>
-              <div className={styles.statusIndicator}></div>
+              <div
+                className={styles.statusIndicator}
+                style={{ background: overall === "operational" ? "#22c55e" : "#f59e0b" }}
+              />
               <div>
-                <div className={styles.statusText}>All Systems Operational</div>
-                <div className={styles.statusDescription}>All services are running normally</div>
+                <div className={styles.statusText}>{overallLabel}</div>
+                <div className={styles.statusDescription}>{overallDesc}</div>
               </div>
             </div>
             <div className={styles.lastUpdated}>
-              Last updated: {new Date().toLocaleString()}
+              Last checked: {new Date(checkedAt).toLocaleString()} · v{version}
             </div>
           </div>
 
-          {/* Service Status Grid */}
           <div className={styles.servicesGrid}>
-            {services.map((service, index) => (
-              <div key={index} className={styles.serviceCard}>
+            {services.map((service) => (
+              <div key={service.name} className={styles.serviceCard}>
                 <div className={styles.serviceHeader}>
                   <h3 className={styles.serviceName}>{service.name}</h3>
-                  <div className={styles.serviceStatus + " " + styles.statusOperational}>
-                    <div className={styles.statusIndicatorSmall + " operational"}></div>
-                    <span>Operational</span>
+                  <div
+                    className={
+                      styles.serviceStatus +
+                      " " +
+                      (service.status === "operational"
+                        ? styles.statusOperational
+                        : service.status === "down"
+                          ? styles.statusOutage
+                          : styles.statusDegraded)
+                    }
+                  >
+                    <div
+                      className={
+                        styles.statusIndicatorSmall +
+                        " " +
+                        (service.status === "operational" ? "operational" : "degraded")
+                      }
+                    />
+                    <span>
+                      {service.status === "operational"
+                        ? "Operational"
+                        : service.status === "down"
+                          ? "Down"
+                          : "Degraded"}
+                    </span>
                   </div>
                 </div>
-
-                <p className={styles.serviceDescription}>
-                  Service is running normally with high availability.
-                </p>
-
+                <p className={styles.serviceDescription}>{service.detail}</p>
                 <div className={styles.serviceMetrics}>
-                  <div className={styles.metric}>
-                    <span className={styles.metricValue}>{service.uptime}</span>
-                    <span className={styles.metricLabel}>Uptime</span>
-                  </div>
                   <div className={styles.metric}>
                     <span className={styles.metricValue}>{service.responseTime}</span>
                     <span className={styles.metricLabel}>Response</span>
@@ -116,69 +141,15 @@ export default function SystemStatus() {
             ))}
           </div>
 
-          {/* Incident History */}
           <div className={styles.incidentsSection}>
-            <h2 className={styles.sectionTitle}>Recent Incidents</h2>
-
-            <div className={styles.incidentsList}>
-              <div className={styles.incidentCard + " resolved"}>
-                <h3 className={styles.incidentTitle}>All Systems Operational</h3>
-                <div className={styles.incidentMeta}>Ongoing • No incidents reported</div>
-                <p className={styles.incidentDescription}>
-                  All Reverse Bundling services are operating normally with no reported issues.
-                  Our monitoring systems show 100% uptime across all critical components.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: '2rem', color: '#4a5568' }}>
-              No incidents in the last 90 days.
-            </div>
-          </div>
-
-          {/* Uptime Statistics */}
-          <div className={styles.uptimeSection}>
-            <h2 className={styles.sectionTitle}>Uptime Statistics</h2>
-            <div className={styles.uptimeGrid}>
-              <div className={styles.uptimeCard}>
-                <span className={styles.uptimeValue}>99.9%</span>
-                <span className={styles.uptimeLabel}>Last 30 Days</span>
-                <div className={styles.uptimePeriod}>API Services</div>
-              </div>
-              <div className={styles.uptimeCard}>
-                <span className={styles.uptimeValue}>99.8%</span>
-                <span className={styles.uptimeLabel}>Last 30 Days</span>
-                <div className={styles.uptimePeriod}>Integrations</div>
-              </div>
-              <div className={styles.uptimeCard}>
-                <span className={styles.uptimeValue}>99.7%</span>
-                <span className={styles.uptimeLabel}>Last 30 Days</span>
-                <div className={styles.uptimePeriod}>All Services</div>
-              </div>
-              <div className={styles.uptimeCard}>
-                <span className={styles.uptimeValue}>99.9%</span>
-                <span className={styles.uptimeLabel}>Last 30 Days</span>
-                <div className={styles.uptimePeriod}>Database</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Subscribe to Updates */}
-          <div className={styles.subscribeSection}>
-            <h2 className={styles.subscribeTitle}>Stay Informed</h2>
-            <p className={styles.subscribeText}>
-              Get notified about system status changes and maintenance windows.
+            <h2 className={styles.sectionTitle}>Health endpoint</h2>
+            <p style={{ color: "#4a5568", fontSize: 14 }}>
+              Monitoring tools can poll{" "}
+              <a href="/health" style={{ color: "#6366f1" }}>
+                /health
+              </a>{" "}
+              for JSON status.
             </p>
-            <form className={styles.subscribeForm}>
-              <input
-                type="email"
-                placeholder="Enter your email"
-                className={styles.subscribeInput}
-              />
-              <button type="submit" className={styles.subscribeButton}>
-                Subscribe
-              </button>
-            </form>
           </div>
         </div>
       </div>
