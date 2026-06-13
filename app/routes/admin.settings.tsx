@@ -8,6 +8,13 @@ import {
   getSessionShopDomains,
 } from "../shop-cleanup.server";
 import { findStuckRealMerchants, sendStuckMerchantOnboardingEmails } from "../merchant-outreach.server";
+import {
+  listOutreachProspects,
+  seedOutreachProspects,
+  sendProspectOutreachBatch,
+  markProspectReplied,
+  markProspectOptedOut,
+} from "../prospect-outreach.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -35,6 +42,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sessionShopDomains,
     installedShopDomains,
     stuckMerchants,
+    outreachProspects,
+    outreachStats,
   ] = await Promise.all([
     db.session.count(),
     db.bundleRule.count(),
@@ -45,6 +54,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getSessionShopDomains(),
     getInstalledShopDomains(),
     findStuckRealMerchants(),
+    listOutreachProspects(20),
+    db.outreachProspect.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
 
   return json({
@@ -78,6 +89,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orderCount: m.orderCount,
     })),
     stuckRealMerchantCount: stuckMerchants.length,
+    outreachProspects: outreachProspects.map((p) => ({
+      id: p.id,
+      storeName: p.storeName,
+      email: p.email,
+      niche: p.niche,
+      status: p.status,
+      sentAt: p.sentAt?.toISOString() || null,
+    })),
+    outreachStats: Object.fromEntries(
+      outreachStats.map((row) => [row.status, row._count._all])
+    ),
+    outreachReplyTo: process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com",
   });
 };
 
@@ -136,6 +159,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           message: `Sent ${result.sent} onboarding emails to real merchants (${result.failed} failed, ${result.candidates} targeted)`,
         });
       }
+      case "seed-outreach-prospects": {
+        const result = await seedOutreachProspects();
+        return json({
+          success: true,
+          message: `Seeded ${result.created} ICP prospects (${result.skipped} already existed)`,
+        });
+      }
+      case "preview-outreach-emails": {
+        const result = await sendProspectOutreachBatch({ dryRun: true, limit: 12 });
+        return json({
+          success: true,
+          message: `Preview: ${result.targeted} pending prospects ready to email (supplements, beauty, accessories)`,
+        });
+      }
+      case "send-outreach-emails": {
+        const result = await sendProspectOutreachBatch({ dryRun: false, limit: 12 });
+        return json({
+          success: true,
+          message: `Sent ${result.sent} outreach emails (${result.failed} failed, ${result.targeted} targeted). Replies go to ${process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com"}`,
+        });
+      }
+      case "mark-prospect-replied": {
+        const email = (form.get("email") as string)?.trim();
+        if (!email) return json({ error: "Email required" }, { status: 400 });
+        await markProspectReplied(email);
+        return json({ success: true, message: `Marked ${email} as replied` });
+      }
+      case "mark-prospect-opt-out": {
+        const email = (form.get("email") as string)?.trim();
+        if (!email) return json({ error: "Email required" }, { status: 400 });
+        await markProspectOptedOut(email);
+        return json({ success: true, message: `Marked ${email} as opted out` });
+      }
       default:
         return json({ error: "Unknown action" }, { status: 400 });
     }
@@ -146,7 +202,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminSettings() {
-  const { envVars, appInfo, dataCounts, merchantCounts, stuckRealMerchants, stuckRealMerchantCount } = useLoaderData<typeof loader>();
+  const {
+    envVars,
+    appInfo,
+    dataCounts,
+    merchantCounts,
+    stuckRealMerchants,
+    stuckRealMerchantCount,
+    outreachProspects,
+    outreachStats,
+    outreachReplyTo,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
 
   return (
@@ -304,6 +370,91 @@ export default function AdminSettings() {
               <input type="hidden" name="_action" value="send-onboarding-emails" />
               <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`} disabled={fetcher.state !== "idle" || stuckRealMerchantCount === 0}>
                 {fetcher.state !== "idle" ? "Sending…" : `Email ${stuckRealMerchantCount} real merchants`}
+              </button>
+            </fetcher.Form>
+          </div>
+        </div>
+      </div>
+
+      {/* ICP Cold Outreach */}
+      <div className={styles.card} style={{ marginTop: 24 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>📣 New Merchant Outreach (ICP)</span>
+          <span className={`${styles.badge} ${styles.badgeBlue}`}>
+            {(outreachStats.pending as number) || 0} pending
+          </span>
+        </div>
+        <div className={styles.cardBody}>
+          <p style={{ margin: "0 0 16px", color: "#6b7280", fontSize: 14 }}>
+            Professional cold outreach to supplements, beauty kits, and accessories stores.
+            Emails send from Brevo with replies to <strong>{outreachReplyTo}</strong> — check that inbox daily.
+          </p>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+            {[
+              { label: "Pending", key: "pending", color: "#2563eb" },
+              { label: "Sent", key: "sent", color: "#059669" },
+              { label: "Replied", key: "replied", color: "#7c3aed" },
+              { label: "Opted out", key: "opted_out", color: "#6b7280" },
+            ].map((s) => (
+              <div key={s.key} style={{ textAlign: "center", minWidth: 80 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>
+                  {(outreachStats[s.key] as number) || 0}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {outreachProspects.length > 0 && (
+            <table className={styles.table} style={{ marginBottom: 16 }}>
+              <thead>
+                <tr>
+                  <th>Store</th>
+                  <th>Email</th>
+                  <th>Niche</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outreachProspects.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.storeName}</td>
+                    <td>{p.email}</td>
+                    <td>{p.niche}</td>
+                    <td>{p.status}</td>
+                    <td>
+                      {p.status === "sent" && (
+                        <fetcher.Form method="post" style={{ display: "inline" }}>
+                          <input type="hidden" name="_action" value="mark-prospect-replied" />
+                          <input type="hidden" name="email" value={p.email} />
+                          <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
+                            Mark replied
+                          </button>
+                        </fetcher.Form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <fetcher.Form method="post">
+              <input type="hidden" name="_action" value="seed-outreach-prospects" />
+              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
+                Seed 11 ICP prospects
+              </button>
+            </fetcher.Form>
+            <fetcher.Form method="post">
+              <input type="hidden" name="_action" value="preview-outreach-emails" />
+              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
+                Preview pending count
+              </button>
+            </fetcher.Form>
+            <fetcher.Form method="post">
+              <input type="hidden" name="_action" value="send-outreach-emails" />
+              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`} disabled={fetcher.state !== "idle"}>
+                {fetcher.state !== "idle" ? "Sending…" : "Send outreach batch (max 12)"}
               </button>
             </fetcher.Form>
           </div>

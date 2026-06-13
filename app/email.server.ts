@@ -8,13 +8,27 @@ interface EmailOptions {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   from?: string;
+  replyTo?: string;
+  listUnsubscribe?: string;
 }
 
 let brevoTransporter: Transporter | null | undefined;
 
 function getDefaultFromAddress(): string {
   return process.env.EMAIL_FROM || "Reverse Bundle Pro <noreply@reverse-bundling.me>";
+}
+
+function getOutreachFromAddress(): string {
+  return (
+    process.env.OUTREACH_EMAIL_FROM ||
+    "Md Alamin | Reverse Bundle Pro <noreply@reverse-bundling.me>"
+  );
+}
+
+function getOutreachReplyTo(): string {
+  return process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com";
 }
 
 function isConfiguredSecret(value: string | undefined): value is string {
@@ -46,18 +60,26 @@ function getBrevoTransporter(): Transporter | null {
   return brevoTransporter;
 }
 
-async function sendEmail({ to, subject, html, from }: EmailOptions) {
+async function sendEmail({ to, subject, html, text, from, replyTo, listUnsubscribe }: EmailOptions) {
   const fromAddress = from || getDefaultFromAddress();
 
   try {
     const transporter = getBrevoTransporter();
 
     if (transporter) {
+      const headers: Record<string, string> = {};
+      if (listUnsubscribe) {
+        headers["List-Unsubscribe"] = `<mailto:${listUnsubscribe}?subject=unsubscribe>`;
+      }
+
       const info = await transporter.sendMail({
         from: fromAddress,
         to,
+        replyTo: replyTo || undefined,
         subject,
         html,
+        text,
+        headers: Object.keys(headers).length ? headers : undefined,
       });
 
       logInfo("Email sent via Brevo SMTP", {
@@ -416,6 +438,145 @@ export async function sendOnboardingReminderEmail(data: OnboardingReminderEmailD
     to: merchantEmail,
     subject: "Finish Reverse Bundle Pro setup — create your first bundle rule",
     html,
+    replyTo: getOutreachReplyTo(),
+  });
+}
+
+export type ProspectNiche = "supplements" | "beauty" | "accessories";
+
+interface ProspectOutreachEmailData {
+  prospectEmail: string;
+  contactName: string;
+  storeName: string;
+  storeUrl: string;
+  niche: ProspectNiche;
+  hook?: string;
+  appStoreUrl?: string;
+}
+
+function nicheContext(niche: ProspectNiche): { pain: string; example: string } {
+  switch (niche) {
+    case "supplements":
+      return {
+        pain: "customers often order multiple bottles or stack products in one cart",
+        example: "protein + vitamins, or a starter stack shipped as one pre-packed unit",
+      };
+    case "beauty":
+      return {
+        pain: "kits and add-ons (serum + moisturizer + samples) ship as separate line items",
+        example: "a routine bundle or gift set picked as one SKU instead of three",
+      };
+    case "accessories":
+      return {
+        pain: "phone cases, chargers, and screen protectors frequently ship together",
+        example: "case + protector + cable converted to one bundle SKU before ShipStation",
+      };
+  }
+}
+
+function getOutreachEmailFooter(replyTo: string) {
+  return `
+        </div>
+        <div class="footer">
+          <p>
+            <strong>NexusSell</strong> · Reverse Bundle Pro<br>
+            Jessore, Bangladesh ·
+            <a href="https://reverse-bundling.me/privacy-policy" style="color: #667eea;">Privacy</a>
+          </p>
+          <p style="font-size: 12px; color: #9ca3af;">
+            You received this one-to-one note because your store fits our fulfillment automation focus.
+            Reply <strong>unsubscribe</strong> to opt out of future messages.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendProspectOutreachEmail(data: ProspectOutreachEmailData) {
+  const {
+    prospectEmail,
+    contactName,
+    storeName,
+    storeUrl,
+    niche,
+    hook,
+    appStoreUrl = "https://apps.shopify.com/reverse-bundling",
+  } = data;
+
+  const replyTo = getOutreachReplyTo();
+  const greeting = contactName && contactName !== "there" ? contactName : "there";
+  const context = nicheContext(niche);
+  const personalHook =
+    hook ||
+    `I noticed ${storeName} sells products where ${context.pain} — a great fit for reverse bundling.`;
+
+  const subject = `Fulfillment idea for ${storeName} — bundle multi-SKU orders automatically`;
+
+  const text = `Hi ${greeting},
+
+${personalHook}
+
+Reverse Bundle Pro is a Shopify app that converts matching multi-item orders into one pre-packed bundle SKU before fulfillment — so your team picks one unit instead of several (${context.example}).
+
+What merchants use it for:
+- Fewer picks and simpler labels on repeat product pairs
+- Works with ShipStation / ShipBob via Shopify order sync
+- 14-day trial with up to 25 conversions — then paid plans from $17.99/mo
+
+Install (free trial): ${appStoreUrl}
+Store: ${storeUrl}
+
+Happy to set up your first bundle rule free in a 10-minute call — just reply to this email.
+
+Best,
+Md Alamin Haque
+Founder, NexusSell · Reverse Bundle Pro
+${replyTo}
+
+Reply "unsubscribe" to opt out.`;
+
+  const html = `
+    ${getEmailHeader("A quick fulfillment idea")}
+    <p>Hi ${greeting},</p>
+    <p>${personalHook}</p>
+    <p>
+      <strong>Reverse Bundle Pro</strong> is a Shopify app that converts matching multi-item orders
+      into one pre-packed bundle SKU <em>before</em> fulfillment — so your team picks one unit instead of several
+      (${context.example}).
+    </p>
+    <div class="metric">
+      <div style="font-size: 14px; color: #6b7280;">Why stores like yours use it</div>
+      <ul style="margin: 8px 0; padding-left: 20px;">
+        <li>Fewer picks on orders that always ship together</li>
+        <li>Cleaner handoff to ShipStation / ShipBob</li>
+        <li>Dashboard tracks conversions and estimated savings</li>
+      </ul>
+    </div>
+    <p>
+      <strong>Trial:</strong> 14 days, up to 25 bundle conversions — then paid plans from $17.99/mo.
+    </p>
+    <a href="${appStoreUrl}" class="button">View on Shopify App Store →</a>
+    <p style="font-size: 14px; color: #6b7280; margin-top: 24px;">
+      If helpful, reply to this email and I’ll set up your first bundle rule free in about 10 minutes.
+    </p>
+    <p style="margin-top: 24px;">
+      Best,<br>
+      <strong>Md Alamin Haque</strong><br>
+      Founder, NexusSell · Reverse Bundle Pro
+    </p>
+    ${getOutreachEmailFooter(replyTo)}
+  `;
+
+  return sendEmail({
+    to: prospectEmail,
+    subject,
+    html,
+    text,
+    from: getOutreachFromAddress(),
+    replyTo,
+    listUnsubscribe: replyTo,
   });
 }
 
@@ -581,7 +742,9 @@ export default {
   sendBundleDetectedEmail,
   sendBillingAlertEmail,
   sendOnboardingReminderEmail,
+  sendProspectOutreachEmail,
   sendWeeklySummaryEmail,
   sendMonthlyReportEmail,
   getMerchantEmailSettings,
+  isEmailDeliveryConfigured,
 };

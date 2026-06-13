@@ -189,3 +189,23 @@ model BundleSuggestion {
   @@index([shop, potentialSavings])
   @@map("bundle_suggestions")
 }
+
+model OutreachProspect {
+  id          String    @id @default(cuid())
+  storeName   String
+  storeUrl    String
+  email       String    @unique
+  niche       String    // supplements, beauty, accessories
+  contactName String?
+  hook        String?
+  status      String    @default("pending") // pending, sent, replied, opted_out, skipped
+  sentAt      DateTime?
+  repliedAt   DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([niche])
+  @@map("outreach_prospects")
+}
