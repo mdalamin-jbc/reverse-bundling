@@ -1,4 +1,5 @@
 import "@shopify/shopify-app-remix/adapters/node";
+import { redirect } from "@remix-run/node";
 import {
   ApiVersion,
   AppDistribution,
@@ -51,6 +52,14 @@ const shopify = shopifyApp({
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
 });
+
+/** Keep shop/host (and other) params when redirecting inside the embedded app. */
+export function redirectWithEmbeddedParams(request: Request, pathname: string) {
+  const current = new URL(request.url);
+  const target = new URL(pathname, current.origin);
+  target.search = current.search;
+  return redirect(`${target.pathname}${target.search}`);
+}
 
 export default shopify;
 export const apiVersion = ApiVersion.January25;

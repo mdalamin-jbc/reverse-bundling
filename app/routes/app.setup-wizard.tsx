@@ -31,6 +31,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { logInfo, logError } from "../logger.server";
 import { getQuickBundlePairsFromShopify } from "../onboarding.server";
+import { withEmbeddedSearch } from "../embedded-navigation";
 import { useState, useCallback, useEffect } from "react";
 
 /* ─── LOADER ─────────────────────────────────── */
@@ -396,9 +397,9 @@ export default function SetupWizard() {
               </BlockStack>
 
               <InlineStack gap="300">
-                <Button variant="primary" onClick={() => navigate("/app")}>Go to Dashboard</Button>
-                <Button onClick={() => navigate("/app/bundle-rules")}>View Bundle Rules</Button>
-                <Button variant="plain" onClick={() => navigate("/app/guidelines")}>Read Tutorial</Button>
+                <Button variant="primary" onClick={() => navigate(withEmbeddedSearch("/app"))}>Go to Dashboard</Button>
+                <Button onClick={() => navigate(withEmbeddedSearch("/app/bundle-rules"))}>View Bundle Rules</Button>
+                <Button variant="plain" onClick={() => navigate(withEmbeddedSearch("/app/guidelines"))}>Read Tutorial</Button>
               </InlineStack>
             </BlockStack>
           </Box>
@@ -411,7 +412,7 @@ export default function SetupWizard() {
     <Page
       title="Setup Wizard"
       subtitle="Create your first bundle rule in under 2 minutes"
-      backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
+      backAction={{ content: "Dashboard", onAction: () => navigate(withEmbeddedSearch("/app")) }}
     >
       <TitleBar title="Setup Wizard" />
 
