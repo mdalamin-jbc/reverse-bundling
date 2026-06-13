@@ -1,5 +1,5 @@
 import { type LoaderFunctionArgs, type ActionFunctionArgs, json } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, Link, useSearchParams } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import {
@@ -13,16 +13,27 @@ import {
   sendStuckMerchantOnboardingEmails,
 } from "../merchant-outreach.server";
 import {
-  listOutreachProspects,
-  seedOutreachProspects,
-  sendProspectOutreachBatch,
+  listOutreachProspectsPaginated,
+  seedWeek1Campaign,
+  sendCampaignDayBatch,
+  getCampaignDayOverview,
   markProspectReplied,
   markProspectOptedOut,
+  OUTREACH_PAGE_SIZE,
+  WEEK1_DAILY_CAP,
 } from "../prospect-outreach.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);
+
+  const url = new URL(request.url);
+  const prospectPage = Math.max(1, parseInt(url.searchParams.get("prospectPage") || "1", 10) || 1);
+  const prospectDayRaw = url.searchParams.get("prospectDay");
+  const prospectDayFilter =
+    prospectDayRaw && prospectDayRaw !== "all"
+      ? Math.min(7, Math.max(1, parseInt(prospectDayRaw, 10) || 1))
+      : undefined;
 
   const envVars = [
     { key: "NODE_ENV", value: process.env.NODE_ENV || "—" },
@@ -47,8 +58,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     installedShopDomains,
     stuckMerchantEstimate,
     stuckMerchantPreview,
-    outreachProspects,
+    outreachPage,
     outreachStats,
+    campaignOverview,
   ] = await Promise.all([
     db.session.count(),
     db.bundleRule.count(),
@@ -60,8 +72,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getInstalledShopDomains(),
     countQuickStuckCandidates(),
     listQuickStuckCandidates(10),
-    listOutreachProspects(20),
+    listOutreachProspectsPaginated({
+      page: prospectPage,
+      pageSize: OUTREACH_PAGE_SIZE,
+      campaignDay: prospectDayFilter,
+    }),
     db.outreachProspect.groupBy({ by: ["status"], _count: { _all: true } }),
+    getCampaignDayOverview(),
   ]);
 
   return json({
@@ -95,18 +112,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orderCount: null as number | null,
     })),
     stuckRealMerchantCount: stuckMerchantEstimate,
-    outreachProspects: outreachProspects.map((p) => ({
+    outreachProspects: outreachPage.items.map((p) => ({
       id: p.id,
       storeName: p.storeName,
       email: p.email,
       niche: p.niche,
       status: p.status,
+      campaignDay: p.campaignDay,
+      alignmentScore: p.alignmentScore,
       sentAt: p.sentAt?.toISOString() || null,
     })),
+    outreachPagination: {
+      page: outreachPage.page,
+      pageSize: outreachPage.pageSize,
+      total: outreachPage.total,
+      totalPages: outreachPage.totalPages,
+      dayFilter: prospectDayFilter ?? "all",
+    },
     outreachStats: Object.fromEntries(
       outreachStats.map((row) => [row.status, row._count._all])
     ),
     outreachReplyTo: process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com",
+    campaignOverview,
+    dailyOutreachCap: WEEK1_DAILY_CAP,
   });
 };
 
@@ -165,25 +193,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           message: `Sent ${result.sent} onboarding emails to real merchants (${result.failed} failed, ${result.candidates} targeted)`,
         });
       }
-      case "seed-outreach-prospects": {
-        const result = await seedOutreachProspects();
+      case "seed-outreach-prospects":
+      case "seed-week1-campaign": {
+        const result = await seedWeek1Campaign();
         return json({
           success: true,
-          message: `Seeded ${result.created} ICP prospects (${result.skipped} already existed)`,
+          message: `Week 1 campaign: ${result.created} created, ${result.updated} updated (${result.duplicatesInFile} duplicates skipped in file). Target: 140 Shopify prospects (20/day × 7).`,
         });
       }
       case "preview-outreach-emails": {
-        const result = await sendProspectOutreachBatch({ dryRun: true, limit: 12 });
+        const day = parseInt((form.get("campaignDay") as string) || "1", 10);
+        const result = await sendCampaignDayBatch({ day, dryRun: true });
         return json({
           success: true,
-          message: `Preview: ${result.targeted} pending prospects ready to email (supplements, beauty, accessories)`,
+          message: result.error || `Day ${day} preview: ${result.targeted} eligible pending (cap ${WEEK1_DAILY_CAP}/day, ${result.sentToday} sent today).`,
         });
       }
-      case "send-outreach-emails": {
-        const result = await sendProspectOutreachBatch({ dryRun: false, limit: 12 });
+      case "send-outreach-emails":
+      case "send-campaign-day": {
+        const day = parseInt((form.get("campaignDay") as string) || "1", 10);
+        const result = await sendCampaignDayBatch({ day, dryRun: false });
         return json({
-          success: true,
-          message: `Sent ${result.sent} outreach emails (${result.failed} failed, ${result.targeted} targeted). Replies go to ${process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com"}`,
+          success: !result.error,
+          message: result.error || `Day ${day}: sent ${result.sent}, failed ${result.failed}, skipped ineligible ${result.skippedIneligible}. Today total: ${result.sentToday}/${WEEK1_DAILY_CAP}. Replies: ${process.env.OUTREACH_REPLY_TO || "azurite.tech.ltd@gmail.com"}`,
         });
       }
       case "mark-prospect-replied": {
@@ -216,10 +248,21 @@ export default function AdminSettings() {
     stuckRealMerchants,
     stuckRealMerchantCount,
     outreachProspects,
+    outreachPagination,
     outreachStats,
     outreachReplyTo,
+    campaignOverview,
+    dailyOutreachCap,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
+  const [searchParams] = useSearchParams();
+
+  const buildProspectQuery = (overrides: { page?: number; day?: string }) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("prospectPage", String(overrides.page ?? outreachPagination.page));
+    params.set("prospectDay", overrides.day ?? outreachPagination.dayFilter);
+    return `?${params.toString()}`;
+  };
 
   return (
     <>
@@ -382,18 +425,21 @@ export default function AdminSettings() {
         </div>
       </div>
 
-      {/* ICP Cold Outreach */}
+      {/* 7-Day Cold Campaign */}
       <div className={styles.card} style={{ marginTop: 24 }}>
         <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>📣 New Merchant Outreach (ICP)</span>
+          <span className={styles.cardTitle}>📅 Week 1 Cold Campaign (Shopify ICP only)</span>
           <span className={`${styles.badge} ${styles.badgeBlue}`}>
-            {(outreachStats.pending as number) || 0} pending
+            {campaignOverview.totalProspects}/{campaignOverview.targetTotal} loaded
           </span>
         </div>
         <div className={styles.cardBody}>
-          <p style={{ margin: "0 0 16px", color: "#6b7280", fontSize: 14 }}>
-            Professional cold outreach to supplements, beauty kits, and accessories stores.
-            Emails send from Brevo with replies to <strong>{outreachReplyTo}</strong> — check that inbox daily.
+          <p style={{ margin: "0 0 12px", color: "#6b7280", fontSize: 14 }}>
+            Target: <strong>20 emails/day × 7 days = 140</strong>. Ignores your 127 installed merchants — only external Shopify stores that need reverse bundling (multi-SKU, supplements/beauty/accessories).
+            Only <strong>.myshopify.com</strong> stores are eligible. Replies: <strong>{outreachReplyTo}</strong>
+          </p>
+          <p style={{ margin: "0 0 16px", color: "#059669", fontSize: 13 }}>
+            Today: <strong>{campaignOverview.sentToday}/{dailyOutreachCap}</strong> sent · <strong>{campaignOverview.remainingToday}</strong> remaining (daily safety cap)
           </p>
           <div style={{ display: "flex", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
             {[
@@ -410,60 +456,112 @@ export default function AdminSettings() {
               </div>
             ))}
           </div>
-          {outreachProspects.length > 0 && (
-            <table className={styles.table} style={{ marginBottom: 16 }}>
-              <thead>
-                <tr>
-                  <th>Store</th>
-                  <th>Email</th>
-                  <th>Niche</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {outreachProspects.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.storeName}</td>
-                    <td>{p.email}</td>
-                    <td>{p.niche}</td>
-                    <td>{p.status}</td>
-                    <td>
-                      {p.status === "sent" && (
-                        <fetcher.Form method="post" style={{ display: "inline" }}>
-                          <input type="hidden" name="_action" value="mark-prospect-replied" />
-                          <input type="hidden" name="email" value={p.email} />
-                          <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
-                            Mark replied
-                          </button>
-                        </fetcher.Form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <fetcher.Form method="post">
-              <input type="hidden" name="_action" value="seed-outreach-prospects" />
-              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
-                Seed 11 ICP prospects
-              </button>
-            </fetcher.Form>
-            <fetcher.Form method="post">
-              <input type="hidden" name="_action" value="preview-outreach-emails" />
-              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
-                Preview pending count
-              </button>
-            </fetcher.Form>
-            <fetcher.Form method="post">
-              <input type="hidden" name="_action" value="send-outreach-emails" />
-              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`} disabled={fetcher.state !== "idle"}>
-                {fetcher.state !== "idle" ? "Sending…" : "Send outreach batch (max 12)"}
-              </button>
-            </fetcher.Form>
+          <fetcher.Form method="post" style={{ marginBottom: 16 }}>
+            <input type="hidden" name="_action" value="seed-week1-campaign" />
+            <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
+              Load / refresh Week 1 prospect list
+            </button>
+          </fetcher.Form>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, marginBottom: 16 }}>
+            {campaignOverview.days.map((d) => (
+              <div key={d.day} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: d.pending > 0 ? "#f8fafc" : "#fafafa" }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>Day {d.day}</div>
+                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
+                  Pending: <strong>{d.pending}</strong>/{d.target}<br />
+                  Sent: {d.sent} · Replied: {d.replied}
+                </div>
+                <fetcher.Form method="post" style={{ marginTop: 10 }}>
+                  <input type="hidden" name="_action" value="send-campaign-day" />
+                  <input type="hidden" name="campaignDay" value={d.day} />
+                  <button
+                    type="submit"
+                    className={`${styles.btn} ${styles.btnSm} ${d.pending > 0 ? styles.btnPrimary : styles.btnSecondary}`}
+                    disabled={fetcher.state !== "idle" || d.pending === 0 || campaignOverview.remainingToday === 0}
+                    style={{ width: "100%" }}
+                  >
+                    Send Day {d.day}
+                  </button>
+                </fetcher.Form>
+              </div>
+            ))}
           </div>
+          {outreachProspects.length > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
+                <div style={{ fontSize: 13, color: "#6b7280" }}>
+                  Showing {(outreachPagination.page - 1) * outreachPagination.pageSize + 1}–
+                  {Math.min(outreachPagination.page * outreachPagination.pageSize, outreachPagination.total)} of {outreachPagination.total}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {["all", "1", "2", "3", "4", "5", "6", "7"].map((day) => (
+                    <Link
+                      key={day}
+                      to={buildProspectQuery({ page: 1, day })}
+                      className={`${styles.btn} ${styles.btnSm} ${outreachPagination.dayFilter === day ? styles.btnPrimary : styles.btnSecondary}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      {day === "all" ? "All days" : `Day ${day}`}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+              <table className={styles.table} style={{ marginBottom: 8 }}>
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    <th>Store</th>
+                    <th>Email</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outreachProspects.map((p) => (
+                    <tr key={p.id}>
+                      <td>{p.campaignDay ?? "—"}</td>
+                      <td>{p.storeName}</td>
+                      <td>{p.email}</td>
+                      <td>{p.alignmentScore ?? "—"}</td>
+                      <td>{p.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {outreachPagination.totalPages > 1 && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 12 }}>
+                  {outreachPagination.page > 1 ? (
+                    <Link
+                      to={buildProspectQuery({ page: outreachPagination.page - 1 })}
+                      className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      ← Previous
+                    </Link>
+                  ) : (
+                    <span className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} style={{ opacity: 0.4 }}>
+                      ← Previous
+                    </span>
+                  )}
+                  <span style={{ alignSelf: "center", fontSize: 13, color: "#6b7280" }}>
+                    Page {outreachPagination.page} / {outreachPagination.totalPages}
+                  </span>
+                  {outreachPagination.page < outreachPagination.totalPages ? (
+                    <Link
+                      to={buildProspectQuery({ page: outreachPagination.page + 1 })}
+                      className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
+                      style={{ textDecoration: "none" }}
+                    >
+                      Next →
+                    </Link>
+                  ) : (
+                    <span className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} style={{ opacity: 0.4 }}>
+                      Next →
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 

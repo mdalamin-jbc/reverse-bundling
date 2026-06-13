@@ -1,6 +1,13 @@
 import db from "./db.server";
 import { sendProspectOutreachEmail, type ProspectNiche } from "./email.server";
 import { logInfo, logError } from "./logger.server";
+import {
+  WEEK1_CAMPAIGN_ID,
+  WEEK1_CAMPAIGN_PROSPECTS,
+  WEEK1_DAILY_CAP,
+  WEEK1_DAYS,
+  type CampaignProspectSeed,
+} from "./data/icp-week1-campaign";
 
 export type ProspectSeed = {
   storeName: string;
@@ -11,149 +18,241 @@ export type ProspectSeed = {
   hook?: string;
 };
 
-/** Public contact emails from store contact/wholesale pages (verified manually). */
-export const DEFAULT_ICP_PROSPECTS: ProspectSeed[] = [
-  {
-    storeName: "Forevervital",
-    storeUrl: "https://forever-vital.myshopify.com",
-    email: "support@forevervital.com",
-    niche: "supplements",
-    hook: "Forevervital’s multi-product wellness orders look like a strong fit for bundle conversion before pick-and-pack.",
-  },
-  {
-    storeName: "Premium Nutrition USA",
-    storeUrl: "https://supplements-green.myshopify.com",
-    email: "support@premiumnutritionusa.com",
-    niche: "supplements",
-  },
-  {
-    storeName: "Labie Wellness",
-    storeUrl: "https://labiewellness.myshopify.com",
-    email: "labiewellness@gmail.com",
-    niche: "supplements",
-    hook: "Your bundle-and-save offers (3+ bottles) are exactly the pattern reverse bundling automates at fulfillment time.",
-  },
-  {
-    storeName: "CBD Superstore",
-    storeUrl: "https://cbd-superstore.myshopify.com",
-    email: "wholesale@proteambrady.com",
-    niche: "supplements",
-    contactName: "Pro Team",
-  },
-  {
-    storeName: "Just Nutritive",
-    storeUrl: "https://just-nutritive-wholesale.myshopify.com",
-    email: "contact@justnutritive.com",
-    niche: "beauty",
-    hook: "Hair and skin routines often ship as multiple SKUs — bundling them pre-fulfillment can cut pick steps.",
-  },
-  {
-    storeName: "Toi Beauty",
-    storeUrl: "https://9c8524-3.myshopify.com",
-    email: "info@toibeauty.com",
-    niche: "beauty",
-  },
-  {
-    storeName: "Dropship Beauty",
-    storeUrl: "https://dropship-beauty-16.myshopify.com",
-    email: "support@dropshipbeauty.app",
-    niche: "beauty",
-  },
-  {
-    storeName: "Beauty Packs",
-    storeUrl: "https://beautypacks.myshopify.com",
-    email: "Support@puppykits.co",
-    niche: "beauty",
-    hook: "Multi-item beauty packs are a natural fit for auto-converting to one bundle SKU before shipping.",
-  },
-  {
-    storeName: "Play Game With Phone",
-    storeUrl: "https://play-game-with-phone.myshopify.com",
-    email: "support@play-game-with-phone.com",
-    niche: "accessories",
-  },
-  {
-    storeName: "The Mobile Marvel",
-    storeUrl: "https://themobilemarvel.com",
-    email: "mo@themobilemarvel.com",
-    niche: "accessories",
-    hook: "Accessory bundles (case + charger + protector) are one of the highest-volume use cases we see.",
-  },
-  {
-    storeName: "PhoneCladding",
-    storeUrl: "https://phonecladding.myshopify.com",
-    email: "PhoneCladding@gmail.com",
-    niche: "accessories",
-  },
-];
+export const DAILY_OUTREACH_CAP = WEEK1_DAILY_CAP;
 
-export async function seedOutreachProspects(
-  prospects: ProspectSeed[] = DEFAULT_ICP_PROSPECTS
-): Promise<{ created: number; skipped: number }> {
-  let created = 0;
-  let skipped = 0;
-
-  for (const prospect of prospects) {
-    const email = prospect.email.trim().toLowerCase();
-    const existing = await db.outreachProspect.findUnique({ where: { email } });
-    if (existing) {
-      skipped += 1;
-      continue;
-    }
-
-    await db.outreachProspect.create({
-      data: {
-        storeName: prospect.storeName,
-        storeUrl: prospect.storeUrl,
-        email,
-        niche: prospect.niche,
-        contactName: prospect.contactName || null,
-        hook: prospect.hook || null,
-        status: "pending",
-      },
-    });
-    created += 1;
-  }
-
-  return { created, skipped };
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
-export async function listOutreachProspects(limit = 50) {
-  return db.outreachProspect.findMany({
-    orderBy: [{ status: "asc" }, { createdAt: "asc" }],
-    take: limit,
+function isShopifyStoreUrl(url: string): boolean {
+  return url.includes(".myshopify.com");
+}
+
+/** Skip non-Shopify URLs unless explicitly high-fit accessory/supplement store. */
+export function isEligibleColdTarget(prospect: {
+  storeUrl: string;
+  alignmentScore: number;
+  fulfillmentSignal?: string | null;
+}): boolean {
+  if (isShopifyStoreUrl(prospect.storeUrl)) return prospect.alignmentScore >= 70;
+  const signal = (prospect.fulfillmentSignal || "").toLowerCase();
+  return prospect.alignmentScore >= 88 && (signal.includes("shipstation") || signal.includes("3pl"));
+}
+
+export async function getSentCountToday(): Promise<number> {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return db.outreachProspect.count({
+    where: { status: "sent", sentAt: { gte: start } },
   });
 }
 
-export async function sendProspectOutreachBatch(options?: {
+export async function seedWeek1Campaign(): Promise<{
+  created: number;
+  updated: number;
+  skipped: number;
+  duplicatesInFile: number;
+}> {
+  const seen = new Set<string>();
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let duplicatesInFile = 0;
+
+  for (const prospect of WEEK1_CAMPAIGN_PROSPECTS) {
+    const email = normalizeEmail(prospect.email);
+    if (seen.has(email)) {
+      duplicatesInFile += 1;
+      continue;
+    }
+    seen.add(email);
+
+    const existing = await db.outreachProspect.findUnique({ where: { email } });
+    const data = {
+      storeName: prospect.storeName,
+      storeUrl: prospect.storeUrl,
+      niche: prospect.niche,
+      contactName: prospect.contactName || null,
+      hook: prospect.hook || null,
+      campaignId: WEEK1_CAMPAIGN_ID,
+      campaignDay: prospect.campaignDay,
+      alignmentScore: prospect.alignmentScore,
+      fulfillmentSignal: prospect.fulfillmentSignal,
+    };
+
+    if (existing) {
+      await db.outreachProspect.update({ where: { email }, data });
+      updated += 1;
+    } else {
+      await db.outreachProspect.create({
+        data: { ...data, email, status: "pending" },
+      });
+      created += 1;
+    }
+  }
+
+  return { created, updated, skipped, duplicatesInFile };
+}
+
+export async function getCampaignDayOverview(campaignId: string = WEEK1_CAMPAIGN_ID) {
+  const days = [];
+  for (let day = 1; day <= WEEK1_DAYS; day += 1) {
+    const [pending, sent, replied, optedOut, total] = await Promise.all([
+      db.outreachProspect.count({ where: { campaignId, campaignDay: day, status: "pending" } }),
+      db.outreachProspect.count({ where: { campaignId, campaignDay: day, status: "sent" } }),
+      db.outreachProspect.count({ where: { campaignId, campaignDay: day, status: "replied" } }),
+      db.outreachProspect.count({ where: { campaignId, campaignDay: day, status: "opted_out" } }),
+      db.outreachProspect.count({ where: { campaignId, campaignDay: day } }),
+    ]);
+    days.push({
+      day,
+      pending,
+      sent,
+      replied,
+      optedOut,
+      total,
+      target: WEEK1_DAILY_CAP,
+      ready: pending > 0,
+    });
+  }
+
+  const sentToday = await getSentCountToday();
+  return {
+    campaignId,
+    dailyCap: WEEK1_DAILY_CAP,
+    sentToday,
+    remainingToday: Math.max(0, WEEK1_DAILY_CAP - sentToday),
+    days,
+    totalProspects: days.reduce((sum, d) => sum + d.total, 0),
+    targetTotal: WEEK1_DAILY_CAP * WEEK1_DAYS,
+  };
+}
+
+export async function listOutreachProspects(limit = 50, campaignDay?: number) {
+  const result = await listOutreachProspectsPaginated({
+    page: 1,
+    pageSize: limit,
+    campaignDay,
+  });
+  return result.items;
+}
+
+export const OUTREACH_PAGE_SIZE = 20;
+
+export async function listOutreachProspectsPaginated(options: {
+  page?: number;
+  pageSize?: number;
+  campaignDay?: number;
+  campaignId?: string;
+}) {
+  const page = Math.max(1, options.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize ?? OUTREACH_PAGE_SIZE));
+  const where: {
+    campaignId?: string;
+    campaignDay?: number;
+  } = {};
+  if (options.campaignId) where.campaignId = options.campaignId;
+  if (options.campaignDay) where.campaignDay = options.campaignDay;
+
+  const [items, total] = await Promise.all([
+    db.outreachProspect.findMany({
+      where,
+      orderBy: [{ campaignDay: "asc" }, { alignmentScore: "desc" }, { createdAt: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.outreachProspect.count({ where }),
+  ]);
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+export async function sendCampaignDayBatch(options: {
+  campaignId?: string;
+  day: number;
   dryRun?: boolean;
-  limit?: number;
-  niche?: ProspectNiche;
 }): Promise<{
   dryRun: boolean;
+  day: number;
   targeted: number;
   sent: number;
   failed: number;
+  skippedIneligible: number;
+  sentToday: number;
+  dailyCap: number;
   results: Array<{ email: string; storeName: string; status: string }>;
+  error?: string;
 }> {
-  const dryRun = options?.dryRun ?? false;
-  const limit = options?.limit ?? 12;
+  const campaignId = options.campaignId || WEEK1_CAMPAIGN_ID;
+  const day = options.day;
+  const dryRun = options.dryRun ?? false;
+
+  if (day < 1 || day > WEEK1_DAYS) {
+    return {
+      dryRun,
+      day,
+      targeted: 0,
+      sent: 0,
+      failed: 0,
+      skippedIneligible: 0,
+      sentToday: 0,
+      dailyCap: WEEK1_DAILY_CAP,
+      results: [],
+      error: `Invalid campaign day ${day}. Use 1-${WEEK1_DAYS}.`,
+    };
+  }
+
+  const sentToday = await getSentCountToday();
+  const remainingToday = WEEK1_DAILY_CAP - sentToday;
+  if (!dryRun && remainingToday <= 0) {
+    return {
+      dryRun,
+      day,
+      targeted: 0,
+      sent: 0,
+      failed: 0,
+      skippedIneligible: 0,
+      sentToday,
+      dailyCap: WEEK1_DAILY_CAP,
+      results: [],
+      error: `Daily safety cap reached (${WEEK1_DAILY_CAP}/day). Try again tomorrow.`,
+    };
+  }
+
+  const limit = dryRun ? WEEK1_DAILY_CAP : Math.min(WEEK1_DAILY_CAP, remainingToday);
   const appStoreUrl = "https://apps.shopify.com/reverse-bundling";
 
-  const prospects = await db.outreachProspect.findMany({
-    where: {
-      status: "pending",
-      ...(options?.niche ? { niche: options.niche } : {}),
-    },
-    orderBy: { createdAt: "asc" },
-    take: limit,
+  const candidates = await db.outreachProspect.findMany({
+    where: { campaignId, campaignDay: day, status: "pending" },
+    orderBy: [{ alignmentScore: "desc" }, { createdAt: "asc" }],
+    take: limit * 2,
   });
 
   const results: Array<{ email: string; storeName: string; status: string }> = [];
   let sent = 0;
   let failed = 0;
+  let skippedIneligible = 0;
+  let targeted = 0;
 
-  for (const prospect of prospects) {
+  for (const prospect of candidates) {
+    if (targeted >= limit) break;
+
+    if (!isEligibleColdTarget(prospect)) {
+      skippedIneligible += 1;
+      if (dryRun) {
+        results.push({ email: prospect.email, storeName: prospect.storeName, status: "ineligible" });
+      }
+      continue;
+    }
+
+    targeted += 1;
+
     if (dryRun) {
       results.push({ email: prospect.email, storeName: prospect.storeName, status: "preview" });
       continue;
@@ -177,10 +276,12 @@ export async function sendProspectOutreachBatch(options?: {
         });
         sent += 1;
         results.push({ email: prospect.email, storeName: prospect.storeName, status: "sent" });
-        logInfo("Sent prospect outreach email", {
+        logInfo("Sent campaign outreach email", {
+          campaignId,
+          day,
           email: prospect.email,
           store: prospect.storeName,
-          niche: prospect.niche,
+          alignmentScore: prospect.alignmentScore,
         });
       } else {
         failed += 1;
@@ -189,29 +290,47 @@ export async function sendProspectOutreachBatch(options?: {
     } catch (error) {
       failed += 1;
       results.push({ email: prospect.email, storeName: prospect.storeName, status: "failed" });
-      logError(error as Error, { context: "prospect_outreach", email: prospect.email });
+      logError(error as Error, { context: "campaign_outreach", email: prospect.email, day });
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  return { dryRun, targeted: prospects.length, sent, failed, results };
+  return {
+    dryRun,
+    day,
+    targeted,
+    sent,
+    failed,
+    skippedIneligible,
+    sentToday: dryRun ? sentToday : sentToday + sent,
+    dailyCap: WEEK1_DAILY_CAP,
+    results,
+  };
+}
+
+/** @deprecated Use sendCampaignDayBatch */
+export async function sendProspectOutreachBatch(options?: {
+  dryRun?: boolean;
+  limit?: number;
+  niche?: ProspectNiche;
+}) {
+  return sendCampaignDayBatch({ day: 1, dryRun: options?.dryRun });
 }
 
 export async function markProspectReplied(email: string, notes?: string) {
   return db.outreachProspect.update({
-    where: { email: email.trim().toLowerCase() },
-    data: {
-      status: "replied",
-      repliedAt: new Date(),
-      notes: notes || null,
-    },
+    where: { email: normalizeEmail(email) },
+    data: { status: "replied", repliedAt: new Date(), notes: notes || null },
   });
 }
 
 export async function markProspectOptedOut(email: string) {
   return db.outreachProspect.update({
-    where: { email: email.trim().toLowerCase() },
+    where: { email: normalizeEmail(email) },
     data: { status: "opted_out", notes: "Opted out via email" },
   });
 }
+
+export { WEEK1_CAMPAIGN_ID, WEEK1_DAILY_CAP, WEEK1_DAYS, WEEK1_CAMPAIGN_PROSPECTS };
+export type { CampaignProspectSeed };

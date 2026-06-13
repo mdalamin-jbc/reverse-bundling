@@ -38,8 +38,9 @@ model BundleRule {
   items       String   // JSON array of SKUs
   bundledSku  String
   status      String   @default("draft") // draft, active, paused
-  frequency   Int      @default(0)
-  savings     Float    @default(0.0)
+  frequency      Int      @default(0)
+  savings        Float    @default(0.0)  // accumulated total savings (sum of all conversions)
+  savingsPerOrder Float   @default(10.0) // per-order expected savings configured by merchant
   category    String?
   tags        String?  // JSON array of tags
   createdAt   DateTime @default(now())
@@ -187,4 +188,29 @@ model BundleSuggestion {
   @@index([shop, confidence])
   @@index([shop, potentialSavings])
   @@map("bundle_suggestions")
+}
+
+model OutreachProspect {
+  id                 String    @id @default(cuid())
+  storeName          String
+  storeUrl           String
+  email              String    @unique
+  niche              String    // supplements, beauty, accessories
+  contactName        String?
+  hook               String?
+  campaignId         String?   @default("week-1")
+  campaignDay        Int?      // 1-7 for weekly cold campaign
+  alignmentScore     Int       @default(50) // higher = better ICP fit
+  fulfillmentSignal  String?   // e.g. multi-sku, shipstation, 3pl
+  status             String    @default("pending") // pending, sent, replied, opted_out, skipped
+  sentAt             DateTime?
+  repliedAt          DateTime?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@index([niche])
+  @@index([campaignId, campaignDay])
+  @@map("outreach_prospects")
 }
