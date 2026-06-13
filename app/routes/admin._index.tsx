@@ -3,7 +3,8 @@ import { useLoaderData, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
-import { getMerchantStage, stageLabel } from "../merchant-health.server";
+import { stageLabel } from "../merchant-health";
+import { getMerchantStage } from "../merchant-health.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await requireAdmin(request);

@@ -3,13 +3,9 @@ import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import styles from "./styles/admin.module.css";
-import {
-  type MerchantStage,
-  daysSince,
-  getMerchantHealth,
-  getMerchantStage,
-  stageLabel,
-} from "../merchant-health.server";
+import type { MerchantStage } from "../merchant-health";
+import { stageLabel } from "../merchant-health";
+import { daysSince, getMerchantHealth, getMerchantStage } from "../merchant-health.server";
 
 const PER_PAGE_OPTIONS = [10, 25, 50];
 const STAGE_FILTERS: MerchantStage[] = [
