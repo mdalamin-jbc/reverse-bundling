@@ -65,6 +65,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             reason: billing.reason,
           });
 
+          const { notifyBillingBlockedOrder } = await import("../billing-notifications.server");
+          const { getMerchantBillingStatus } = await import("../billing.server");
+          const billingStatus = await getMerchantBillingStatus(shop, admin);
+          void notifyBillingBlockedOrder(shop, billingStatus, order.name || String(order.id));
+
           perfMonitor.end({ shop, orderId: String(order.id), billingBlocked: true });
           return new Response("Billing limit exceeded", { status: 200 });
         }

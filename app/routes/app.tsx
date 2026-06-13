@@ -3,20 +3,32 @@ import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu, TitleBar } from "@shopify/app-bridge-react";
+import { Banner, Box } from "@shopify/polaris";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
+import { getMerchantBillingStatus } from "../billing.server";
+import { buildBillingAlert, maybeNotifyMerchantBilling } from "../billing-notifications.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  let billingAlert = null;
+  try {
+    const billing = await getMerchantBillingStatus(session.shop, admin);
+    billingAlert = buildBillingAlert(billing);
+    void maybeNotifyMerchantBilling(session.shop, billing);
+  } catch {
+    billingAlert = null;
+  }
+
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", billingAlert };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, billingAlert } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
@@ -30,6 +42,17 @@ export default function App() {
         <Link to="/app/guidelines">Easy Tutorial Guide</Link>
         <Link to="/app/settings">Settings</Link>
       </NavMenu>
+      {billingAlert && (
+        <Box paddingBlockStart="400" paddingInline="400">
+          <Banner
+            tone={billingAlert.tone}
+            title={billingAlert.title}
+            action={{ content: billingAlert.actionLabel, url: billingAlert.actionUrl }}
+          >
+            <p>{billingAlert.message}</p>
+          </Banner>
+        </Box>
+      )}
       <Outlet />
     </AppProvider>
   );

@@ -52,6 +52,26 @@ interface MonthlyReportEmailData {
   appUrl: string;
 }
 
+export type BillingAlertType =
+  | "trial_80"
+  | "trial_90"
+  | "trial_exhausted"
+  | "trial_expired"
+  | "order_blocked";
+
+interface BillingAlertEmailData {
+  merchantEmail: string;
+  merchantName: string;
+  alertType: BillingAlertType;
+  message: string;
+  usageCount: number;
+  planLimit: number;
+  trialEndsAt: string | null;
+  billingUrl: string;
+  appUrl: string;
+  orderName?: string;
+}
+
 // Email sending function (uses console.log for now - replace with real email service)
 async function sendEmail({ to, subject, html, from }: EmailOptions) {
   try {
@@ -256,6 +276,70 @@ export async function sendBundleDetectedEmail(data: BundleDetectedEmailData) {
   });
 }
 
+const billingAlertTitles: Record<BillingAlertType, string> = {
+  trial_80: "Trial usage at 80%",
+  trial_90: "Trial usage at 90%",
+  trial_exhausted: "Trial conversion limit reached",
+  trial_expired: "Your trial has ended",
+  order_blocked: "Bundle conversion paused",
+};
+
+const billingAlertSubjects: Record<BillingAlertType, string> = {
+  trial_80: "Reverse Bundle Pro: 80% of trial conversions used",
+  trial_90: "Reverse Bundle Pro: 90% of trial conversions used — subscribe soon",
+  trial_exhausted: "Reverse Bundle Pro: trial limit reached — subscribe to continue",
+  trial_expired: "Reverse Bundle Pro: subscription required to keep converting orders",
+  order_blocked: "Reverse Bundle Pro: an order was not converted — action required",
+};
+
+export async function sendBillingAlertEmail(data: BillingAlertEmailData) {
+  const {
+    merchantEmail,
+    merchantName,
+    alertType,
+    message,
+    usageCount,
+    planLimit,
+    trialEndsAt,
+    billingUrl,
+    appUrl,
+    orderName,
+  } = data;
+
+  const title = billingAlertTitles[alertType];
+  const limitLabel = planLimit === 999999 ? "Unlimited" : String(planLimit);
+
+  const html = `
+    ${getEmailHeader(title)}
+    <p>Hi ${merchantName},</p>
+    <p>${message}</p>
+    ${orderName ? `<p><strong>Affected order:</strong> ${orderName}</p>` : ""}
+    <div class="metric">
+      <div style="font-size: 14px; color: #6b7280;">Current usage</div>
+      <div style="font-size: 24px; font-weight: bold; color: #dc2626; margin: 4px 0;">
+        ${usageCount} / ${limitLabel}
+      </div>
+    </div>
+    ${
+      trialEndsAt
+        ? `<p style="font-size: 14px; color: #6b7280;">Trial end date: ${new Date(trialEndsAt).toLocaleDateString()}</p>`
+        : ""
+    }
+    <p>To keep saving on shipping with automatic bundle conversions, choose a plan in Shopify billing.</p>
+    <a href="${billingUrl}" class="button">Choose a plan →</a>
+    <p style="font-size: 14px; color: #6b7280; margin-top: 24px;">
+      You can also open the app and go to <strong>Billing</strong> any time.
+    </p>
+    ${getEmailFooter(appUrl)}
+  `;
+
+  return sendEmail({
+    to: merchantEmail,
+    subject: billingAlertSubjects[alertType],
+    html,
+  });
+}
+
 // 2. Weekly Summary Email (sent every Monday morning)
 export async function sendWeeklySummaryEmail(data: WeeklySummaryEmailData) {
   const { merchantEmail, merchantName, weekStartDate, weekEndDate, totalConversions, totalSavings, topRule, appUrl } = data;
@@ -416,6 +500,7 @@ export async function getMerchantEmailSettings(shop: string) {
 
 export default {
   sendBundleDetectedEmail,
+  sendBillingAlertEmail,
   sendWeeklySummaryEmail,
   sendMonthlyReportEmail,
   getMerchantEmailSettings,
