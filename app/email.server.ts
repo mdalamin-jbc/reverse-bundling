@@ -1,6 +1,7 @@
 // Email notification service
-// Handles sending emails for bundle conversions, weekly summaries, and monthly reports
+// Handles sending emails for bundle conversions, billing alerts, and reports
 
+import nodemailer, { type Transporter } from "nodemailer";
 import { logInfo, logError } from "./logger.server";
 
 interface EmailOptions {
@@ -8,6 +9,84 @@ interface EmailOptions {
   subject: string;
   html: string;
   from?: string;
+}
+
+let brevoTransporter: Transporter | null | undefined;
+
+function getDefaultFromAddress(): string {
+  return process.env.EMAIL_FROM || "Reverse Bundle Pro <noreply@reverse-bundling.me>";
+}
+
+function isConfiguredSecret(value: string | undefined): value is string {
+  if (!value) return false;
+  const placeholder = value.toLowerCase();
+  return !placeholder.startsWith("your_") && placeholder !== "changeme" && value.length > 8;
+}
+
+function getBrevoTransporter(): Transporter | null {
+  if (brevoTransporter !== undefined) {
+    return brevoTransporter;
+  }
+
+  const user = process.env.BREVO_SMTP_USER;
+  const pass = process.env.BREVO_SMTP_KEY;
+
+  if (!isConfiguredSecret(user) || !isConfiguredSecret(pass)) {
+    brevoTransporter = null;
+    return null;
+  }
+
+  brevoTransporter = nodemailer.createTransport({
+    host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
+    port: parseInt(process.env.BREVO_SMTP_PORT || "587", 10),
+    secure: false,
+    auth: { user, pass },
+  });
+
+  return brevoTransporter;
+}
+
+async function sendEmail({ to, subject, html, from }: EmailOptions) {
+  const fromAddress = from || getDefaultFromAddress();
+
+  try {
+    const transporter = getBrevoTransporter();
+
+    if (transporter) {
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject,
+        html,
+      });
+
+      logInfo("Email sent via Brevo SMTP", {
+        to,
+        subject,
+        messageId: info.messageId,
+      });
+
+      return { success: true, provider: "brevo" as const };
+    }
+
+    console.log("\n================== EMAIL (dev log) ==================");
+    console.log(`To: ${to}`);
+    console.log(`From: ${fromAddress}`);
+    console.log(`Subject: ${subject}`);
+    console.log("\n--- HTML Content ---");
+    console.log(html);
+    console.log("=====================================================\n");
+
+    logInfo("Email logged only — configure BREVO_SMTP_* to send for real", { to, subject });
+    return { success: true, provider: "log" as const };
+  } catch (error) {
+    logError(error as Error, { context: "send_email", to, subject });
+    return { success: false, error };
+  }
+}
+
+export function isEmailDeliveryConfigured(): boolean {
+  return getBrevoTransporter() !== null;
 }
 
 interface BundleDetectedEmailData {
@@ -70,42 +149,6 @@ interface BillingAlertEmailData {
   billingUrl: string;
   appUrl: string;
   orderName?: string;
-}
-
-// Email sending function (uses console.log for now - replace with real email service)
-async function sendEmail({ to, subject, html, from }: EmailOptions) {
-  try {
-    // TODO: Replace with actual email service (SendGrid, AWS SES, Mailgun, etc.)
-    // For now, just log the email content
-    
-    console.log('\n================== EMAIL ==================');
-    console.log(`To: ${to}`);
-    console.log(`From: ${from || 'noreply@reversebundlepro.com'}`);
-    console.log(`Subject: ${subject}`);
-    console.log('\n--- HTML Content ---');
-    console.log(html);
-    console.log('==========================================\n');
-
-    logInfo('Email sent successfully', { to, subject });
-
-    // Example integration with SendGrid (commented out):
-    /*
-    const sgMail = require('@sendgrid/mail');
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    
-    await sgMail.send({
-      to,
-      from: from || 'noreply@reversebundlepro.com',
-      subject,
-      html,
-    });
-    */
-
-    return { success: true };
-  } catch (error) {
-    logError(error as Error, { context: 'send_email', to, subject });
-    return { success: false, error };
-  }
 }
 
 // Email template helpers
