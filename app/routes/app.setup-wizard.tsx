@@ -46,33 +46,55 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.orderConversion.count({ where: { shop: session.shop } }),
     ]);
 
-    // Fetch products from Shopify
-    const response = await admin.graphql(`
-      query {
-        products(first: 50, sortKey: BEST_SELLING) {
+    // Fetch products from Shopify (same query pattern as bundle-rules)
+    const response = await admin.graphql(
+      `#graphql
+      query getSetupWizardProducts {
+        products(first: 100) {
           edges {
             node {
               id
               title
               productType
-              variants(first: 10) {
+              variants(first: 25) {
                 edges {
                   node {
                     id
                     title
                     sku
                     price
-                    displayName
                   }
                 }
               }
             }
           }
         }
-      }
-    `);
+      }`
+    );
 
     const data = await response.json();
+
+    if (data.errors?.length) {
+      logError(new Error(`Setup wizard product query failed: ${JSON.stringify(data.errors)}`), {
+        shop: session.shop,
+      });
+      return json({
+        products: [],
+        suggestedPairs: [],
+        productLoadError: "Could not load products from Shopify. Try reopening the app.",
+        setupState: {
+          hasRules: rulesCount > 0,
+          rulesCount,
+          hasSettings: !!settings,
+          fulfillmentMode: settings?.fulfillmentMode || "tag_only",
+          hasConversions: conversionsCount > 0,
+          individualShipCost: settings?.individualShipCost || 7.0,
+          bundleShipCost: settings?.bundleShipCost || 9.0,
+        },
+        shop: session.shop,
+      });
+    }
+
     const products = (data.data?.products?.edges || []).map((e: any) => ({
       id: e.node.id,
       title: e.node.title,
@@ -82,7 +104,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         title: v.node.title,
         sku: v.node.sku || "",
         price: parseFloat(v.node.price || "0"),
-        displayName: v.node.displayName,
+        displayName: v.node.title,
       })),
     }));
 
@@ -106,7 +128,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     logError(error instanceof Error ? error : new Error("Wizard loader error"), {
       shop: session.shop,
     });
-    return json({ products: [], suggestedPairs: [], setupState: { hasRules: false, rulesCount: 0, hasSettings: false, fulfillmentMode: "tag_only", hasConversions: false, individualShipCost: 7.0, bundleShipCost: 9.0 }, shop: session.shop });
+    return json({
+      products: [],
+      suggestedPairs: [],
+      productLoadError: "Could not load products from Shopify. Try reopening the app.",
+      setupState: {
+        hasRules: false,
+        rulesCount: 0,
+        hasSettings: false,
+        fulfillmentMode: "tag_only",
+        hasConversions: false,
+        individualShipCost: 7.0,
+        bundleShipCost: 9.0,
+      },
+      shop: session.shop,
+    });
   }
 };
 
@@ -242,7 +278,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 
 /* ─── MAIN WIZARD ────────────────────────────── */
 export default function SetupWizard() {
-  const { products, setupState, suggestedPairs } = useLoaderData<typeof loader>();
+  const { products, setupState, suggestedPairs, productLoadError } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<any>();
   const navigate = useNavigate();
 
@@ -460,6 +496,12 @@ export default function SetupWizard() {
         {result?.error && (
           <Banner title="Error" tone="critical">
             <p>{result.error}</p>
+          </Banner>
+        )}
+
+        {productLoadError && (
+          <Banner title="Products could not be loaded" tone="warning">
+            <p>{productLoadError}</p>
           </Banner>
         )}
 
