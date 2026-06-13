@@ -38,7 +38,7 @@ function getBrevoTransporter(): Transporter | null {
 
   brevoTransporter = nodemailer.createTransport({
     host: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
-    port: parseInt(process.env.BREVO_SMTP_PORT || "587", 10),
+    port: parseInt(process.env.BREVO_SMTP_PORT || "2525", 10),
     secure: false,
     auth: { user, pass },
   });
