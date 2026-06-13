@@ -64,7 +64,7 @@
   background: linear-gradient(135deg, #6366f1, #818cf8);
   border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
+  color: #fff;
   box-shadow: 0 4px 12px rgba(99,102,241,0.35);
   flex-shrink: 0;
 }
@@ -124,7 +124,14 @@
 }
 
 .navIcon {
-  font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; opacity: 0.85;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; opacity: 0.85;
+}
+
+.navBadgeAlert {
+  background: rgba(239,68,68,0.25) !important;
+  color: #fca5a5 !important;
 }
 
 .navBadge {
@@ -138,6 +145,12 @@
 .sidebarFooter {
   padding: 16px;
   border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.sidebarStatus {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: rgba(255,255,255,0.45);
+  margin-bottom: 12px; padding: 0 4px;
 }
 
 .logoutBtn {
@@ -512,101 +525,207 @@
   max-width: 320px; margin: 0 auto;
 }
 
-/* ─── Login Page ────────────────────────────────────────────── */
-.loginPage {
+/* ─── Login (split panel) ───────────────────────────────────── */
+.loginShell {
   min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-family: var(--admin-font);
+}
+
+.loginBrandPanel {
+  background: linear-gradient(160deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+  color: #fff;
   display: flex; align-items: center; justify-content: center;
-  background: #0f172a; padding: 20px;
+  padding: 48px;
   position: relative; overflow: hidden;
 }
 
-.loginPage::before {
-  content: ''; position: absolute;
-  width: 600px; height: 600px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%);
-  top: -200px; right: -100px;
+.loginBrandPanel::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(99,102,241,0.25), transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(139,92,246,0.15), transparent 40%);
+  pointer-events: none;
 }
 
-.loginPage::after {
-  content: ''; position: absolute;
-  width: 500px; height: 500px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(139,92,246,0.1), transparent 70%);
-  bottom: -150px; left: -100px;
+.loginBrandInner {
+  position: relative; z-index: 1; max-width: 400px;
 }
 
-.loginCard {
-  background: var(--admin-surface);
-  border-radius: 20px; padding: 48px 44px;
-  width: 100%; max-width: 440px;
-  box-shadow: 0 25px 80px rgba(0,0,0,0.45);
-  position: relative; z-index: 1;
-}
-
-.loginHeader { text-align: center; margin-bottom: 36px; }
-
-.loginLogo {
-  width: 64px; height: 64px;
-  background: linear-gradient(135deg, #4f46e5, #818cf8);
-  border-radius: 18px;
+.loginBrandLogo {
+  width: 56px; height: 56px;
+  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 30px; margin: 0 auto 20px;
-  box-shadow: 0 8px 24px rgba(79,70,229,0.35);
+  color: #fff; margin-bottom: 28px;
+  box-shadow: 0 12px 32px rgba(99,102,241,0.4);
 }
 
-.loginTitle {
-  font-size: 26px; font-weight: 800; color: var(--admin-text);
-  margin: 0 0 6px; letter-spacing: -0.5px;
+.loginBrandLogoIcon { color: #fff; }
+
+.loginBrandTitle {
+  font-size: 32px; font-weight: 800; letter-spacing: -0.8px;
+  margin: 0 0 12px; line-height: 1.15;
 }
 
-.loginSubtitle {
+.loginBrandTagline {
+  font-size: 15px; line-height: 1.6;
+  color: rgba(255,255,255,0.65); margin: 0 0 32px;
+}
+
+.loginLiveStats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 24px;
+}
+
+.loginLiveStat {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 16px 12px; text-align: center;
+}
+
+.loginLiveStatValue {
+  display: block; font-size: 22px; font-weight: 800;
+  font-variant-numeric: tabular-nums; color: #fff;
+}
+
+.loginLiveStatLabel {
+  display: block; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.45); margin-top: 4px;
+}
+
+.loginSystemPill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 8px 14px; margin-bottom: 28px;
+}
+
+.loginChecklist {
+  list-style: none; margin: 0; padding: 0;
+  font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.8;
+}
+
+.loginChecklist li {
+  padding-left: 20px; position: relative;
+}
+
+.loginChecklist li::before {
+  content: '✓'; position: absolute; left: 0;
+  color: #818cf8; font-weight: 700;
+}
+
+.loginFormPanel {
+  background: var(--admin-bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 48px 32px;
+}
+
+.loginFormCard {
+  width: 100%; max-width: 400px;
+}
+
+.loginFormHeader { margin-bottom: 28px; }
+
+.loginFormTitle {
+  font-size: 24px; font-weight: 800; color: var(--admin-text);
+  margin: 0 0 6px; letter-spacing: -0.4px;
+}
+
+.loginFormSubtitle {
   font-size: 14px; color: var(--admin-text-muted); margin: 0;
 }
+
+.loginForm { margin-bottom: 20px; }
 
 .loginError {
   background: #fef2f2; border: 1px solid #fecaca; color: #dc2626;
   padding: 12px 16px; border-radius: var(--admin-radius-sm);
   font-size: 13px; font-weight: 500;
-  margin-bottom: 20px; text-align: center;
+  margin-bottom: 20px;
 }
 
 .loginBtn {
   width: 100%; padding: 13px;
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
-  color: #fff; border: none; border-radius: var(--admin-radius);
-  font-size: 15px; font-weight: 700; cursor: pointer;
+  background: var(--admin-primary); color: #fff;
+  border: none; border-radius: var(--admin-radius-sm);
+  font-size: 14px; font-weight: 700; cursor: pointer;
   transition: all var(--admin-transition);
   font-family: var(--admin-font);
-  box-shadow: 0 4px 16px rgba(79,70,229,0.35);
+  box-shadow: 0 2px 8px rgba(79,70,229,0.25);
 }
 
-.loginBtn:hover {
-  background: linear-gradient(135deg, #4338ca, #4f46e5);
-  box-shadow: 0 6px 20px rgba(79,70,229,0.45);
-  transform: translateY(-2px);
+.loginBtn:hover:not(:disabled) {
+  background: var(--admin-primary-hover);
+  box-shadow: 0 4px 14px rgba(79,70,229,0.35);
 }
 
-.loginBtn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.loginBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.loginFooter {
-  text-align: center; margin-top: 28px;
-  font-size: 12px; color: var(--admin-text-muted);
-}
-
-.loginFeatures {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 12px; margin-top: 20px;
-}
-
-.loginFeature {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--admin-text-muted);
-}
-
-.loginFeatureIcon {
-  width: 28px; height: 28px; border-radius: 8px;
-  background: #f3f4f6;
+.loginFormLinks {
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; flex-shrink: 0;
+  gap: 8px; margin-bottom: 20px;
+}
+
+.loginLink {
+  font-size: 13px; font-weight: 600; color: var(--admin-primary);
+  text-decoration: none;
+}
+
+.loginLink:hover { text-decoration: underline; }
+
+.loginLinkDivider { color: var(--admin-text-muted); font-size: 13px; }
+
+.loginLegal {
+  font-size: 11px; color: var(--admin-text-muted);
+  text-align: center; margin: 0; line-height: 1.5;
+}
+
+/* ─── Pipeline cards ────────────────────────────────────────── */
+.pipelineGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.pipelineCard {
+  text-decoration: none; text-align: center;
+  padding: 20px 12px; border-radius: var(--admin-radius-sm);
+  background: #f9fafb; border: 1px solid var(--admin-border);
+  transition: all var(--admin-transition);
+}
+
+.pipelineCard:hover {
+  border-color: var(--admin-primary);
+  box-shadow: var(--admin-shadow);
+  transform: translateY(-1px);
+}
+
+.pipelineCardRisk {
+  background: #fef2f2; border-color: #fecaca;
+}
+
+.pipelineCardRisk:hover { border-color: #f87171; }
+
+.pipelineCount {
+  display: block; font-size: 26px; font-weight: 800;
+  color: var(--admin-text); font-variant-numeric: tabular-nums;
+}
+
+.pipelineCardRisk .pipelineCount { color: #dc2626; }
+
+.pipelineLabel {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--admin-text-secondary); margin-top: 6px;
+}
+
+.alertLink {
+  color: inherit; font-weight: 700; margin-left: 4px;
 }
 
 /* ─── Detail Page ───────────────────────────────────────────── */
@@ -771,6 +890,11 @@
 }
 
 @media (max-width: 1024px) {
+  .loginShell { grid-template-columns: 1fr; }
+  .loginBrandPanel { padding: 32px 24px; min-height: auto; }
+  .loginBrandInner { max-width: 100%; }
+  .loginFormPanel { padding: 32px 24px 48px; }
+  .pipelineGrid { grid-template-columns: repeat(3, 1fr); }
   .sidebar { transform: translateX(-100%); }
   .mainContent { margin-left: 0; }
   .twoCol, .threeCol, .fourCol, .detailGrid { grid-template-columns: 1fr; }
@@ -780,6 +904,8 @@
 }
 
 @media (max-width: 640px) {
+  .pipelineGrid { grid-template-columns: repeat(2, 1fr); }
+  .loginLiveStats { grid-template-columns: 1fr; }
   .statsGrid { grid-template-columns: 1fr; }
   .pageContent { padding: 16px; }
   .topBar { padding: 0 16px; height: 56px; }

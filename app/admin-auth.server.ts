@@ -30,10 +30,12 @@ export async function requireAdmin(request: Request) {
 }
 
 export async function adminLogin(request: Request, password: string) {
-  const isValid = crypto.timingSafeEqual(
-    Buffer.from(password),
-    Buffer.from(ADMIN_PASSWORD)
-  );
+  const expected = ADMIN_PASSWORD;
+  const inputBuf = Buffer.from(password);
+  const expectedBuf = Buffer.from(expected);
+  const isValid =
+    inputBuf.length === expectedBuf.length &&
+    crypto.timingSafeEqual(inputBuf, expectedBuf);
 
   if (!isValid) {
     return { error: "Invalid password" };

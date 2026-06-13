@@ -16,10 +16,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [
     allSessions, totalRules, activeRules,
     totalConversions, recentConversions7d, recentConversions30d,
-    totalSuggestions, appliedSuggestions, pendingSuggestions,
-    totalOrderHistory, totalCooccurrences,
-    recentRules, recentMerchants, configuredMerchants,
-    successConversions, failedConversions,
+    totalSuggestions, appliedSuggestions,
+    recentRules, recentMerchants,
+    configuredMerchants, successConversions, failedConversions,
   ] = await Promise.all([
     db.session.findMany({ distinct: ["shop"], select: { shop: true }, orderBy: { id: "desc" } }),
     db.bundleRule.count(),
@@ -29,14 +28,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.orderConversion.count({ where: { convertedAt: { gte: thirtyDaysAgo } } }),
     db.bundleSuggestion.count(),
     db.bundleSuggestion.count({ where: { status: "applied" } }),
-    db.bundleSuggestion.count({ where: { status: "pending" } }),
-    db.orderHistory.count(),
-    db.itemCooccurrence.count(),
     db.bundleRule.findMany({
-      orderBy: { createdAt: "desc" }, take: 8,
-      select: { id: true, shop: true, name: true, status: true, bundledSku: true, frequency: true, createdAt: true },
+      orderBy: { createdAt: "desc" }, take: 6,
+      select: { id: true, shop: true, name: true, status: true, frequency: true },
     }),
-    db.session.findMany({ distinct: ["shop"], select: { shop: true, id: true }, orderBy: { id: "desc" }, take: 8 }),
+    db.session.findMany({ distinct: ["shop"], select: { shop: true }, orderBy: { id: "desc" }, take: 6 }),
     db.appSettings.count(),
     db.orderConversion.count({ where: { status: "success" } }),
     db.orderConversion.count({ where: { status: "failed" } }),
@@ -46,16 +42,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const merchantsWithRules = await db.bundleRule.findMany({ distinct: ["shop"], select: { shop: true } });
 
   const pipelineCounts = { installed: 0, onboarding: 0, rules_live: 0, converting: 0, at_risk: 0 };
+  const atRiskShops: string[] = [];
+
   for (const { shop } of allSessions) {
     const [activeRuleCount, conversionCount, settings] = await Promise.all([
       db.bundleRule.count({ where: { shop, status: "active" } }),
       db.orderConversion.count({ where: { shop } }),
       db.appSettings.findFirst({ where: { shop }, select: { createdAt: true } }),
     ]);
-    const daysSinceFirst =
-      settings?.createdAt
-        ? Math.floor((Date.now() - settings.createdAt.getTime()) / (1000 * 60 * 60 * 24))
-        : null;
+    const daysSinceFirst = settings?.createdAt
+      ? Math.floor((Date.now() - settings.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
     const stage = getMerchantStage({
       configured: !!settings,
       activeRuleCount,
@@ -63,181 +60,163 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       daysSinceFirstActivity: daysSinceFirst,
     });
     pipelineCounts[stage]++;
+    if (stage === "at_risk") atRiskShops.push(shop);
   }
 
-  // Recent conversions for activity feed
   const recentConversionsList = await db.orderConversion.findMany({
-    orderBy: { convertedAt: "desc" }, take: 5,
-    select: { id: true, shop: true, orderId: true, savingsAmount: true, status: true, convertedAt: true, bundledSku: true },
+    orderBy: { convertedAt: "desc" }, take: 8,
+    select: { id: true, shop: true, orderId: true, savingsAmount: true, status: true, convertedAt: true },
   });
 
   return json({
     stats: {
       totalMerchants: allSessions.length,
-      totalRules, activeRules, draftRules: totalRules - activeRules,
+      totalRules, activeRules,
       totalConversions, recentConversions7d, recentConversions30d,
       successConversions, failedConversions,
       totalSavings: savingsResult._sum.savingsAmount || 0,
-      totalSuggestions, appliedSuggestions, pendingSuggestions,
-      totalOrderHistory, totalCooccurrences,
+      totalSuggestions, appliedSuggestions,
       merchantsWithRules: merchantsWithRules.length,
       configuredMerchants,
-      conversionRate: totalConversions > 0 ? ((successConversions / totalConversions) * 100) : 0,
+      conversionRate: totalConversions > 0 ? (successConversions / totalConversions) * 100 : 0,
     },
-    recentRules: recentRules.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })),
+    recentRules,
     recentMerchants,
-    recentConversions: recentConversionsList.map(c => ({ ...c, convertedAt: c.convertedAt.toISOString() })),
+    recentConversions: recentConversionsList.map((c) => ({
+      ...c,
+      convertedAt: c.convertedAt.toISOString(),
+    })),
     pipelineCounts,
+    atRiskShops: atRiskShops.slice(0, 5),
   });
 };
 
 export default function AdminDashboard() {
-  const { stats, recentRules, recentMerchants, recentConversions, pipelineCounts } = useLoaderData<typeof loader>();
+  const { stats, recentRules, recentMerchants, recentConversions, pipelineCounts, atRiskShops } =
+    useLoaderData<typeof loader>();
 
   return (
     <>
-      {/* Welcome Header */}
-      <div className={styles.pageHeader}>
-        <div className={styles.pageHeaderRow}>
-          <div>
-            <h2 className={styles.pageHeaderTitle}>Welcome back, Admin</h2>
-            <p className={styles.pageHeaderSub}>
-              Here's what's happening with Reverse Bundle Pro today.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Link to="/admin/merchants" className={`${styles.btn} ${styles.btnSecondary}`}>
-              🏪 View Merchants
-            </Link>
-            <Link to="/admin/system" className={`${styles.btn} ${styles.btnPrimary}`}>
-              💚 System Health
-            </Link>
-          </div>
+      {atRiskShops.length > 0 && (
+        <div className={`${styles.alert} ${styles.alertWarning}`}>
+          <strong>{pipelineCounts.at_risk} merchant{pipelineCounts.at_risk !== 1 ? "s" : ""} at risk</strong>
+          — installed but no active rules.{" "}
+          <Link to="/admin/merchants?stage=at_risk" className={styles.alertLink}>
+            Review now →
+          </Link>
         </div>
-      </div>
+      )}
 
-      {/* Main Stats Row */}
       <div className={styles.statsGrid}>
         <div className={`${styles.statCard} ${styles.statCardBlue}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Total Merchants</span>
-            <div className={`${styles.statIcon} ${styles.statIconBlue}`}>🏪</div>
+            <span className={styles.statLabel}>Merchants</span>
           </div>
           <div className={styles.statValue}>{stats.totalMerchants}</div>
           <div className={styles.statChange}>
-            <span className={styles.statUp}>{stats.configuredMerchants} configured</span>
-            <span className={styles.statNeutral}>· {stats.merchantsWithRules} with rules</span>
+            <span className={styles.statNeutral}>{stats.configuredMerchants} configured · {stats.merchantsWithRules} with rules</span>
           </div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardGreen}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Bundle Rules</span>
-            <div className={`${styles.statIcon} ${styles.statIconGreen}`}>📋</div>
+            <span className={styles.statLabel}>Active rules</span>
           </div>
-          <div className={styles.statValue}>{stats.totalRules}</div>
+          <div className={styles.statValue}>{stats.activeRules}</div>
           <div className={styles.statChange}>
-            <span className={styles.statUp}>{stats.activeRules} active</span>
-            {stats.draftRules > 0 && <span className={styles.statNeutral}>· {stats.draftRules} draft</span>}
+            <span className={styles.statNeutral}>{stats.totalRules} total rules</span>
           </div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardPurple}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Order Conversions</span>
-            <div className={`${styles.statIcon} ${styles.statIconPurple}`}>🔄</div>
+            <span className={styles.statLabel}>Conversions</span>
           </div>
           <div className={styles.statValue}>{stats.totalConversions}</div>
           <div className={styles.statChange}>
             <span className={styles.statUp}>+{stats.recentConversions7d} this week</span>
-            <span className={styles.statNeutral}>· +{stats.recentConversions30d} this month</span>
           </div>
         </div>
 
         <div className={`${styles.statCard} ${styles.statCardOrange}`}>
           <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Total Savings</span>
-            <div className={`${styles.statIcon} ${styles.statIconOrange}`}>💰</div>
+            <span className={styles.statLabel}>Total savings</span>
           </div>
           <div className={styles.statValue}>${stats.totalSavings.toFixed(2)}</div>
           <div className={styles.statChange}>
-            <span className={styles.statUp}>Across all merchants</span>
+            <span className={styles.statNeutral}>{stats.conversionRate.toFixed(0)}% success rate</span>
           </div>
         </div>
       </div>
 
-      {/* Merchant pipeline */}
-      <div className={styles.card} style={{ marginBottom: 28 }}>
+      <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>🎯 Merchant Pipeline</span>
-          <Link to="/admin/merchants?stage=at_risk" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
-            View at-risk →
+          <span className={styles.cardTitle}>Merchant pipeline</span>
+          <Link to="/admin/merchants" className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}>
+            All merchants →
           </Link>
         </div>
         <div className={styles.cardBody}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+          <div className={styles.pipelineGrid}>
             {(["installed", "onboarding", "rules_live", "converting", "at_risk"] as const).map((stage) => (
               <Link
                 key={stage}
                 to={`/admin/merchants?stage=${stage}`}
-                style={{ textDecoration: "none", textAlign: "center", padding: 12, borderRadius: 10, background: "#f9fafb", border: "1px solid #e5e7eb" }}
+                className={`${styles.pipelineCard} ${stage === "at_risk" ? styles.pipelineCardRisk : ""}`}
               >
-                <div style={{ fontSize: 22, fontWeight: 800, color: stage === "at_risk" ? "#dc2626" : "#111827" }}>
-                  {pipelineCounts[stage]}
-                </div>
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>{stageLabel(stage)}</div>
+                <span className={styles.pipelineCount}>{pipelineCounts[stage]}</span>
+                <span className={styles.pipelineLabel}>{stageLabel(stage)}</span>
               </Link>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Secondary Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 28 }}>
-        <div className={styles.card} style={{ marginBottom: 0 }}>
-          <div className={styles.cardBody} style={{ padding: "16px 20px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Conversion Rate</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: stats.conversionRate >= 80 ? "#059669" : stats.conversionRate >= 50 ? "#d97706" : "#dc2626" }}>
-              {stats.conversionRate.toFixed(1)}%
-            </div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>{stats.successConversions} success · {stats.failedConversions} failed</div>
-          </div>
-        </div>
-
-        <div className={styles.card} style={{ marginBottom: 0 }}>
-          <div className={styles.cardBody} style={{ padding: "16px 20px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>AI Suggestions</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#7c3aed" }}>{stats.totalSuggestions}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>{stats.appliedSuggestions} applied · {stats.pendingSuggestions} pending</div>
-          </div>
-        </div>
-
-        <div className={styles.card} style={{ marginBottom: 0 }}>
-          <div className={styles.cardBody} style={{ padding: "16px 20px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Order History</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#2563eb" }}>{stats.totalOrderHistory.toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>Records analyzed</div>
-          </div>
-        </div>
-
-        <div className={styles.card} style={{ marginBottom: 0 }}>
-          <div className={styles.cardBody} style={{ padding: "16px 20px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Co-occurrences</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: "#0d9488" }}>{stats.totalCooccurrences.toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>Item pairs tracked</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Three Column Layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24 }}>
-        {/* Recent Merchants */}
+      <div className={styles.twoCol}>
         <div className={styles.card}>
           <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>🏪 Recent Merchants</span>
-            <Link to="/admin/merchants" className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}>
-              View All →
-            </Link>
+            <span className={styles.cardTitle}>Recent activity</span>
+          </div>
+          <div className={styles.cardBodyNoPad}>
+            {recentConversions.length > 0 ? (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Shop</th>
+                    <th style={{ textAlign: "right" }}>Saved</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentConversions.map((c) => (
+                    <tr key={c.id}>
+                      <td><span className={styles.codeInline}>#{c.orderId.slice(-8)}</span></td>
+                      <td>{c.shop.replace(".myshopify.com", "")}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: "#059669" }}>
+                        ${c.savingsAmount.toFixed(2)}
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${c.status === "success" ? styles.badgeGreen : styles.badgeRed}`}>
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyTitle}>No conversions yet</div>
+                <div className={styles.emptyText}>Conversions appear when bundle rules match live orders.</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.card}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>Recent merchants</span>
           </div>
           <div className={styles.cardBodyNoPad}>
             {recentMerchants.length > 0 ? (
@@ -251,163 +230,53 @@ export default function AdminDashboard() {
                         </Link>
                         <div className={styles.tableSub}>{m.shop}</div>
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        <span className={`${styles.badge} ${styles.badgeGreen}`}>
-                          <span className={styles.badgeDot}></span> Active
-                        </span>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <div className={styles.emptyState} style={{ padding: 32 }}>
-                <div className={styles.emptyIcon} style={{ fontSize: 32 }}>🏪</div>
-                <div className={styles.emptyText}>No merchants yet</div>
+              <div className={styles.emptyState}>
+                <div className={styles.emptyTitle}>No merchants yet</div>
+                <div className={styles.emptyText}>Installs from the Shopify App Store will appear here.</div>
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Recent Bundle Rules */}
+      {recentRules.length > 0 && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>📋 Bundle Rules</span>
-            <span className={`${styles.badge} ${styles.badgeBlue}`}>{stats.totalRules}</span>
+            <span className={styles.cardTitle}>Latest bundle rules</span>
           </div>
           <div className={styles.cardBodyNoPad}>
-            {recentRules.length > 0 ? (
-              <table className={styles.table}>
-                <tbody>
-                  {recentRules.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                        <div className={styles.tableSub}>{r.shop.replace(".myshopify.com", "")} · {r.frequency}× used</div>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <span className={`${styles.badge} ${r.status === "active" ? styles.badgeGreen : r.status === "paused" ? styles.badgeYellow : styles.badgeGray}`}>
-                          {r.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className={styles.emptyState} style={{ padding: 32 }}>
-                <div className={styles.emptyIcon} style={{ fontSize: 32 }}>📋</div>
-                <div className={styles.emptyText}>No rules created yet</div>
-              </div>
-            )}
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Rule</th>
+                  <th>Shop</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Used</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRules.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td>{r.shop.replace(".myshopify.com", "")}</td>
+                    <td>
+                      <span className={`${styles.badge} ${r.status === "active" ? styles.badgeGreen : styles.badgeGray}`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{r.frequency}×</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* Recent Activity */}
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <span className={styles.cardTitle}>⚡ Recent Activity</span>
-          </div>
-          <div className={styles.cardBodyNoPad}>
-            {recentConversions.length > 0 ? (
-              <table className={styles.table}>
-                <tbody>
-                  {recentConversions.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          Order #{c.orderId.slice(-8)}
-                        </div>
-                        <div className={styles.tableSub}>
-                          {c.shop.replace(".myshopify.com", "")} · ${c.savingsAmount.toFixed(2)} saved
-                        </div>
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <span className={`${styles.badge} ${c.status === "success" ? styles.badgeGreen : c.status === "failed" ? styles.badgeRed : styles.badgeYellow}`}>
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className={styles.emptyState} style={{ padding: 32 }}>
-                <div className={styles.emptyIcon} style={{ fontSize: 32 }}>⚡</div>
-                <div className={styles.emptyText}>No conversions yet</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Data Health Overview */}
-      <div className={styles.card} style={{ marginTop: 24 }}>
-        <div className={styles.cardHeader}>
-          <span className={styles.cardTitle}>📊 Data Health Overview</span>
-          <Link to="/admin/system" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
-            View System Health →
-          </Link>
-        </div>
-        <div className={styles.cardBody}>
-          <div className={styles.threeCol}>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Merchants with Rules</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  {stats.merchantsWithRules}/{stats.totalMerchants}
-                </span>
-              </div>
-              <div className={styles.progressBar}>
-                <div
-                  className={`${styles.progressFill} ${styles.progressBlue}`}
-                  style={{ width: `${stats.totalMerchants > 0 ? (stats.merchantsWithRules / stats.totalMerchants) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Conversion Success Rate</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  {stats.conversionRate.toFixed(0)}%
-                </span>
-              </div>
-              <div className={styles.progressBar}>
-                <div
-                  className={`${styles.progressFill} ${stats.conversionRate >= 80 ? styles.progressGreen : styles.progressYellow}`}
-                  style={{ width: `${stats.conversionRate}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Suggestions Applied</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  {stats.appliedSuggestions}/{stats.totalSuggestions}
-                </span>
-              </div>
-              <div className={styles.progressBar}>
-                <div
-                  className={`${styles.progressFill} ${styles.progressPurple}`}
-                  style={{ width: `${stats.totalSuggestions > 0 ? (stats.appliedSuggestions / stats.totalSuggestions) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div className={styles.card} style={{ marginTop: 0 }}>
-        <div className={styles.cardBody} style={{ padding: 20 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link to="/admin/merchants" className={`${styles.btn} ${styles.btnSecondary}`}>🏪 All Merchants</Link>
-            <Link to="/admin/analytics" className={`${styles.btn} ${styles.btnSecondary}`}>📈 Full Analytics</Link>
-            <Link to="/admin/system" className={`${styles.btn} ${styles.btnSecondary}`}>💚 System Health</Link>
-            <Link to="/admin/settings" className={`${styles.btn} ${styles.btnSecondary}`}>⚙️ App Settings</Link>
-          </div>
-        </div>
-      </div>
+      )}
     </>
   );
 }

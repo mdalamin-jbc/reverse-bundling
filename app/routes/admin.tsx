@@ -1,43 +1,77 @@
 import { type LoaderFunctionArgs, json } from "@remix-run/node";
 import { Link, Outlet, useLoaderData, useLocation, Form } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
+import {
+  IconAnalytics,
+  IconDashboard,
+  IconHealth,
+  IconMerchants,
+  IconSettings,
+  IconBundle,
+} from "../components/AdminIcons";
 import db from "../db.server";
+import { getMerchantStage } from "../merchant-health.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   if (url.pathname === "/admin/login") {
-    return json({
-      merchantCount: 0, ruleCount: 0, conversionCount: 0,
-      totalSavings: 0, env: process.env.NODE_ENV || "production", isLogin: true,
-    });
+    return json({ isLogin: true as const });
   }
 
   await requireAdmin(request);
 
-  const [merchants, ruleCount, conversionCount, savingsAgg] = await Promise.all([
+  const [sessions, ruleCount, conversionCount, savingsAgg] = await Promise.all([
     db.session.findMany({ distinct: ["shop"], select: { shop: true } }),
     db.bundleRule.count(),
     db.orderConversion.count(),
     db.orderConversion.aggregate({ _sum: { savingsAmount: true } }),
   ]);
 
+  let atRiskCount = 0;
+  for (const { shop } of sessions) {
+    const [activeRuleCount, conversionCount, settings] = await Promise.all([
+      db.bundleRule.count({ where: { shop, status: "active" } }),
+      db.orderConversion.count({ where: { shop } }),
+      db.appSettings.findFirst({ where: { shop }, select: { createdAt: true } }),
+    ]);
+    const daysSinceFirst = settings?.createdAt
+      ? Math.floor((Date.now() - settings.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const stage = getMerchantStage({
+      configured: !!settings,
+      activeRuleCount,
+      conversionCount,
+      daysSinceFirstActivity: daysSinceFirst,
+    });
+    if (stage === "at_risk") atRiskCount++;
+  }
+
+  let dbHealthy = true;
+  try {
+    await db.$queryRaw`SELECT 1`;
+  } catch {
+    dbHealthy = false;
+  }
+
   return json({
-    merchantCount: merchants.length,
+    isLogin: false as const,
+    merchantCount: sessions.length,
     ruleCount,
     conversionCount,
     totalSavings: savingsAgg._sum.savingsAmount || 0,
+    atRiskCount,
+    dbHealthy,
     env: process.env.NODE_ENV || "production",
-    isLogin: false,
   });
 };
 
 const navItems = [
-  { label: "Dashboard", icon: "📊", href: "/admin", end: true },
-  { label: "Merchants", icon: "🏪", href: "/admin/merchants" },
-  { label: "Analytics", icon: "📈", href: "/admin/analytics" },
-  { label: "System Health", icon: "💚", href: "/admin/system" },
-  { label: "Settings", icon: "⚙️", href: "/admin/settings" },
+  { label: "Dashboard", href: "/admin", end: true, Icon: IconDashboard },
+  { label: "Merchants", href: "/admin/merchants", Icon: IconMerchants },
+  { label: "Analytics", href: "/admin/analytics", Icon: IconAnalytics },
+  { label: "System", href: "/admin/system", Icon: IconHealth },
+  { label: "Settings", href: "/admin/settings", Icon: IconSettings },
 ];
 
 export default function AdminLayout() {
@@ -48,7 +82,7 @@ export default function AdminLayout() {
     return <Outlet />;
   }
 
-  const { merchantCount, ruleCount, conversionCount, totalSavings, env } = data;
+  const { merchantCount, atRiskCount, dbHealthy, env } = data;
 
   const isActive = (href: string, end?: boolean) => {
     if (end) return location.pathname === href;
@@ -57,12 +91,12 @@ export default function AdminLayout() {
 
   const pageTitle = (() => {
     if (location.pathname === "/admin") return "Dashboard";
-    if (location.pathname.includes("/merchants/")) return "Merchant Details";
+    if (location.pathname.includes("/merchants/")) return "Merchant";
     if (location.pathname.includes("/merchants")) return "Merchants";
     if (location.pathname.includes("/analytics")) return "Analytics";
-    if (location.pathname.includes("/system")) return "System Health";
+    if (location.pathname.includes("/system")) return "System";
     if (location.pathname.includes("/settings")) return "Settings";
-    return "Admin";
+    return "Console";
   })();
 
   return (
@@ -70,79 +104,62 @@ export default function AdminLayout() {
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <Link to="/admin" className={styles.sidebarLogo}>
-            <span className={styles.logoIcon}>📦</span>
+            <span className={styles.logoIcon}>
+              <IconBundle />
+            </span>
             <div>
               <span className={styles.logoText}>Reverse Bundle Pro</span>
-              <span className={styles.logoSub}>Admin Console</span>
+              <span className={styles.logoSub}>Operations</span>
             </div>
           </Link>
         </div>
 
         <nav className={styles.sidebarNav}>
-          <div className={styles.navSection}>
-            <div className={styles.navSectionTitle}>Navigation</div>
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={`${styles.navLink} ${isActive(item.href, item.end) ? styles.navLinkActive : ""}`}
-              >
-                <span className={styles.navIcon}>{item.icon}</span>
-                {item.label}
-                {item.label === "Merchants" && merchantCount > 0 && (
-                  <span className={styles.navBadge}>{merchantCount}</span>
-                )}
-              </Link>
-            ))}
-          </div>
-
-          <div className={styles.navSection}>
-            <div className={styles.navSectionTitle}>Overview</div>
-            <div style={{ padding: "0 14px", fontSize: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
-                <span>Merchants</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{merchantCount}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
-                <span>Bundle Rules</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{ruleCount}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
-                <span>Conversions</span>
-                <span style={{ color: "#a5b4fc", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{conversionCount}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", color: "rgba(255,255,255,0.4)" }}>
-                <span>Total Savings</span>
-                <span style={{ color: "#34d399", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>${totalSavings.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={`${styles.navLink} ${isActive(item.href, item.end) ? styles.navLinkActive : ""}`}
+            >
+              <span className={styles.navIcon}>
+                <item.Icon />
+              </span>
+              {item.label}
+              {item.label === "Merchants" && atRiskCount > 0 && (
+                <span className={`${styles.navBadge} ${styles.navBadgeAlert}`}>{atRiskCount}</span>
+              )}
+              {item.label === "Merchants" && atRiskCount === 0 && merchantCount > 0 && (
+                <span className={styles.navBadge}>{merchantCount}</span>
+              )}
+            </Link>
+          ))}
         </nav>
 
         <div className={styles.sidebarFooter}>
+          <div className={styles.sidebarStatus}>
+            <span className={`${styles.healthDot} ${dbHealthy ? styles.healthGreen : styles.healthRed}`} />
+            <span>{dbHealthy ? "All systems operational" : "Database issue"}</span>
+          </div>
           <Form method="post" action="/admin/logout">
             <button type="submit" className={styles.logoutBtn}>
-              <span>🚪</span> Sign Out
+              Sign out
             </button>
           </Form>
         </div>
       </aside>
 
       <div className={styles.mainContent}>
-        <div className={styles.topBar}>
+        <header className={styles.topBar}>
           <h1 className={styles.pageTitle}>{pageTitle}</h1>
           <div className={styles.topBarRight}>
             <span className={`${styles.envBadge} ${env === "production" ? styles.envProd : styles.envDev}`}>
               {env}
             </span>
-            <span className={styles.currentTime}>
-              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-            </span>
           </div>
-        </div>
-        <div className={styles.pageContent}>
+        </header>
+        <main className={styles.pageContent}>
           <Outlet />
-        </div>
+        </main>
       </div>
     </div>
   );
