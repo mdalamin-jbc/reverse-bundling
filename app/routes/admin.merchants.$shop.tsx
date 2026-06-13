@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, json } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
+import { getMerchantBillingStatus } from "../billing.server";
 import styles from "./styles/admin.module.css";
 import { useState } from "react";
 import { stageLabel } from "../merchant-health";
@@ -66,10 +67,29 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     })
   );
 
+  let billing = null as Awaited<ReturnType<typeof getMerchantBillingStatus>> | null;
+  try {
+    billing = await getMerchantBillingStatus(shop);
+  } catch {
+    billing = null;
+  }
+
+  const monthlyBreakdown: Record<string, number> = {};
+  const allConversions = await db.orderConversion.findMany({
+    where: { shop },
+    select: { convertedAt: true },
+  });
+  for (const c of allConversions) {
+    const key = `${c.convertedAt.getFullYear()}-${String(c.convertedAt.getMonth() + 1).padStart(2, "0")}`;
+    monthlyBreakdown[key] = (monthlyBreakdown[key] || 0) + 1;
+  }
+
   return json({
     shop,
     stage,
     health,
+    billing,
+    monthlyBreakdown,
     ownerEmail: ownerSession?.email || null,
     ownerName: [ownerSession?.firstName, ownerSession?.lastName].filter(Boolean).join(" ") || null,
     sessions: sessions.map(s => ({
@@ -99,7 +119,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 type Tab = "overview" | "rules" | "conversions" | "suggestions" | "settings";
 
 export default function AdminMerchantDetail() {
-  const { shop, stage, health, ownerEmail, ownerName, sessions, rules, conversions, settings, suggestions, fulfillmentProviders, stats } = useLoaderData<typeof loader>();
+  const { shop, stage, health, billing, monthlyBreakdown, ownerEmail, ownerName, sessions, rules, conversions, settings, suggestions, fulfillmentProviders, stats } = useLoaderData<typeof loader>();
   const [tab, setTab] = useState<Tab>("overview");
   const shortShop = shop.replace(".myshopify.com", "");
 
@@ -128,9 +148,74 @@ export default function AdminMerchantDetail() {
             {settings?.autoConvertOrders && (
               <span className={`${styles.badge} ${styles.badgeTeal}`}>Auto-convert ON</span>
             )}
+            {billing && (
+              <span className={`${styles.badge} ${billing.hasPaidSubscription ? styles.badgeGreen : billing.billingState === "trial" ? styles.badgeBlue : styles.badgeRed}`}>
+                {billing.hasPaidSubscription ? `${billing.planName} · Paid` : billing.billingState === "trial" ? "Trial" : "Unpaid"}
+              </span>
+            )}
           </div>
         </div>
       </div>
+
+      {billing && !billing.hasPaidSubscription && billing.billingState === "expired" && stats.totalConversions > 0 && (
+        <div className={`${styles.alert} ${styles.alertError}`} style={{ marginBottom: 20 }}>
+          This merchant has {stats.totalConversions} conversions (${stats.totalSavings.toFixed(2)} savings) but no active subscription.
+          {billing.blockReason ? ` ${billing.blockReason}` : ""} New conversions are blocked.
+        </div>
+      )}
+
+      {billing && (
+        <div className={styles.card} style={{ marginBottom: 24 }}>
+          <div className={styles.cardHeader}>
+            <span className={styles.cardTitle}>💳 Billing & Usage</span>
+            <span className={`${styles.badge} ${billing.accessAllowed ? styles.badgeGreen : styles.badgeRed}`}>
+              {billing.accessAllowed ? "Conversions allowed" : "Conversions blocked"}
+            </span>
+          </div>
+          <div className={styles.cardBody}>
+            <div className={styles.fourCol}>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: billing.hasPaidSubscription ? "#059669" : "#dc2626" }}>
+                  {billing.hasPaidSubscription ? billing.planName : billing.billingState === "trial" ? "Trial" : "None"}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>Current plan</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#2563eb" }}>
+                  {billing.usageCount}/{billing.planLimit === 999999 ? "∞" : billing.planLimit}
+                </div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>{billing.usageLabel}</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#7c3aed" }}>{billing.conversionsThisMonth}</div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>This month</div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#d97706" }}>{billing.conversionsLifetime}</div>
+                <div style={{ fontSize: 12, color: "#6b7280" }}>Lifetime</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13, color: "#374151" }}>
+              <div><strong>Install date:</strong> {billing.installDate ? new Date(billing.installDate).toLocaleDateString() : "—"}</div>
+              <div><strong>Trial ends:</strong> {billing.trialEndsAt ? new Date(billing.trialEndsAt).toLocaleDateString() : "—"}</div>
+              <div><strong>Subscription:</strong> {billing.subscriptionName || (billing.hasPaidSubscription ? "Active" : "None")}</div>
+              <div><strong>Monthly revenue:</strong> {billing.hasPaidSubscription ? `$${billing.planAmount.toFixed(2)}` : "$0.00"}</div>
+            </div>
+            {Object.keys(monthlyBreakdown).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 8 }}>Conversions by month</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {Object.entries(monthlyBreakdown).map(([month, count]) => (
+                    <span key={month} className={`${styles.badge} ${count > 25 ? styles.badgeRed : styles.badgeGray}`}>
+                      {month}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className={styles.statsGrid}>

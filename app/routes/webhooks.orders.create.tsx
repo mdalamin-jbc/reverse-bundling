@@ -48,110 +48,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     logInfo(`Processing order: ${order.name || order.id}`, { shop, orderId: String(order.id) });
 
-    // Check plan limits before processing (only if admin API is available)
+    // Enforce billing before processing bundle conversions
     if (admin) {
       try {
-        const { hasActiveSubscription } = await import("../billing.server");
-        const hasSubscription = await hasActiveSubscription(admin, shop);
-        
-        let planLimit = 25; // Free plan default (matches billing.server.ts freeOrderLimit)
-        
-        if (hasSubscription) {
-          // Get current subscription details
-          const subscriptionResponse = await admin.graphql(
-            `#graphql
-              query {
-                currentAppInstallation {
-                  activeSubscriptions {
-                    id
-                    name
-                    status
-                    lineItems {
-                      plan {
-                        pricingDetails {
-                          ... on AppRecurringPricing {
-                            price {
-                              amount
-                            }
-                            interval
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }`
-          );
-          const subscriptionData = await subscriptionResponse.json();
-          const subscriptions = subscriptionData.data?.currentAppInstallation?.activeSubscriptions || [];
-          const activeSubscription = subscriptions.find((sub: any) => sub.status === 'ACTIVE');
-          
-          if (activeSubscription) {
-            const pricing = activeSubscription.lineItems?.[0]?.plan?.pricingDetails;
-            if (pricing) {
-              const amount = parseFloat(pricing.price?.amount) || 0;
-              const interval = pricing.interval;
-              
-              // Map pricing to plan limits based on actual billing.server.ts plan prices
-              // Starter: $17.99/30 days or $150/year → 125 orders/month
-              // Professional: $39.99/30 days or $350/year → 525 orders/month
-              // Enterprise: $79.99/30 days or $700/year → unlimited
-              if (interval === 'ANNUAL') {
-                if (amount >= 600) planLimit = 999999;      // Enterprise ($700/year)
-                else if (amount >= 300) planLimit = 525;    // Professional ($350/year)
-                else if (amount >= 100) planLimit = 125;    // Starter ($150/year)
-              } else {
-                if (Math.abs(amount - 79.99) < 1) planLimit = 999999;  // Enterprise ($79.99/30 days)
-                else if (Math.abs(amount - 39.99) < 1) planLimit = 525; // Professional ($39.99/30 days)
-                else if (Math.abs(amount - 17.99) < 1) planLimit = 125; // Starter ($17.99/30 days)
-              }
-            } else {
-              // No pricing details — fallback to subscription name
-              const subName = (activeSubscription.name || '').toLowerCase();
-              if (subName.includes('enterprise')) planLimit = 999999;
-              else if (subName.includes('professional')) planLimit = 525;
-              else if (subName.includes('starter')) planLimit = 125;
-            }
-          }
-        }
-        
-        // Check current order count for this month
-        const currentMonth = new Date();
-        currentMonth.setDate(1);
-        currentMonth.setHours(0, 0, 0, 0);
-        
-        const orderCountThisMonth = await db.orderConversion.count({
-          where: {
-            shop,
-            convertedAt: {
-              gte: currentMonth
-            }
-          }
-        });
-        
-        if (orderCountThisMonth >= planLimit) {
-          logWarning(`Plan limit exceeded - skipping bundle processing`, {
+        const { checkConversionAllowed } = await import("../billing.server");
+        const billing = await checkConversionAllowed(shop, admin);
+
+        if (!billing.allowed) {
+          logWarning("Billing limit — skipping bundle processing", {
             shop,
             orderId: String(order.id),
-            orderCountThisMonth,
-            planLimit,
-            planName: planLimit === 999999 ? 'Enterprise' : planLimit === 525 ? 'Professional' : planLimit === 125 ? 'Starter' : 'Free'
+            billingState: billing.billingState,
+            planName: billing.planName,
+            usageCount: billing.usageCount,
+            planLimit: billing.planLimit,
+            reason: billing.reason,
           });
-          
-          perfMonitor.end({ shop, orderId: String(order.id), limitExceeded: true });
-          return new Response("Plan limit exceeded", { status: 200 });
+
+          perfMonitor.end({ shop, orderId: String(order.id), billingBlocked: true });
+          return new Response("Billing limit exceeded", { status: 200 });
         }
-        
       } catch (limitCheckError) {
-        logError(limitCheckError as Error, { 
-          context: 'plan_limit_check', 
-          shop, 
-          orderId: String(order.id) 
+        logError(limitCheckError as Error, {
+          context: "billing_limit_check",
+          shop,
+          orderId: String(order.id),
         });
-        // Continue processing if limit check fails (fail open)
+        perfMonitor.end({ shop, orderId: String(order.id), billingCheckFailed: true });
+        return new Response("Billing check failed", { status: 200 });
       }
     } else {
-      logInfo('Admin API not available in webhook context, skipping plan limit check', { shop, orderId: String(order.id) });
+      logWarning("Admin API unavailable — blocking conversion until billing can be verified", {
+        shop,
+        orderId: String(order.id),
+      });
+      return new Response("Billing verification unavailable", { status: 200 });
     }
 
     // Get active bundle rules for this shop

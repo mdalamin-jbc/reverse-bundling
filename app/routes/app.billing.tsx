@@ -24,7 +24,7 @@ import {
 } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { hasActiveSubscription, redirectToBillingManagement, getSubscriptionByChargeId } from "../billing.server";
+import { redirectToBillingManagement, getSubscriptionByChargeId, getMerchantBillingStatus } from "../billing.server";
 import { logInfo, logError } from "../logger.server";
 import db from "../db.server";
 import { useEffect, useState } from "react";
@@ -37,220 +37,51 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { logInfo, logError } = await import("../logger.server");
   
   try {
-    const hasSubscription = await hasActiveSubscription(admin, session.shop);
-    
-    // Check for specific subscription if charge_id is provided (primary source for plan detection)
+    const billing = await getMerchantBillingStatus(session.shop, admin);
+    const hasSubscription = billing.hasPaidSubscription;
+
     let chargeSubscription = null;
     if (chargeId) {
       chargeSubscription = await getSubscriptionByChargeId(admin, chargeId);
       logInfo("Loaded subscription details", { shop: session.shop, chargeId, hasSubscription: !!chargeSubscription });
     }
 
-    // Always fetch active subscriptions as fallback/secondary source
-    let activeSubscription = null;
-    try {
-      const response = await admin.graphql(
-        `#graphql
-          query {
-            currentAppInstallation {
-              activeSubscriptions {
-                id
-                name
-                status
-                lineItems {
-                  plan {
-                    pricingDetails {
-                      ... on AppRecurringPricing {
-                        price {
-                          amount
-                          currencyCode
-                        }
-                        interval
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }`
-      );
-      const data = await response.json();
-      const subscriptions = data.data?.currentAppInstallation?.activeSubscriptions || [];
-      // Get the first active paid subscription
-      activeSubscription = subscriptions.find((sub: any) => 
-        sub.status === 'ACTIVE' && sub.lineItems?.[0]?.plan?.pricingDetails?.price?.amount > 0
-      ) || null;
-    } catch (error) {
-      logError(error as Error, { shop: session.shop, context: "fetching active subscription" });
-    }
+    const subscriptionToUse = chargeSubscription || (hasSubscription ? { name: billing.subscriptionName, status: "ACTIVE" } : null);
 
-    // Use charge subscription as primary source, active subscription as fallback
-    const subscriptionToUse = chargeSubscription || activeSubscription;
-
-    // Determine plan based on subscription or usage
-    let planLimit = 25, planName = "Free", planAmount = 0, planInterval = "EVERY_30_DAYS";
-    
-    if (subscriptionToUse && subscriptionToUse.status === 'ACTIVE') {
-      // Extract plan details from subscription
-      const lineItem = subscriptionToUse.lineItems?.[0];
-      if (lineItem?.plan?.pricingDetails) {
-        const pricing = lineItem.plan.pricingDetails;
-        planAmount = pricing.price?.amount || 0;
-        planInterval = pricing.interval || "EVERY_30_DAYS";
-        
-        // Debug logging
-        logInfo("Subscription pricing data", { 
-          shop: session.shop, 
-          subscriptionName: subscriptionToUse.name,
-          planAmount,
-          planInterval,
-          pricingDetails: JSON.stringify(pricing)
-        });
-        
-        // Handle pricing in cents (divide by 100) or direct dollar amounts
-        let normalizedAmount = planAmount;
-        if (planAmount > 1000) { // Likely in cents
-          normalizedAmount = planAmount / 100;
-        }
-        
-        // Map normalized amount to plan details based on interval
-        if (planInterval === 'ANNUAL') {
-          // For yearly plans, match the yearly amounts
-          if (normalizedAmount === 150 || normalizedAmount === 150.00) {
-            planName = "Starter";
-            planLimit = 125;
-          } else if (normalizedAmount === 350 || normalizedAmount === 350.00) {
-            planName = "Professional"; 
-            planLimit = 525;
-          } else if (normalizedAmount === 700 || normalizedAmount === 700.00) {
-            planName = "Enterprise";
-            planLimit = 999999; // Unlimited
-          } else {
-            // Fallback: try to match by subscription name for yearly plans
-            const subName = subscriptionToUse.name?.toLowerCase() || '';
-            if (subName.includes('enterprise')) {
-              planName = "Enterprise";
-              planLimit = 999999;
-              planAmount = 700;
-            } else if (subName.includes('professional')) {
-              planName = "Professional";
-              planLimit = 525;
-              planAmount = 350;
-            } else if (subName.includes('starter')) {
-              planName = "Starter";
-              planLimit = 125;
-              planAmount = 150;
-            }
-          }
-        } else {
-          // For monthly plans, match the monthly amounts
-          if (Math.abs(normalizedAmount - 17.99) < 0.1) {
-            planName = "Starter";
-            planLimit = 125;
-          } else if (Math.abs(normalizedAmount - 39.99) < 0.1) {
-            planName = "Professional"; 
-            planLimit = 525;
-          } else if (Math.abs(normalizedAmount - 79.99) < 0.1) {
-            planName = "Enterprise";
-            planLimit = 999999; // Unlimited
-          } else {
-            // Fallback: try to match by subscription name for monthly plans
-            const subName = subscriptionToUse.name?.toLowerCase() || '';
-            if (subName.includes('enterprise')) {
-              planName = "Enterprise";
-              planLimit = 999999;
-              planAmount = 79.99;
-            } else if (subName.includes('professional')) {
-              planName = "Professional";
-              planLimit = 525;
-              planAmount = 39.99;
-            } else if (subName.includes('starter')) {
-              planName = "Starter";
-              planLimit = 125;
-              planAmount = 17.99;
-            }
-            
-            logInfo("Plan detected by name fallback", { 
-              shop: session.shop, 
-              subscriptionName: subscriptionToUse.name,
-              detectedPlan: planName,
-              originalAmount: planAmount,
-              normalizedAmount,
-              planInterval
-            });
-          }
-        }
-      } else {
-        // No pricing details available, fallback to subscription name
-        const subName = subscriptionToUse.name?.toLowerCase() || '';
-        if (subName.includes('enterprise')) {
-          planName = "Enterprise";
-          planLimit = 999999;
-          planAmount = planInterval === "ANNUAL" ? 700 : 79.99;
-        } else if (subName.includes('professional')) {
-          planName = "Professional";
-          planLimit = 525;
-          planAmount = planInterval === "ANNUAL" ? 350 : 39.99;
-        } else if (subName.includes('starter')) {
-          planName = "Starter";
-          planLimit = 125;
-          planAmount = planInterval === "ANNUAL" ? 150 : 17.99;
-        }
-        
-        logInfo("No pricing details, using name-based detection", { 
-          shop: session.shop, 
-          subscriptionName: subscriptionToUse.name,
-          detectedPlan: planName
-        });
-      }
-    }
-
-    // Get order count for usage tracking - count processed bundle conversions from database
-    let orderCount = 0;
-    try {
-      orderCount = await db.orderConversion.count({
-        where: {
-          shop: session.shop,
-          status: 'success'
-        }
-      });
-    } catch (error) {
-      logError(error as Error, { shop: session.shop, context: "fetching order conversion count" });
-    }
-
-    // Calculate total savings from successful conversions
-    let totalSavings = 0;
-    try {
-      const savingsAgg = await db.orderConversion.aggregate({
-        where: { shop: session.shop, status: 'success' },
-        _sum: { savingsAmount: true },
-      });
-      totalSavings = savingsAgg._sum.savingsAmount || 0;
-    } catch (error) {
-      logError(error as Error, { shop: session.shop, context: 'fetching total savings' });
-    }
-
-    logInfo("Billing loader completed", { 
-      shop: session.shop, 
+    logInfo("Billing loader completed", {
+      shop: session.shop,
       hasSubscription,
-      planName,
-      planAmount,
-      planInterval,
-      planLimit,
-      orderCount
+      planName: billing.planName,
+      planAmount: billing.planAmount,
+      planInterval: billing.planInterval,
+      planLimit: billing.planLimit,
+      orderCount: billing.conversionsThisMonth,
+      billingState: billing.billingState,
+    });
+
+    const savingsAgg = await db.orderConversion.aggregate({
+      where: { shop: session.shop, status: "success" },
+      _sum: { savingsAmount: true },
     });
 
     return json({
       hasSubscription,
-      orderCount,
-      planLimit,
-      planName,
-      planAmount,
-      planInterval,
-      totalSavings,
+      orderCount: billing.conversionsThisMonth,
+      planLimit: billing.planLimit,
+      planName: billing.hasPaidSubscription ? billing.planName : billing.billingState === "trial" ? "Trial" : "Free",
+      planAmount: billing.planAmount,
+      planInterval: billing.planInterval,
+      totalSavings: savingsAgg._sum.savingsAmount || 0,
       currentSubscription: subscriptionToUse,
       chargeSubscription,
-      chargeId
+      chargeId,
+      billingState: billing.billingState,
+      trialEndsAt: billing.trialEndsAt,
+      usageCount: billing.usageCount,
+      usageLabel: billing.usageLabel,
+      accessAllowed: billing.accessAllowed,
+      blockReason: billing.blockReason,
+      conversionsLifetime: billing.conversionsLifetime,
     });
   } catch (error) {
     logError(error as Error, { shop: session.shop, context: "billing loader" });
@@ -264,7 +95,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalSavings: 0,
       currentSubscription: null,
       chargeSubscription: null,
-      chargeId: null
+      chargeId: null,
+      billingState: "expired",
+      trialEndsAt: null,
+      usageCount: 0,
+      usageLabel: "blocked",
+      accessAllowed: false,
+      blockReason: null,
+      conversionsLifetime: 0,
     });
   }
 };
@@ -303,7 +141,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Billing() {
-  const { hasSubscription, orderCount, planLimit, planName, planAmount, planInterval, totalSavings, currentSubscription, chargeSubscription, chargeId } = useLoaderData<typeof loader>();
+  const {
+    hasSubscription, orderCount, planLimit, planName, planAmount, planInterval, totalSavings,
+    currentSubscription, chargeSubscription, chargeId, billingState, trialEndsAt, usageCount,
+    usageLabel, accessAllowed, blockReason, conversionsLifetime,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; error?: string; confirmationUrl?: string; message?: string }>();
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -493,6 +335,26 @@ export default function Billing() {
       <BlockStack gap="500">
         {fetcher.data?.message && <Banner tone="info"><p>{fetcher.data.message}</p></Banner>}
         {chargeId && chargeSubscription && <Banner tone="success"><p>Subscription activated successfully. You are now on the {planName} plan.</p></Banner>}
+        {billingState === "expired" && !hasSubscription && (
+          <Banner tone="critical">
+            <p>
+              {blockReason || "Your 14-day trial has ended. Subscribe to a plan to continue processing bundle conversions."}
+              {conversionsLifetime > 0 ? ` You have ${conversionsLifetime} lifetime conversions so far.` : ""}
+            </p>
+          </Banner>
+        )}
+        {billingState === "trial" && !accessAllowed && (
+          <Banner tone="warning">
+            <p>You have used all {planLimit} trial conversions. Subscribe to continue processing orders.</p>
+          </Banner>
+        )}
+        {billingState === "trial" && accessAllowed && trialEndsAt && (
+          <Banner tone="info">
+            <p>
+              Trial active until {new Date(trialEndsAt).toLocaleDateString()} · {usageCount}/{planLimit} trial conversions used
+            </p>
+          </Banner>
+        )}
 
         {/* Current Plan Summary */}
         <Card>
@@ -509,8 +371,8 @@ export default function Billing() {
                   </Text>
                 </BlockStack>
               </InlineStack>
-              <Badge tone={currentSubscription ? "success" : "info"} size="large">
-                {currentSubscription ? "Active" : "Free Tier"}
+              <Badge tone={hasSubscription ? "success" : billingState === "trial" ? "info" : "critical"} size="large">
+                {hasSubscription ? "Active" : billingState === "trial" ? "Trial" : "Subscription required"}
               </Badge>
             </InlineStack>
 
@@ -523,10 +385,10 @@ export default function Billing() {
                     <Box padding="200" borderRadius="300" background="bg-surface-secondary">
                       <Icon source={OrderIcon} tone="subdued" />
                     </Box>
-                    <Text as="p" variant="bodySm" tone="subdued">Orders Used</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Conversions Used ({usageLabel})</Text>
                   </InlineStack>
                   <Text as="p" variant="headingSm" fontWeight="bold">
-                    {orderCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
+                    {usageCount.toLocaleString()} / {planLimit === 999999 ? 'Unlimited' : planLimit.toLocaleString()}
                   </Text>
                 </BlockStack>
               </Layout.Section>
@@ -567,7 +429,7 @@ export default function Billing() {
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
                 <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
-                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial. Cancel anytime.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial with up to 25 conversions. A paid plan is required after the trial.</Text>
               </BlockStack>
               <InlineStack gap="200" blockAlign="center">
                 <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>

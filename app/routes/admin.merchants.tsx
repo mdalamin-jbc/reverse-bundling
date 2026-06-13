@@ -3,6 +3,7 @@ import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
 import { getInstalledShopDomains } from "../shop-cleanup.server";
+import { getMerchantBillingStatus, getMonthlyConversionCount, getTrialEndDate, BILLING_CONFIG } from "../billing.server";
 import styles from "./styles/admin.module.css";
 import type { MerchantStage } from "../merchant-health";
 import { stageLabel } from "../merchant-health";
@@ -22,6 +23,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() || "";
   const stageFilter = url.searchParams.get("stage") as MerchantStage | null;
+  const billingFilter = url.searchParams.get("billing") || "";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const perPage = PER_PAGE_OPTIONS.includes(parseInt(url.searchParams.get("perPage") || "10", 10))
     ? parseInt(url.searchParams.get("perPage") || "10", 10)
@@ -37,7 +39,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const [
         ruleCount, activeRuleCount, conversionCount, settings, savingsAgg,
         orderHistoryCount, suggestionCount, ownerSession,
-        latestConversion, latestRule, earliestSettings,
+        latestConversion, latestRule, earliestSettings, conversionsThisMonth,
       ] = await Promise.all([
         db.bundleRule.count({ where: { shop } }),
         db.bundleRule.count({ where: { shop, status: "active" } }),
@@ -65,6 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           where: { shop },
           select: { createdAt: true },
         }),
+        getMonthlyConversionCount(shop),
       ]);
 
       const configured = !!settings;
@@ -89,6 +92,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         daysSinceLastActivity: daysSince(lastActivityAt),
       });
 
+      const installDate = earliestSettings?.createdAt || settings?.createdAt || null;
+      const trialEndsAt = installDate ? getTrialEndDate(installDate) : null;
+      const trialActive = trialEndsAt ? new Date() < trialEndsAt : false;
+      const trialExpired = installDate ? new Date() >= getTrialEndDate(installDate) : false;
+
       return {
         shop,
         ruleCount,
@@ -105,29 +113,71 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         stage,
         health,
         lastActivityAt: lastActivityAt?.toISOString() || null,
+        likelyUnpaid: trialExpired && conversionCount > 0,
+        billing: {
+          planName: trialActive ? "Trial" : "—",
+          billingState: (trialActive ? "trial" : trialExpired ? "expired" : "trial") as "trial" | "expired" | "paid",
+          hasPaidSubscription: false,
+          usageCount: trialActive ? conversionCount : conversionsThisMonth,
+          planLimit: trialActive ? BILLING_CONFIG.trialConversionLimit : 0,
+          usageLabel: trialActive ? "trial total" : "this month",
+          accessAllowed: trialActive ? conversionCount < BILLING_CONFIG.trialConversionLimit : false,
+          conversionsThisMonth,
+        },
       };
     })
   );
 
+  const billingFilteredMerchants =
+    billingFilter === "unpaid"
+      ? allMerchants.filter((m) => m.likelyUnpaid)
+      : allMerchants;
+
   const filteredMerchants =
     stageFilter && STAGE_FILTERS.includes(stageFilter)
-      ? allMerchants.filter((m) => m.stage === stageFilter)
-      : allMerchants;
+      ? billingFilteredMerchants.filter((m) => m.stage === stageFilter)
+      : billingFilteredMerchants;
 
   const stageCounts = STAGE_FILTERS.reduce(
     (acc, stage) => {
-      acc[stage] = allMerchants.filter((m) => m.stage === stage).length;
+      acc[stage] = billingFilteredMerchants.filter((m) => m.stage === stage).length;
       return acc;
     },
     {} as Record<MerchantStage, number>
   );
 
+  const unpaidCount = allMerchants.filter((m) => m.likelyUnpaid).length;
+
   const totalCount = filteredMerchants.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const currentPage = Math.min(page, totalPages);
-  const merchants = filteredMerchants.slice(
+  const pageMerchants = filteredMerchants.slice(
     (currentPage - 1) * perPage,
     currentPage * perPage
+  );
+
+  const merchants = await Promise.all(
+    pageMerchants.map(async (merchant) => {
+      try {
+        const live = await getMerchantBillingStatus(merchant.shop);
+        return {
+          ...merchant,
+          likelyUnpaid: !live.hasPaidSubscription && live.billingState === "expired" && merchant.conversionCount > 0,
+          billing: {
+            planName: live.hasPaidSubscription ? live.planName : live.billingState === "trial" ? "Trial" : "Unpaid",
+            billingState: live.billingState,
+            hasPaidSubscription: live.hasPaidSubscription,
+            usageCount: live.usageCount,
+            planLimit: live.planLimit,
+            usageLabel: live.usageLabel,
+            accessAllowed: live.accessAllowed,
+            conversionsThisMonth: live.conversionsThisMonth,
+          },
+        };
+      } catch {
+        return merchant;
+      }
+    })
   );
 
   return json({
@@ -137,6 +187,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     query,
     stageFilter: stageFilter && STAGE_FILTERS.includes(stageFilter) ? stageFilter : null,
     stageCounts,
+    billingFilter,
+    unpaidCount,
   });
 };
 
@@ -154,8 +206,15 @@ const stageBadge: Record<MerchantStage, string> = {
   at_risk: styles.badgeRed,
 };
 
+const billingBadge: Record<string, string> = {
+  paid: styles.badgeGreen,
+  trial: styles.badgeBlue,
+  expired: styles.badgeRed,
+};
+
 export default function AdminMerchants() {
-  const { merchants, pagination, totalMerchants, query, stageFilter, stageCounts } = useLoaderData<typeof loader>();
+  const { merchants, pagination, totalMerchants, query, stageFilter, stageCounts, billingFilter, unpaidCount } =
+    useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const updateParams = (updates: Record<string, string>) => {
@@ -199,6 +258,13 @@ export default function AdminMerchants() {
             {stageLabel(stage)} ({stageCounts[stage]})
           </button>
         ))}
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.btnSm} ${billingFilter === "unpaid" ? styles.btnPrimary : styles.btnSecondary}`}
+          onClick={() => updateParams({ billing: billingFilter === "unpaid" ? "" : "unpaid", page: "1" })}
+        >
+          Unpaid users ({unpaidCount})
+        </button>
       </div>
 
       {/* Search & Filters */}
@@ -252,6 +318,8 @@ export default function AdminMerchants() {
                 <tr>
                   <th>Shop</th>
                   <th>Stage</th>
+                  <th>Plan</th>
+                  <th style={{ textAlign: "center" }}>Usage</th>
                   <th style={{ textAlign: "center" }}>Rules</th>
                   <th style={{ textAlign: "center" }}>Conversions</th>
                   <th style={{ textAlign: "right" }}>Savings</th>
@@ -274,6 +342,32 @@ export default function AdminMerchants() {
                     </td>
                     <td>
                       <span className={`${styles.badge} ${stageBadge[m.stage]}`}>{stageLabel(m.stage)}</span>
+                    </td>
+                    <td>
+                      {m.billing ? (
+                        <>
+                          <span className={`${styles.badge} ${billingBadge[m.billing.billingState] || styles.badgeGray}`}>
+                            {m.billing.hasPaidSubscription ? m.billing.planName : m.billing.billingState === "trial" ? "Trial" : "Unpaid"}
+                          </span>
+                          {m.billing.billingState === "expired" && m.conversionCount > 0 && (
+                            <div className={styles.tableSub} style={{ color: "#dc2626" }}>Should subscribe</div>
+                          )}
+                        </>
+                      ) : (
+                        <span className={`${styles.badge} ${styles.badgeGray}`}>—</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "center", fontSize: 12 }}>
+                      {m.billing ? (
+                        <>
+                          <span style={{ fontWeight: 700 }}>
+                            {m.billing.usageCount}/{m.billing.planLimit === 999999 ? "∞" : m.billing.planLimit}
+                          </span>
+                          <div className={styles.tableSub}>{m.billing.usageLabel}</div>
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <span style={{ fontWeight: 700, color: "#111827" }}>{m.ruleCount}</span>
