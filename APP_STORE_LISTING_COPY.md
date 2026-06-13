@@ -59,9 +59,19 @@ We request order and product access to read incoming orders and apply bundle rul
 ## Pricing (match your plans)
 
 ```
-Free plan available · 14-day trial on paid plans
+14-day free trial · up to 25 conversions · paid plan required after trial
 Starter $17.99/mo · Professional $39.99/mo · Enterprise $79.99/mo
 ```
+
+### Partner Dashboard — remove permanent free plan
+
+In **Pricing details**, delete or unpublish the **Free Plan ($0)** public plan. Keep only:
+
+- Starter ($17.99, 14-day trial)
+- Professional ($39.99, 14-day trial)
+- Enterprise ($79.99, 14-day trial)
+
+On the listing page, change **“Free plan available”** to **“14-day free trial available”**.
 
 ## Do NOT claim (trust killers)
 

@@ -68,7 +68,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       hasSubscription,
       orderCount: billing.conversionsThisMonth,
       planLimit: billing.planLimit,
-      planName: billing.hasPaidSubscription ? billing.planName : billing.billingState === "trial" ? "Trial" : "Free",
+      planName: billing.hasPaidSubscription ? billing.planName : billing.billingState === "trial" ? "Trial" : "No active plan",
       planAmount: billing.planAmount,
       planInterval: billing.planInterval,
       totalSavings: savingsAgg._sum.savingsAmount || 0,
@@ -89,7 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       hasSubscription: false,
       orderCount: 0,
       planLimit: 25,
-      planName: "Free",
+      planName: "No active plan",
       planAmount: 0,
       planInterval: "EVERY_30_DAYS",
       totalSavings: 0,
@@ -229,26 +229,6 @@ export default function Billing() {
 
   // Helper function to get button configuration for a plan
   const getPlanButton = (planCardName: string, monthlyPrice?: number) => {
-    // Handle Free plan specially
-    if (planCardName === 'Free') {
-      if (!hasSubscription || planName === 'Free') {
-        return {
-          text: 'Current Plan',
-          variant: 'secondary' as const,
-          disabled: true,
-          onClick: () => {}
-        };
-      } else {
-        // Has paid subscription, can downgrade to Free
-        return {
-          text: 'Downgrade to Free',
-          variant: 'secondary' as const,
-          disabled: false,
-          onClick: () => handleSelectPlan('free')
-        };
-      }
-    }
-
     let cardPlanName: string = planCardName;
     if (monthlyPrice) {
       if (Math.abs(monthlyPrice - 17.99) < 0.1) {
@@ -296,7 +276,7 @@ export default function Billing() {
     }
 
     // Different plan - allow upgrade/downgrade
-    const planHierarchy = { 'Free': 0, 'Starter': 1, 'Professional': 2, 'Enterprise': 3 };
+    const planHierarchy = { Trial: 0, 'No active plan': 0, Starter: 1, Professional: 2, Enterprise: 3 };
     const currentLevel = planHierarchy[planName as keyof typeof planHierarchy] || 0;
     const cardLevel = planHierarchy[cardPlanName as keyof typeof planHierarchy] || 0;
 
@@ -365,9 +345,15 @@ export default function Billing() {
                   <Icon source={StarFilledIcon} tone={currentSubscription ? "success" : "info"} />
                 </Box>
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingMd" fontWeight="bold">{planName} Plan</Text>
+                  <Text as="h2" variant="headingMd" fontWeight="bold">
+                    {planName === "No active plan" ? "No active plan" : `${planName} plan`}
+                  </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {planAmount > 0 ? `$${planAmount} / ${planInterval === 'ANNUAL' ? 'year' : 'month'}` : 'No charge'}
+                    {billingState === "trial"
+                      ? "14-day trial · up to 25 conversions"
+                      : planAmount > 0
+                        ? `$${planAmount} / ${planInterval === "ANNUAL" ? "year" : "month"}`
+                        : "Subscribe to a paid plan to continue converting orders"}
                   </Text>
                 </BlockStack>
               </InlineStack>
@@ -428,8 +414,10 @@ export default function Billing() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
-                <Text as="h2" variant="headingMd" fontWeight="semibold">Choose Your Plan</Text>
-                <Text as="p" variant="bodySm" tone="subdued">All plans include a 14-day free trial with up to 25 conversions. A paid plan is required after the trial.</Text>
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Choose a paid plan</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Every new install starts with a 14-day trial (up to 25 conversions). After the trial, a paid plan is required to keep processing bundle orders.
+                </Text>
               </BlockStack>
               <InlineStack gap="200" blockAlign="center">
                 <Button size="slim" variant={billingInterval === 'monthly' ? 'primary' : 'secondary'} onClick={() => setBillingInterval('monthly')}>Monthly</Button>
@@ -442,28 +430,6 @@ export default function Billing() {
 
             {/* Plan Cards - Row 1 */}
             <Layout>
-              {/* Free */}
-              <Layout.Section variant="oneHalf">
-                <Box padding="400" background="bg-surface-secondary" borderRadius="300">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingMd" fontWeight="bold">Free</Text>
-                    <Text as="p" variant="headingLg" fontWeight="bold">$0<Text as="span" variant="bodySm" tone="subdued"> /month</Text></Text>
-                    <Divider />
-                    <BlockStack gap="200">
-                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">25 orders/month</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Basic bundling rules</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Tag & note mode</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Email support</Text></InlineStack>
-                      <InlineStack gap="200" blockAlign="center"><Box padding="200" borderRadius="300" background="bg-surface-secondary"><Icon source={CheckCircleIcon} tone="subdued" /></Box><Text as="p" variant="bodySm">Shopify admin integration</Text></InlineStack>
-                    </BlockStack>
-                    {(() => {
-                      const b = getPlanButton('Free');
-                      return <Button variant={b.variant} onClick={b.onClick} disabled={b.disabled || loadingPlan !== null} loading={loadingPlan === 'free'} fullWidth>{b.text}</Button>;
-                    })()}
-                  </BlockStack>
-                </Box>
-              </Layout.Section>
-
               {/* Starter */}
               <Layout.Section variant="oneHalf">
                 <Box padding="400" background="bg-surface-secondary" borderRadius="300">
@@ -581,7 +547,9 @@ export default function Billing() {
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodyMd" fontWeight="semibold">How does the free trial work?</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">You get full access to all features for 14 days. Cancel anytime during the trial at no cost.</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    New installs get 14 days and up to 25 bundle conversions at no charge. There is no permanent free plan — subscribe to Starter, Professional, or Enterprise before the trial ends to keep converting orders.
+                  </Text>
                 </BlockStack>
               </Box>
               <Box padding="300" background="bg-surface-secondary" borderRadius="200">

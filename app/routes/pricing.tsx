@@ -15,44 +15,49 @@ export default function Pricing() {
         <section className={styles.header}>
           <h1 className={styles.headerTitle}>Simple, Transparent Pricing</h1>
           <p className={styles.headerSubtitle}>
-            Choose the plan that fits your business. All plans include our core bundling features with different usage limits.
+            Start with a 14-day free trial (up to 25 conversions), then choose a paid plan that fits your order volume.
           </p>
         </section>
 
         <div className={styles.pricingGrid}>
-          {/* Free Plan */}
+          {/* Free Trial */}
           <div className={styles.pricingCard}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.planName}>Free</h3>
+              <h3 className={styles.planName}>Free Trial</h3>
               <div className={styles.planPrice}>
                 <span className={styles.priceAmount}>$0</span>
-                <span className={styles.pricePeriod}>forever</span>
+                <span className={styles.pricePeriod}>for 14 days</span>
               </div>
-              <p className={styles.planDescription}>Get started with basic reverse bundling features</p>
+              <p className={styles.planDescription}>Try the full app before you subscribe. No permanent free plan.</p>
             </div>
             <ul className={styles.featureList}>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Up to 5 bundle rules
+                Up to 25 bundle conversions during trial
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Basic order analysis
+                Setup wizard and bundle suggestions
               </li>
               <li className={styles.featureItem}>
                 <svg className={styles.featureIcon} fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Email support
+                Paid plan required after trial ends
               </li>
             </ul>
-            <button className={`${styles.ctaButton} ${styles.secondaryButton}`}>
-              Get Started Free
-            </button>
+            <a
+              className={`${styles.ctaButton} ${styles.secondaryButton}`}
+              href="https://apps.shopify.com/reverse-bundling"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Install from App Store
+            </a>
           </div>
 
           {/* Starter Plan */}
@@ -204,7 +209,7 @@ export default function Pricing() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className={styles.featureTitle}>14-day free trial</h3>
+              <h3 className={styles.featureTitle}>14-day trial · 25 conversions</h3>
             </div>
             <div className={styles.featureCard}>
               <div className={`${styles.featureIconContainer} ${styles.featureIconBlue}`}>
