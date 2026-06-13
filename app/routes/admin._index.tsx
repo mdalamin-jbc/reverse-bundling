@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, json } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
+import { getInstalledShopDomains } from "../shop-cleanup.server";
 import styles from "./styles/admin.module.css";
 import { stageLabel } from "../merchant-health";
 import { getMerchantStage } from "../merchant-health.server";
@@ -13,14 +14,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+  const installedShops = await getInstalledShopDomains();
+  const shopDomains = installedShops;
+
   const [
-    allSessions, totalRules, activeRules,
+    totalRules, activeRules,
     totalConversions, recentConversions7d, recentConversions30d,
     totalSuggestions, appliedSuggestions,
-    recentRules, recentMerchants,
-    configuredMerchants, successConversions, failedConversions,
+    recentRules, configuredMerchants,
+    successConversions, failedConversions,
   ] = await Promise.all([
-    db.session.findMany({ distinct: ["shop"], select: { shop: true }, orderBy: { id: "desc" } }),
     db.bundleRule.count(),
     db.bundleRule.count({ where: { status: "active" } }),
     db.orderConversion.count(),
@@ -32,11 +35,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orderBy: { createdAt: "desc" }, take: 6,
       select: { id: true, shop: true, name: true, status: true, frequency: true },
     }),
-    db.session.findMany({ distinct: ["shop"], select: { shop: true }, orderBy: { id: "desc" }, take: 6 }),
     db.appSettings.count(),
     db.orderConversion.count({ where: { status: "success" } }),
     db.orderConversion.count({ where: { status: "failed" } }),
   ]);
+
+  const recentMerchants = shopDomains.slice(0, 6).map((shop) => ({ shop }));
 
   const savingsResult = await db.orderConversion.aggregate({ _sum: { savingsAmount: true } });
   const merchantsWithRules = await db.bundleRule.findMany({ distinct: ["shop"], select: { shop: true } });
@@ -44,7 +48,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const pipelineCounts = { installed: 0, onboarding: 0, rules_live: 0, converting: 0, at_risk: 0 };
   const atRiskShops: string[] = [];
 
-  for (const { shop } of allSessions) {
+  for (const shop of shopDomains) {
     const [activeRuleCount, conversionCount, settings] = await Promise.all([
       db.bundleRule.count({ where: { shop, status: "active" } }),
       db.orderConversion.count({ where: { shop } }),
@@ -70,7 +74,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     stats: {
-      totalMerchants: allSessions.length,
+      totalMerchants: shopDomains.length,
       totalRules, activeRules,
       totalConversions, recentConversions7d, recentConversions30d,
       successConversions, failedConversions,

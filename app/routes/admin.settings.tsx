@@ -2,6 +2,11 @@ import { type LoaderFunctionArgs, type ActionFunctionArgs, json } from "@remix-r
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
+import {
+  cleanupUninstalledShops,
+  getInstalledShopDomains,
+  getSessionShopDomains,
+} from "../shop-cleanup.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -19,13 +24,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     { key: "PORT", value: process.env.PORT || "3000" },
   ];
 
-  const [totalSessions, totalRules, totalConversions, totalOrders, totalCooccurrences, totalSuggestions] = await Promise.all([
+  const [
+    totalSessions,
+    totalRules,
+    totalConversions,
+    totalOrders,
+    totalCooccurrences,
+    totalSuggestions,
+    sessionShopDomains,
+    installedShopDomains,
+  ] = await Promise.all([
     db.session.count(),
     db.bundleRule.count(),
     db.orderConversion.count(),
     db.orderHistory.count(),
     db.itemCooccurrence.count(),
     db.bundleSuggestion.count(),
+    getSessionShopDomains(),
+    getInstalledShopDomains(),
   ]);
 
   return json({
@@ -45,6 +61,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orders: totalOrders,
       cooccurrences: totalCooccurrences,
       suggestions: totalSuggestions,
+    },
+    merchantCounts: {
+      sessionShops: sessionShopDomains.length,
+      installedShops: installedShopDomains.length,
+      orphanedShops: Math.max(0, sessionShopDomains.length - installedShopDomains.length),
     },
   });
 };
@@ -83,6 +104,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
         return json({ success: true, message: `Reset ${result.count} failed conversions to pending` });
       }
+      case "cleanup-uninstalled-shops": {
+        const result = await cleanupUninstalledShops();
+        return json({
+          success: true,
+          message: `Checked ${result.checked} shops, removed ${result.removed} uninstalled merchant${result.removed !== 1 ? "s" : ""} and all their data`,
+        });
+      }
       default:
         return json({ error: "Unknown action" }, { status: 400 });
     }
@@ -93,7 +121,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminSettings() {
-  const { envVars, appInfo, dataCounts } = useLoaderData<typeof loader>();
+  const { envVars, appInfo, dataCounts, merchantCounts } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
 
   return (
@@ -154,6 +182,31 @@ export default function AdminSettings() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Merchant counts */}
+      <div className={styles.card} style={{ marginTop: 24 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>🏪 Merchant Database</span>
+        </div>
+        <div className={styles.cardBody}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#2563eb" }}>{merchantCounts.installedShops}</div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>Installed (with token)</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#6b7280" }}>{merchantCounts.sessionShops}</div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>Session rows (legacy)</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: merchantCounts.orphanedShops > 0 ? "#dc2626" : "#059669" }}>
+                {merchantCounts.orphanedShops}
+              </div>
+              <div style={{ fontSize: 12, color: "#6b7280" }}>Likely uninstalled</div>
+            </div>
           </div>
         </div>
       </div>
@@ -251,6 +304,24 @@ export default function AdminSettings() {
                 <input type="hidden" name="_action" value="reset-failed-conversions" />
                 <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}>
                   Reset to Pending
+                </button>
+              </fetcher.Form>
+            </div>
+
+            {/* Remove uninstalled merchants */}
+            <div className={styles.maintenanceAction}>
+              <div className={styles.maintenanceTitle}>🧹 Remove Uninstalled Merchants</div>
+              <div className={styles.maintenanceDesc}>
+                Purge all database records for shops that uninstalled the app. Verifies each shop with Shopify before deleting sessions, rules, conversions, and settings. May take a few minutes.
+              </div>
+              <fetcher.Form method="post" style={{ marginTop: 10 }}>
+                <input type="hidden" name="_action" value="cleanup-uninstalled-shops" />
+                <button
+                  type="submit"
+                  className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}
+                  disabled={fetcher.state !== "idle"}
+                >
+                  {fetcher.state !== "idle" ? "Cleaning up…" : "Remove Uninstalled Merchants"}
                 </button>
               </fetcher.Form>
             </div>

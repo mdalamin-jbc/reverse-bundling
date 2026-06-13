@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, json } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
+import { getInstalledShopDomains } from "../shop-cleanup.server";
 import styles from "./styles/admin.module.css";
 
 const PERIODS = [
@@ -43,11 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       take: 10,
       select: { id: true, name: true, shop: true, frequency: true, savings: true, status: true },
     }),
-    db.session.findMany({
-      distinct: ["shop"],
-      select: { shop: true },
-      orderBy: { id: "desc" },
-    }),
+    getInstalledShopDomains().then((shops) => shops.map((shop) => ({ shop }))),
     db.bundleSuggestion.count(),
     db.bundleSuggestion.count({ where: { status: "applied" } }),
     db.orderHistory.count(),

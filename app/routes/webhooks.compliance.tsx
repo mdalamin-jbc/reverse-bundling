@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { logInfo, logError } from "../logger.server";
 import db from "../db.server";
+import { purgeShopData } from "../shop-cleanup.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
@@ -73,25 +74,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       case "shop/redact": {
-        // GDPR: Delete ALL shop data — shop is being deleted
         logInfo("Processing shop data redaction", { shop, topic });
-
-        await db.$transaction([
-          db.bundleSuggestion.deleteMany({ where: { shop } }),
-          db.itemCooccurrence.deleteMany({ where: { shop } }),
-          db.orderHistory.deleteMany({ where: { shop } }),
-          db.bundleAnalytics.deleteMany({ where: { shop } }),
-          db.orderConversion.deleteMany({ where: { shop } }),
-          db.bundleRule.deleteMany({ where: { shop } }),
-          db.fulfillmentProvider.deleteMany({ where: { shop } }),
-          db.appSettings.deleteMany({ where: { shop } }),
-          db.session.deleteMany({ where: { shop } }),
-        ]);
-
-        logInfo("Shop data redaction completed — all data deleted", {
-          shop,
-          topic,
-        });
+        await purgeShopData(shop);
+        logInfo("Shop data redaction completed — all data deleted", { shop, topic });
         break;
       }
 

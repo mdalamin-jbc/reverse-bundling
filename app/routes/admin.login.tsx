@@ -4,6 +4,7 @@ import { Form, Link, useActionData, useLoaderData, useNavigation } from "@remix-
 import { adminLogin, requireAdmin } from "../admin-auth.server";
 import { IconBundle } from "../components/AdminIcons";
 import db from "../db.server";
+import { getInstalledShopDomains } from "../shop-cleanup.server";
 import styles from "./styles/admin.module.css";
 
 export const meta: MetaFunction = () => [
@@ -24,11 +25,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       dbHealthy = false;
     }
 
-    const [merchantCount, conversionCount, savingsAgg] = await Promise.all([
-      db.session.findMany({ distinct: ["shop"], select: { shop: true } }).then((s) => s.length),
+    const [installedShops, conversionCount, savingsAgg] = await Promise.all([
+      getInstalledShopDomains(),
       db.orderConversion.count(),
       db.orderConversion.aggregate({ _sum: { savingsAmount: true } }),
     ]);
+    const merchantCount = installedShops.length;
 
     return json({
       dbHealthy,

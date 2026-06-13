@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, json } from "@remix-run/node";
 import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
 import { requireAdmin } from "../admin-auth.server";
 import db from "../db.server";
+import { getInstalledShopDomains } from "../shop-cleanup.server";
 import styles from "./styles/admin.module.css";
 import type { MerchantStage } from "../merchant-health";
 import { stageLabel } from "../merchant-health";
@@ -26,15 +27,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? parseInt(url.searchParams.get("perPage") || "10", 10)
     : 10;
 
-  const allSessions = await db.session.findMany({
-    distinct: ["shop"],
-    where: query ? { shop: { contains: query, mode: "insensitive" } } : undefined,
-    select: { shop: true },
-    orderBy: { id: "desc" },
-  });
+  const installedShops = await getInstalledShopDomains();
+  const shopList = query
+    ? installedShops.filter((shop) => shop.toLowerCase().includes(query.toLowerCase()))
+    : installedShops;
 
   const allMerchants = await Promise.all(
-    allSessions.map(async ({ shop }) => {
+    shopList.map(async (shop) => {
       const [
         ruleCount, activeRuleCount, conversionCount, settings, savingsAgg,
         orderHistoryCount, suggestionCount, ownerSession,

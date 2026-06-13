@@ -10,6 +10,7 @@ import {
   IconBundle,
 } from "../components/AdminIcons";
 import db from "../db.server";
+import { getInstalledShopDomains } from "../shop-cleanup.server";
 import { getMerchantStage } from "../merchant-health.server";
 import styles from "./styles/admin.module.css";
 
@@ -21,15 +22,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await requireAdmin(request);
 
-  const [sessions, ruleCount, conversionCount, savingsAgg] = await Promise.all([
-    db.session.findMany({ distinct: ["shop"], select: { shop: true } }),
-    db.bundleRule.count(),
-    db.orderConversion.count(),
-    db.orderConversion.aggregate({ _sum: { savingsAmount: true } }),
-  ]);
+  const installedShops = await getInstalledShopDomains();
 
   let atRiskCount = 0;
-  for (const { shop } of sessions) {
+  for (const shop of installedShops) {
     const [activeRuleCount, conversionCount, settings] = await Promise.all([
       db.bundleRule.count({ where: { shop, status: "active" } }),
       db.orderConversion.count({ where: { shop } }),
@@ -54,9 +50,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     dbHealthy = false;
   }
 
+  const [ruleCount, conversionCount, savingsAgg] = await Promise.all([
+    db.bundleRule.count(),
+    db.orderConversion.count(),
+    db.orderConversion.aggregate({ _sum: { savingsAmount: true } }),
+  ]);
+
   return json({
     isLogin: false as const,
-    merchantCount: sessions.length,
+    merchantCount: installedShops.length,
     ruleCount,
     conversionCount,
     totalSavings: savingsAgg._sum.savingsAmount || 0,
