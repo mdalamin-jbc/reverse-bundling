@@ -1,4 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
 import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
@@ -9,11 +10,17 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import { getMerchantBillingStatus } from "../billing.server";
 import { buildBillingAlert, maybeNotifyMerchantBilling } from "../billing-notifications.server";
+import { isSetupExemptPath, shopNeedsSetup } from "../onboarding.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  const pathname = new URL(request.url).pathname;
+
+  if ((await shopNeedsSetup(session.shop)) && !isSetupExemptPath(pathname)) {
+    throw redirect("/app/setup-wizard");
+  }
 
   let billingAlert = null;
   try {

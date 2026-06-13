@@ -1,9 +1,9 @@
-import db from "./db.server";
 import { cache } from "./cache.server";
 import { logInfo } from "./logger.server";
 import type { MerchantBillingStatus } from "./billing.server";
 import { BILLING_CONFIG, redirectToBillingManagement } from "./billing.server";
 import { getMerchantEmailSettings, sendBillingAlertEmail } from "./email.server";
+import { getMerchantContact } from "./merchant-contact.server";
 
 export type BillingAlert = {
   tone: "critical" | "warning" | "info";
@@ -15,21 +15,6 @@ export type BillingAlert = {
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
-
-async function getMerchantContact(shop: string) {
-  const session = await db.session.findFirst({
-    where: { shop },
-    select: { email: true, firstName: true, lastName: true },
-    orderBy: { id: "desc" },
-  });
-
-  return {
-    email: session?.email || null,
-    name:
-      [session?.firstName, session?.lastName].filter(Boolean).join(" ") ||
-      shop.replace(".myshopify.com", ""),
-  };
-}
 
 function getBillingPageUrl(): string {
   const appUrl = process.env.SHOPIFY_APP_URL || "https://reverse-bundling.me";

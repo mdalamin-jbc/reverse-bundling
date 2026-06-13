@@ -30,6 +30,7 @@ import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { logInfo, logError } from "../logger.server";
+import { getQuickBundlePairsFromShopify } from "../onboarding.server";
 import { useState, useCallback, useEffect } from "react";
 
 /* ─── LOADER ─────────────────────────────────── */
@@ -84,8 +85,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       })),
     }));
 
+    const suggestedPairs = await getQuickBundlePairsFromShopify(admin, 3);
+
     return json({
       products,
+      suggestedPairs,
       setupState: {
         hasRules: rulesCount > 0,
         rulesCount,
@@ -101,7 +105,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     logError(error instanceof Error ? error : new Error("Wizard loader error"), {
       shop: session.shop,
     });
-    return json({ products: [], setupState: { hasRules: false, rulesCount: 0, hasSettings: false, fulfillmentMode: "tag_only", hasConversions: false, individualShipCost: 7.0, bundleShipCost: 9.0 }, shop: session.shop });
+    return json({ products: [], suggestedPairs: [], setupState: { hasRules: false, rulesCount: 0, hasSettings: false, fulfillmentMode: "tag_only", hasConversions: false, individualShipCost: 7.0, bundleShipCost: 9.0 }, shop: session.shop });
   }
 };
 
@@ -237,7 +241,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 
 /* ─── MAIN WIZARD ────────────────────────────── */
 export default function SetupWizard() {
-  const { products, setupState } = useLoaderData<typeof loader>();
+  const { products, setupState, suggestedPairs } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<any>();
   const navigate = useNavigate();
 
@@ -246,6 +250,24 @@ export default function SetupWizard() {
 
   // Step 1 — Select products
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
+  const applySuggestion = useCallback((pair: { items: string[]; labels: string[] }) => {
+    const variantIds: string[] = [];
+    for (const item of pair.items) {
+      for (const product of products) {
+        for (const variant of product.variants) {
+          if (variant.id === item || (variant.sku && variant.sku === item)) {
+            variantIds.push(variant.id);
+          }
+        }
+      }
+    }
+    const uniqueIds = [...new Set(variantIds)];
+    if (uniqueIds.length >= 2) {
+      setSelectedProducts(uniqueIds);
+      setRuleName(pair.labels.join(" + "));
+    }
+  }, [products]);
 
   // Step 2 — Name & savings
   const [ruleName, setRuleName] = useState("");
@@ -451,6 +473,28 @@ export default function SetupWizard() {
                 </Text>
               </BlockStack>
               <Divider />
+
+              {suggestedPairs.length > 0 && (
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingSm" fontWeight="semibold">Suggested from your recent orders</Text>
+                  {suggestedPairs.map((pair) => (
+                    <Box key={pair.key} padding="400" background="bg-surface-secondary" borderRadius="300">
+                      <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            {pair.labels.join(" + ")}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Bought together in {pair.frequency} recent orders
+                          </Text>
+                        </BlockStack>
+                        <Button onClick={() => applySuggestion(pair)}>Use this bundle</Button>
+                      </InlineStack>
+                    </Box>
+                  ))}
+                  <Divider />
+                </BlockStack>
+              )}
 
               {selectedProducts.length > 0 && (
                 <Banner tone="info">

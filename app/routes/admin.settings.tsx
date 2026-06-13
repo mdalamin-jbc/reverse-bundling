@@ -7,6 +7,7 @@ import {
   getInstalledShopDomains,
   getSessionShopDomains,
 } from "../shop-cleanup.server";
+import { findStuckRealMerchants, sendStuckMerchantOnboardingEmails } from "../merchant-outreach.server";
 import styles from "./styles/admin.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -33,6 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalSuggestions,
     sessionShopDomains,
     installedShopDomains,
+    stuckMerchants,
   ] = await Promise.all([
     db.session.count(),
     db.bundleRule.count(),
@@ -42,6 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.bundleSuggestion.count(),
     getSessionShopDomains(),
     getInstalledShopDomains(),
+    findStuckRealMerchants(),
   ]);
 
   return json({
@@ -67,6 +70,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       installedShops: installedShopDomains.length,
       orphanedShops: Math.max(0, sessionShopDomains.length - installedShopDomains.length),
     },
+    stuckRealMerchants: stuckMerchants.slice(0, 10).map((m) => ({
+      shop: m.shop,
+      email: m.email,
+      shopName: m.shopName,
+      productCount: m.productCount,
+      orderCount: m.orderCount,
+    })),
+    stuckRealMerchantCount: stuckMerchants.length,
   });
 };
 
@@ -111,6 +122,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           message: `Checked ${result.checked} shops, removed ${result.removed} uninstalled merchant${result.removed !== 1 ? "s" : ""} and all their data`,
         });
       }
+      case "preview-onboarding-emails": {
+        const result = await sendStuckMerchantOnboardingEmails({ dryRun: true, limit: 50 });
+        return json({
+          success: true,
+          message: `Found ${result.candidates} real merchants with no active bundle rule (preview only, no emails sent)`,
+        });
+      }
+      case "send-onboarding-emails": {
+        const result = await sendStuckMerchantOnboardingEmails({ dryRun: false, limit: 50 });
+        return json({
+          success: true,
+          message: `Sent ${result.sent} onboarding emails to real merchants (${result.failed} failed, ${result.candidates} targeted)`,
+        });
+      }
       default:
         return json({ error: "Unknown action" }, { status: 400 });
     }
@@ -121,7 +146,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AdminSettings() {
-  const { envVars, appInfo, dataCounts, merchantCounts } = useLoaderData<typeof loader>();
+  const { envVars, appInfo, dataCounts, merchantCounts, stuckRealMerchants, stuckRealMerchantCount } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
 
   return (
@@ -231,6 +256,56 @@ export default function AdminSettings() {
                 <div style={{ fontSize: 12, color: "#6b7280" }}>{d.label}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Merchant Activation */}
+      <div className={styles.card} style={{ marginTop: 24 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>🚀 Merchant Activation</span>
+          <span className={`${styles.badge} ${styles.badgeBlue}`}>{stuckRealMerchantCount} real merchants stuck</span>
+        </div>
+        <div className={styles.cardBody}>
+          <p style={{ margin: "0 0 16px", color: "#6b7280", fontSize: 14 }}>
+            Targets installed stores with real catalogs/orders, no active bundle rule, and a valid shop email.
+            Test/dev stores are excluded automatically.
+          </p>
+          {stuckRealMerchants.length > 0 && (
+            <table className={styles.table} style={{ marginBottom: 16 }}>
+              <thead>
+                <tr>
+                  <th>Shop</th>
+                  <th>Email</th>
+                  <th>Products</th>
+                  <th>Orders</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stuckRealMerchants.map((merchant) => (
+                  <tr key={merchant.shop}>
+                    <td>{merchant.shopName || merchant.shop}</td>
+                    <td>{merchant.email}</td>
+                    <td>{merchant.productCount}</td>
+                    <td>{merchant.orderCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <fetcher.Form method="post">
+              <input type="hidden" name="_action" value="preview-onboarding-emails" />
+              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`} disabled={fetcher.state !== "idle"}>
+                Preview count
+              </button>
+            </fetcher.Form>
+            <fetcher.Form method="post">
+              <input type="hidden" name="_action" value="send-onboarding-emails" />
+              <button type="submit" className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`} disabled={fetcher.state !== "idle" || stuckRealMerchantCount === 0}>
+                {fetcher.state !== "idle" ? "Sending…" : `Email ${stuckRealMerchantCount} real merchants`}
+              </button>
+            </fetcher.Form>
           </div>
         </div>
       </div>

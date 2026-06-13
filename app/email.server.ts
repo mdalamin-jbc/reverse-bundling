@@ -151,6 +151,14 @@ interface BillingAlertEmailData {
   orderName?: string;
 }
 
+interface OnboardingReminderEmailData {
+  merchantEmail: string;
+  merchantName: string;
+  shopName: string;
+  appUrl: string;
+  setupUrl: string;
+}
+
 // Email template helpers
 function getEmailHeader(title: string) {
   return `
@@ -383,6 +391,34 @@ export async function sendBillingAlertEmail(data: BillingAlertEmailData) {
   });
 }
 
+export async function sendOnboardingReminderEmail(data: OnboardingReminderEmailData) {
+  const { merchantEmail, merchantName, shopName, appUrl, setupUrl } = data;
+
+  const html = `
+    ${getEmailHeader("Finish setup in 2 minutes")}
+    <p>Hi ${merchantName},</p>
+    <p>You installed <strong>Reverse Bundle Pro</strong> on <strong>${shopName}</strong>, but your first bundle rule is not active yet.</p>
+    <p>Once you create one rule, the app automatically converts matching orders into a single bundled shipment — saving you money on every qualifying order.</p>
+    <div class="metric">
+      <div style="font-size: 14px; color: #6b7280;">What to do now</div>
+      <div style="font-size: 18px; font-weight: bold; color: #667eea; margin: 8px 0;">
+        Open the app → Launch Setup Wizard → pick 2 products → go live
+      </div>
+    </div>
+    <a href="${setupUrl}" class="button">Launch Setup Wizard →</a>
+    <p style="font-size: 14px; color: #6b7280; margin-top: 24px;">
+      Need help? Reply to this email or open the in-app tutorial from your Shopify admin.
+    </p>
+    ${getEmailFooter(appUrl)}
+  `;
+
+  return sendEmail({
+    to: merchantEmail,
+    subject: "Finish Reverse Bundle Pro setup — create your first bundle rule",
+    html,
+  });
+}
+
 // 2. Weekly Summary Email (sent every Monday morning)
 export async function sendWeeklySummaryEmail(data: WeeklySummaryEmailData) {
   const { merchantEmail, merchantName, weekStartDate, weekEndDate, totalConversions, totalSavings, topRule, appUrl } = data;
@@ -544,6 +580,7 @@ export async function getMerchantEmailSettings(shop: string) {
 export default {
   sendBundleDetectedEmail,
   sendBillingAlertEmail,
+  sendOnboardingReminderEmail,
   sendWeeklySummaryEmail,
   sendMonthlyReportEmail,
   getMerchantEmailSettings,

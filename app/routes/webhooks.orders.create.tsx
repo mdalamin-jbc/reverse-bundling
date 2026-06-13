@@ -270,16 +270,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           try {
             const emailSettings = await getMerchantEmailSettings(shop);
             if (emailSettings.emailEnabled) {
-              // Get merchant email from session
-              const session = await db.session.findFirst({
-                where: { shop },
-                orderBy: { id: 'desc' },
-              });
-              
-              if (session?.email) {
+              const { getMerchantContact } = await import("../merchant-contact.server");
+              const contact = await getMerchantContact(shop);
+
+              if (contact.email) {
                 await sendBundleDetectedEmail({
-                  merchantEmail: session.email,
-                  merchantName: session.firstName || 'Merchant',
+                  merchantEmail: contact.email,
+                  merchantName: contact.name || 'Merchant',
                   orderNumber: order.name || `#${String(order.id)}`,
                   bundleName: rule.name,
                   bundledSku: rule.bundledSku,
