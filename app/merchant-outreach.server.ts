@@ -50,6 +50,57 @@ export async function isRealMerchantCandidate(
   }
 }
 
+/** Fast DB-only estimate — no Shopify API calls (safe for admin page loads). */
+export async function countQuickStuckCandidates(): Promise<number> {
+  const installedShops = await getInstalledShopDomains();
+  let count = 0;
+
+  for (const shop of installedShops) {
+    if (looksLikeTestShop(shop)) continue;
+
+    const activeRules = await db.bundleRule.count({ where: { shop, status: "active" } });
+    if (activeRules > 0) continue;
+
+    const session = await db.session.findFirst({
+      where: { shop, isOnline: false, accessToken: { not: "" } },
+      select: { id: true },
+    });
+    if (session) count += 1;
+  }
+
+  return count;
+}
+
+/** Preview rows without Shopify qualification (shop domain + session email only). */
+export async function listQuickStuckCandidates(limit = 10): Promise<
+  Array<{ shop: string; email: string | null; shopName: string }>
+> {
+  const installedShops = await getInstalledShopDomains();
+  const rows: Array<{ shop: string; email: string | null; shopName: string }> = [];
+
+  for (const shop of installedShops) {
+    if (rows.length >= limit) break;
+    if (looksLikeTestShop(shop)) continue;
+
+    const activeRules = await db.bundleRule.count({ where: { shop, status: "active" } });
+    if (activeRules > 0) continue;
+
+    const session = await db.session.findFirst({
+      where: { shop, isOnline: false },
+      select: { email: true, accessToken: true },
+    });
+    if (!session?.accessToken) continue;
+
+    rows.push({
+      shop,
+      email: session.email || null,
+      shopName: shop.replace(".myshopify.com", ""),
+    });
+  }
+
+  return rows;
+}
+
 export async function findStuckRealMerchants(): Promise<StuckMerchant[]> {
   const installedShops = await getInstalledShopDomains();
   const stuck: StuckMerchant[] = [];

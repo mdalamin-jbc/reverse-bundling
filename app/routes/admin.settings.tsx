@@ -7,7 +7,11 @@ import {
   getInstalledShopDomains,
   getSessionShopDomains,
 } from "../shop-cleanup.server";
-import { findStuckRealMerchants, sendStuckMerchantOnboardingEmails } from "../merchant-outreach.server";
+import {
+  countQuickStuckCandidates,
+  listQuickStuckCandidates,
+  sendStuckMerchantOnboardingEmails,
+} from "../merchant-outreach.server";
 import {
   listOutreachProspects,
   seedOutreachProspects,
@@ -41,7 +45,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalSuggestions,
     sessionShopDomains,
     installedShopDomains,
-    stuckMerchants,
+    stuckMerchantEstimate,
+    stuckMerchantPreview,
     outreachProspects,
     outreachStats,
   ] = await Promise.all([
@@ -53,7 +58,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.bundleSuggestion.count(),
     getSessionShopDomains(),
     getInstalledShopDomains(),
-    findStuckRealMerchants(),
+    countQuickStuckCandidates(),
+    listQuickStuckCandidates(10),
     listOutreachProspects(20),
     db.outreachProspect.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
@@ -81,14 +87,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       installedShops: installedShopDomains.length,
       orphanedShops: Math.max(0, sessionShopDomains.length - installedShopDomains.length),
     },
-    stuckRealMerchants: stuckMerchants.slice(0, 10).map((m) => ({
+    stuckRealMerchants: stuckMerchantPreview.map((m) => ({
       shop: m.shop,
-      email: m.email,
+      email: m.email || "—",
       shopName: m.shopName,
-      productCount: m.productCount,
-      orderCount: m.orderCount,
+      productCount: null as number | null,
+      orderCount: null as number | null,
     })),
-    stuckRealMerchantCount: stuckMerchants.length,
+    stuckRealMerchantCount: stuckMerchantEstimate,
     outreachProspects: outreachProspects.map((p) => ({
       id: p.id,
       storeName: p.storeName,
@@ -334,8 +340,8 @@ export default function AdminSettings() {
         </div>
         <div className={styles.cardBody}>
           <p style={{ margin: "0 0 16px", color: "#6b7280", fontSize: 14 }}>
-            Targets installed stores with real catalogs/orders, no active bundle rule, and a valid shop email.
-            Test/dev stores are excluded automatically.
+            Targets installed stores with no active bundle rule. Count below is a fast DB estimate (~
+            {stuckRealMerchantCount} shops). Click <strong>Preview count</strong> before sending — that runs the full Shopify qualification scan (can take 1–2 minutes).
           </p>
           {stuckRealMerchants.length > 0 && (
             <table className={styles.table} style={{ marginBottom: 16 }}>
@@ -352,8 +358,8 @@ export default function AdminSettings() {
                   <tr key={merchant.shop}>
                     <td>{merchant.shopName || merchant.shop}</td>
                     <td>{merchant.email}</td>
-                    <td>{merchant.productCount}</td>
-                    <td>{merchant.orderCount}</td>
+                    <td>{merchant.productCount ?? "—"}</td>
+                    <td>{merchant.orderCount ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
