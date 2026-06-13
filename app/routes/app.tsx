@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import { Link, Outlet, useLoaderData, useLocation, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu, TitleBar } from "@shopify/app-bridge-react";
@@ -35,18 +35,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey, billingAlert } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  const appPath = (path: string) => `${path}${location.search}`;
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <TitleBar title="Reverse Bundle Pro" />
       <NavMenu>
-        <Link to="/app/bundle-rules">Bundle Rules</Link>
-        <Link to="/app/orders">Order Conversions</Link>
-        <Link to="/app/fulfillment">Fulfillment Provider</Link>
-        <Link to="/app/analytics">Reports & Analytics</Link>
-        <Link to="/app/billing">Billing</Link>
-        <Link to="/app/guidelines">Easy Tutorial Guide</Link>
-        <Link to="/app/settings">Settings</Link>
+        <Link to={appPath("/app")} rel="home">
+          Dashboard
+        </Link>
+        <Link to={appPath("/app/bundle-rules")}>Bundle Rules</Link>
+        <Link to={appPath("/app/orders")}>Order Conversions</Link>
+        <Link to={appPath("/app/fulfillment")}>Fulfillment Provider</Link>
+        <Link to={appPath("/app/analytics")}>Reports & Analytics</Link>
+        <Link to={appPath("/app/billing")}>Billing</Link>
+        <Link to={appPath("/app/guidelines")}>Easy Tutorial Guide</Link>
+        <Link to={appPath("/app/settings")}>Settings</Link>
       </NavMenu>
       {billingAlert && (
         <Box paddingBlockStart="400" paddingInline="400">

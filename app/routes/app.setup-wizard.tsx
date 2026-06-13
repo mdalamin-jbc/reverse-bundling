@@ -32,7 +32,7 @@ import db from "../db.server";
 import { logInfo, logError } from "../logger.server";
 import { getQuickBundlePairsFromShopify } from "../onboarding.server";
 import { withEmbeddedSearch } from "../embedded-navigation";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 /* ─── LOADER ─────────────────────────────────── */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -303,12 +303,35 @@ export default function SetupWizard() {
     if (uniqueIds.length >= 2) {
       setSelectedProducts(uniqueIds);
       setRuleName(pair.labels.join(" + "));
+      setRuleNameEdited(true);
     }
   }, [products]);
 
   // Step 2 — Name & savings
   const [ruleName, setRuleName] = useState("");
+  const [ruleNameEdited, setRuleNameEdited] = useState(false);
   const [autoCreate, setAutoCreate] = useState(true);
+
+  const buildDefaultRuleName = useCallback(() => {
+    const names = selectedProducts
+      .map((vid) => {
+        for (const p of products) {
+          const v = p.variants.find((v: any) => v.id === vid);
+          if (v) return p.title;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    const unique = [...new Set(names)];
+    return unique.length > 0 ? unique.slice(0, 3).join(" + ") : "";
+  }, [selectedProducts, products]);
+
+  const goToNameStep = useCallback(() => {
+    if (!ruleNameEdited && !ruleName.trim()) {
+      setRuleName(buildDefaultRuleName());
+    }
+    setStep(2);
+  }, [ruleNameEdited, ruleName, buildDefaultRuleName]);
 
   // Step 3 — Fulfillment settings
   const [fulfillmentMode, setFulfillmentMode] = useState(setupState.fulfillmentMode);
@@ -325,25 +348,6 @@ export default function SetupWizard() {
       prev.includes(variantId) ? prev.filter((p) => p !== variantId) : [...prev, variantId]
     );
   }, []);
-
-  // Auto-generate rule name from selected products
-  useEffect(() => {
-    if (selectedProducts.length >= 2 && !ruleName) {
-      const names = selectedProducts
-        .map((vid) => {
-          for (const p of products) {
-            const v = p.variants.find((v: any) => v.id === vid);
-            if (v) return p.title;
-          }
-          return null;
-        })
-        .filter(Boolean);
-      const unique = [...new Set(names)];
-      if (unique.length > 0) {
-        setRuleName(unique.slice(0, 3).join(" + "));
-      }
-    }
-  }, [selectedProducts, products, ruleName]);
 
   // Submit handler
   const handleSubmit = useCallback(() => {
@@ -610,7 +614,7 @@ export default function SetupWizard() {
                   variant="primary"
                   icon={ChevronRightIcon}
                   disabled={selectedProducts.length < 2}
-                  onClick={() => setStep(2)}
+                  onClick={goToNameStep}
                 >
                   Next: Name Your Bundle
                 </Button>
@@ -631,14 +635,24 @@ export default function SetupWizard() {
               </BlockStack>
               <Divider />
 
-              <TextField
-                label="Bundle Rule Name"
-                value={ruleName}
-                onChange={setRuleName}
-                placeholder="e.g., Summer Essentials Pack, T-Shirt + Shorts Combo"
-                autoComplete="off"
-                helpText="This name appears in your dashboard and order notes"
-              />
+              <Box paddingBlockEnd="200">
+                <TextField
+                  label="Bundle rule name"
+                  value={ruleName}
+                  onChange={(value) => {
+                    setRuleNameEdited(true);
+                    setRuleName(value);
+                  }}
+                  placeholder="e.g. Summer Essentials Pack"
+                  autoComplete="off"
+                  helpText="This name appears in your dashboard and order notes"
+                  clearButton
+                  onClearButtonClick={() => {
+                    setRuleNameEdited(true);
+                    setRuleName("");
+                  }}
+                />
+              </Box>
 
               <Checkbox
                 label="Auto-create bundle product in Shopify"

@@ -3,7 +3,7 @@
 
 name = "Reverse Bundle Pro"
 client_id = "71fd9bfaa51d9b70a3b6511192fafe4b"
-application_url = "https://reverse-bundling.me"
+application_url = "https://reverse-bundling.me/app"
 embedded = true
 
 [access_scopes]

@@ -8,8 +8,12 @@ import styles from "./styles.module.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  const host = url.searchParams.get("host");
+  const embedded = url.searchParams.get("embedded");
 
-  if (url.searchParams.get("shop")) {
+  // Shopify admin opens the app with shop/host params — never show marketing page in iframe
+  if (shop || host || embedded === "1" || url.searchParams.get("id_token")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
